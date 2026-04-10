@@ -39,6 +39,7 @@ def get_country(num):
 def load_team_dict():
     try:
         df = pd.read_csv(TEAM_FILE)
+        # Phone Number column ko string mein convert karna zaroori hai
         return pd.Series(df.Name.values, index=df['Phone Number'].astype(str)).to_dict()
     except: return {}
 
@@ -67,7 +68,6 @@ while True:
                 df['dt'] = pd.to_datetime(df['dt'])
                 now = datetime.now()
 
-                # 5 AM Logic
                 if now.hour < 5:
                     start_day = (now - timedelta(days=1)).replace(hour=5, minute=0, second=0, microsecond=0)
                 else:
@@ -75,8 +75,6 @@ while True:
 
                 # --- 1: TARGETED CLI DATA ---
                 df_target_all = df[df['cli'].str.contains(target_cli, case=False, na=False)].copy()
-                
-                # Calculations
                 c5 = len(df_target_all[df_target_all['dt'] >= (now - timedelta(minutes=5))])
                 c10 = len(df_target_all[df_target_all['dt'] >= (now - timedelta(minutes=10))])
                 c30 = len(df_target_all[df_target_all['dt'] >= (now - timedelta(minutes=30))])
@@ -85,49 +83,47 @@ while True:
                 # --- 2: LIVE FEED PREP ---
                 df_live = df.head(msg_limit).copy()
                 
-                def attach_info(num):
-                    n_str = str(num)
-                    country = get_country(num)
+                # Number mapping for team names
+                def format_user(num):
+                    n_str = str(num).strip()
                     if n_str in team_dict:
-                        return f"👤 {team_dict[n_str]}", country
-                    return n_str, country
+                        return f"👤 {team_dict[n_str]} ({n_str})"
+                    return n_str
 
                 with placeholder.container():
-                    # --- SECTION A: DEDICATED CLI REPORT BOX ---
+                    # SECTION A: DEDICATED CLI REPORT BOX
                     st.markdown(f'<div class="report-box"><div class="cli-header">📊 {target_cli.upper()} LIVE REPORT</div>', unsafe_allow_html=True)
-                    
-                    # Metrics for CLI
                     m1, m2, m3, m4 = st.columns(4)
-                    m1.metric("Last 5m", f"{c5} OTP")
-                    m2.metric("Last 10m", f"{c10} OTP")
-                    m3.metric("Last 30m", f"{c30} OTP")
-                    m4.metric("Today (Since 5AM)", f"{c_today} OTP")
-
-                    # Target App ki apni choti monitoring table (Last 10 messages of this app)
-                    st.write(f"**Latest {target_cli.upper()} Hits:**")
-                    if not df_target_all.empty:
-                        target_mini = df_target_all.head(10)[['dt', 'num', 'message']].copy()
-                        target_mini.columns = ['Time', 'Number', 'OTP Message']
-                        st.dataframe(target_mini, use_container_width=True, hide_index=True)
-                    else:
-                        st.info(f"No active hits for {target_cli} right now.")
-                    
+                    m1.metric("Last 5m", f"{c5}")
+                    m2.metric("Last 10m", f"{c10}")
+                    m3.metric("Last 30m", f"{c30}")
+                    m4.metric("Today (5AM)", f"{c_today}")
                     st.markdown('</div>', unsafe_allow_html=True)
 
-                    # --- SECTION B: GLOBAL MONITORING ---
-                    st.subheader(f"🚀 Global Market Feed (Last {msg_limit} Mixed Records)")
+                    # SECTION B: GLOBAL MONITORING
+                    st.subheader(f"🚀 Global Market Feed (Last {msg_limit})")
                     
-                    df_live['User/Number'] = df_live['num'].apply(lambda x: attach_info(x)[0])
-                    df_live['Country'] = df_live['num'].apply(lambda x: attach_info(x)[1])
+                    df_live['User/Number'] = df_live['num'].apply(format_user)
+                    df_live['Country'] = df_live['num'].apply(get_country)
                     
                     display_df = df_live[['dt', 'cli', 'User/Number', 'Country', 'message']].copy()
                     display_df.columns = ['Time', 'App', 'User/Number', 'Country', 'Message']
                     
-                    def highlight_team(row):
-                        is_team = "👤" in str(row['User/Number'])
-                        return ['background-color: #1d3557; color: #ffb703; font-weight: bold' if is_team else '' for _ in row]
+                    # --- FIXED HIGHLIGHT LOGIC ---
+                    def apply_team_style(row):
+                        # Agar "👤" symbol User column mein hai to matlab team ka banda hai
+                        highlight = 'background-color: #1d3557; color: #ffb703; font-weight: bold;'
+                        default = ''
+                        if "👤" in str(row['User/Number']):
+                            return [highlight] * len(row)
+                        return [default] * len(row)
 
-                    st.dataframe(display_df.style.apply(highlight_team, axis=1), use_container_width=True, height=450)
+                    st.dataframe(
+                        display_df.style.apply(apply_team_style, axis=1),
+                        use_container_width=True, 
+                        height=500,
+                        hide_index=True
+                    )
 
             else:
                 st.info("Searching market...")
@@ -136,4 +132,4 @@ while True:
         st.rerun()
     except Exception as e:
         time.sleep(5)
-                    
+                                                                                     
