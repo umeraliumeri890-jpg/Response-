@@ -33,4 +33,88 @@ def get_country(num):
         full_num = "+" + str(num).strip()
         parsed = phonenumbers.parse(full_num)
         return geocoder.description_for_number(parsed, "en")
-        
+    except:
+        return "Global"
+
+@st.cache_data
+def load_team_dict():
+    try:
+        df = pd.read_csv(TEAM_FILE)
+        # Phone Number aur Name ke columns use kar rahe hain
+        return pd.Series(df.Name.values, index=df['Phone Number'].astype(str)).to_dict()
+    except Exception:
+        return {}
+
+# Header Section
+st.markdown('<div class="main-title">🎯 HUNTING RADAR</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">✨ Powered by <b>Umer Ali</b> ✨</div>', unsafe_allow_html=True)
+
+# Input Controls
+col_in1, col_in2 = st.columns([2, 1])
+with col_in1:
+    target_cli = st.text_input("🔍 Search App (CLI):", "MYOB").strip()
+with col_in2:
+    msg_limit = st.number_input("📥 Live Feed Limit:", min_value=1, max_value=500, value=25)
+
+team_dict = load_team_dict()
+placeholder = st.empty()
+
+while True:
+    try:
+        r = requests.get(URL, params={"token": TOKEN, "records": 3000})
+        if r.status_code == 200:
+            data = r.json().get("data", [])
+            df = pd.DataFrame(data)
+            
+            if not df.empty:
+                df['dt'] = pd.to_datetime(df['dt'])
+                now = datetime.now()
+
+                # --- 5 AM RESET LOGIC ---
+                if now.hour < 5:
+                    start_of_day = (now - timedelta(days=1)).replace(hour=5, minute=0, second=0, microsecond=0)
+                else:
+                    start_of_day = now.replace(hour=5, minute=0, second=0, microsecond=0)
+
+                # --- TARGETED CLI REPORT ---
+                df_target = df[df['cli'].str.contains(target_cli, case=False, na=False)].copy()
+                c5 = len(df_target[df_target['dt'] >= (now - timedelta(minutes=5))])
+                c10 = len(df_target[df_target['dt'] >= (now - timedelta(minutes=10))])
+                c30 = len(df_target[df_target['dt'] >= (now - timedelta(minutes=30))])
+                c_today = len(df_target[df_target['dt'] >= start_of_day])
+                
+                if not df_target.empty:
+                    df_target['Country'] = df_target['num'].head(50).apply(get_country)
+                    top_regions = df_target['Country'].value_counts().head(3).index.tolist()
+                    regions_str = ", ".join(top_regions)
+                else:
+                    regions_str = "No Data Found"
+
+                # --- LIVE FEED PREVIEW ---
+                df_live = df.head(msg_limit).copy()
+                df_live['Country'] = df_live['num'].apply(get_country)
+                
+                def attach_name(num):
+                    num_str = str(num)
+                    if num_str in team_dict:
+                        return f"👤 {team_dict[num_str]} ({num_str})"
+                    return num_str
+
+                df_live['User/Number'] = df_live['num'].apply(attach_name)
+
+                with placeholder.container():
+                    st.markdown(f"""
+                    <div class="report-box">
+                        <h2 style="color:#00ff00; margin-top:0;">📊 {target_cli.upper()} ANALYSIS</h2>
+                        <table style="width:100%; color:white; font-size:20px;">
+                            <tr>
+                                <td><b>Last 5m:</b> {c5}</td>
+                                <td><b>Last 10m:</b> {c10}</td>
+                                <td><b>Last 30m:</b> {c30}</td>
+                                <td style="color:#00ff00;"><b>Total Today:</b> {c_today}</td>
+                            </tr>
+                        </table>
+                        <p style="margin-top:10px;">🌍 <b>Primary Regions:</b> {regions_str}</p>
+                    </div>
+                    """, unsafe_allow_html=
+                        
