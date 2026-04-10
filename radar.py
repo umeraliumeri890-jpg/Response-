@@ -58,7 +58,6 @@ placeholder = st.empty()
 
 while True:
     try:
-        # High volume market ke liye records barha diye hain
         r = requests.get(URL, params={"token": TOKEN, "records": 3000})
         if r.status_code == 200:
             data = r.json().get("data", [])
@@ -68,7 +67,7 @@ while True:
                 df['dt'] = pd.to_datetime(df['dt'])
                 now = datetime.now()
 
-                # --- BACKGROUND 5 AM LOGIC (Not Mentioned on UI) ---
+                # --- BACKGROUND 5 AM LOGIC ---
                 if now.hour < 5:
                     start_of_day = (now - timedelta(days=1)).replace(hour=5, minute=0, second=0, microsecond=0)
                 else:
@@ -92,5 +91,42 @@ while True:
 
                 # --- LIVE FEED PREVIEW ---
                 df_live = df.head(msg_limit).copy()
-                df_live['Country
+                df_live['Country'] = df_live['num'].apply(get_country)
+
+                with placeholder.container():
+                    # THE CLEAN REPORT BOX
+                    st.markdown(f"""
+                    <div class="report-box">
+                        <h2 style="color:#00ff00; margin-top:0;">📊 {target_cli.upper()} ANALYSIS</h2>
+                        <table style="width:100%; color:white; font-size:20px;">
+                            <tr>
+                                <td><b>Last 5m:</b> {c5}</td>
+                                <td><b>Last 10m:</b> {c10}</td>
+                                <td><b>Last 30m:</b> {c30}</td>
+                                <td style="color:#00ff00;"><b>Total Today:</b> {c_today}</td>
+                            </tr>
+                        </table>
+                        <p style="margin-top:10px;">🌍 <b>Primary Regions:</b> {regions_str}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    # LIVE FEED
+                    st.subheader(f"🚀 Latest {msg_limit} Global Records")
                     
+                    def highlight_team(row):
+                        if str(row['num']) in team_numbers:
+                            return ['background-color: #1d3557; color: #ffb703; font-weight: bold'] * len(row)
+                        return [''] * len(row)
+
+                    display_df = df_live[['dt', 'cli', 'num', 'Country', 'message']]
+                    display_df.columns = ['Time', 'CLI (App)', 'Number', 'Country', 'Message']
+                    st.table(display_df.style.apply(highlight_team, axis=1))
+
+            else:
+                st.info("Searching market data...")
+
+        time.sleep(15)
+        st.rerun()
+    except Exception:
+        time.sleep(5)
+        
