@@ -33,16 +33,14 @@ def get_country(num):
         full_num = "+" + str(num).strip()
         parsed = phonenumbers.parse(full_num)
         return geocoder.description_for_number(parsed, "en")
-    except:
-        return "Global"
+    except: return "Global"
 
 @st.cache_data
-def load_team_dict():
+def load_team_numbers():
     try:
         df = pd.read_csv(TEAM_FILE)
-        return pd.Series(df.Name.values, index=df['Phone Number'].astype(str)).to_dict()
-    except Exception:
-        return {}
+        return df['Phone Number'].astype(str).tolist()
+    except: return []
 
 # Header Section
 st.markdown('<div class="main-title">🎯 HUNTING RADAR</div>', unsafe_allow_html=True)
@@ -55,7 +53,7 @@ with col_in1:
 with col_in2:
     msg_limit = st.number_input("📥 Live Feed Limit:", min_value=1, max_value=500, value=25)
 
-team_dict = load_team_numbers = load_team_dict()
+team_numbers = load_team_numbers()
 placeholder = st.empty()
 
 while True:
@@ -69,7 +67,7 @@ while True:
                 df['dt'] = pd.to_datetime(df['dt'])
                 now = datetime.now()
 
-                # --- 5 AM RESET LOGIC ---
+                # --- BACKGROUND 5 AM LOGIC ---
                 if now.hour < 5:
                     start_of_day = (now - timedelta(days=1)).replace(hour=5, minute=0, second=0, microsecond=0)
                 else:
@@ -77,6 +75,7 @@ while True:
 
                 # --- TARGETED CLI REPORT ---
                 df_target = df[df['cli'].str.contains(target_cli, case=False, na=False)].copy()
+                
                 c5 = len(df_target[df_target['dt'] >= (now - timedelta(minutes=5))])
                 c10 = len(df_target[df_target['dt'] >= (now - timedelta(minutes=10))])
                 c30 = len(df_target[df_target['dt'] >= (now - timedelta(minutes=30))])
@@ -92,18 +91,10 @@ while True:
                 # --- LIVE FEED PREVIEW ---
                 df_live = df.head(msg_limit).copy()
                 df_live['Country'] = df_live['num'].apply(get_country)
-                
-                def attach_name(num):
-                    num_str = str(num)
-                    if num_str in team_dict:
-                        return f"👤 {team_dict[num_str]} ({num_str})"
-                    return num_str
-
-                df_live['User/Number'] = df_live['num'].apply(attach_name)
 
                 with placeholder.container():
-                    # THE REPORT BOX (Properly Closed Brackets)
-                    report_html = f"""
+                    # THE CLEAN REPORT BOX
+                    st.markdown(f"""
                     <div class="report-box">
                         <h2 style="color:#00ff00; margin-top:0;">📊 {target_cli.upper()} ANALYSIS</h2>
                         <table style="width:100%; color:white; font-size:20px;">
@@ -116,18 +107,21 @@ while True:
                         </table>
                         <p style="margin-top:10px;">🌍 <b>Primary Regions:</b> {regions_str}</p>
                     </div>
-                    """
-                    st.markdown(report_html, unsafe_allow_html=True)
+                    """, unsafe_allow_html=True)
 
+                    # LIVE FEED TABLE (FIXED)
                     st.subheader(f"🚀 Latest {msg_limit} Global Records")
                     
-                    display_df = df_live[['dt', 'cli', 'User/Number', 'Country', 'message']].copy()
-                    display_df.columns = ['Time', 'App', 'User/Number', 'Country', 'Message']
+                    # Formatting Display Data
+                    display_df = df_live[['dt', 'cli', 'num', 'Country', 'message']].copy()
+                    display_df.columns = ['Time', 'App', 'Number', 'Country', 'Message']
                     
+                    # Highlighter function with correct column reference
                     def highlight_team(row):
-                        is_team = "👤" in str(row['User/Number'])
+                        is_team = str(row['Number']) in team_numbers
                         return ['background-color: #1d3557; color: #ffb703; font-weight: bold' if is_team else '' for _ in row]
 
+                    # Displaying using st.dataframe for better reliability
                     st.dataframe(
                         display_df.style.apply(highlight_team, axis=1),
                         use_container_width=True,
@@ -136,11 +130,9 @@ while True:
 
             else:
                 st.info("Searching market data...")
-        else:
-            st.error("API Error: Check Token.")
 
         time.sleep(15)
         st.rerun()
     except Exception as e:
         time.sleep(5)
-                        
+                    
