@@ -40,7 +40,6 @@ def get_country(num):
 def load_team_dict():
     try:
         df = pd.read_csv(TEAM_FILE)
-        # Phone Number aur Name ke columns use kar rahe hain
         return pd.Series(df.Name.values, index=df['Phone Number'].astype(str)).to_dict()
     except Exception:
         return {}
@@ -56,7 +55,7 @@ with col_in1:
 with col_in2:
     msg_limit = st.number_input("📥 Live Feed Limit:", min_value=1, max_value=500, value=25)
 
-team_dict = load_team_dict()
+team_dict = load_team_numbers = load_team_dict()
 placeholder = st.empty()
 
 while True:
@@ -103,7 +102,8 @@ while True:
                 df_live['User/Number'] = df_live['num'].apply(attach_name)
 
                 with placeholder.container():
-                    st.markdown(f"""
+                    # THE REPORT BOX (Properly Closed Brackets)
+                    report_html = f"""
                     <div class="report-box">
                         <h2 style="color:#00ff00; margin-top:0;">📊 {target_cli.upper()} ANALYSIS</h2>
                         <table style="width:100%; color:white; font-size:20px;">
@@ -116,5 +116,31 @@ while True:
                         </table>
                         <p style="margin-top:10px;">🌍 <b>Primary Regions:</b> {regions_str}</p>
                     </div>
-                    """, unsafe_allow_html=
+                    """
+                    st.markdown(report_html, unsafe_allow_html=True)
+
+                    st.subheader(f"🚀 Latest {msg_limit} Global Records")
+                    
+                    display_df = df_live[['dt', 'cli', 'User/Number', 'Country', 'message']].copy()
+                    display_df.columns = ['Time', 'App', 'User/Number', 'Country', 'Message']
+                    
+                    def highlight_team(row):
+                        is_team = "👤" in str(row['User/Number'])
+                        return ['background-color: #1d3557; color: #ffb703; font-weight: bold' if is_team else '' for _ in row]
+
+                    st.dataframe(
+                        display_df.style.apply(highlight_team, axis=1),
+                        use_container_width=True,
+                        height=500
+                    )
+
+            else:
+                st.info("Searching market data...")
+        else:
+            st.error("API Error: Check Token.")
+
+        time.sleep(15)
+        st.rerun()
+    except Exception as e:
+        time.sleep(5)
                         
