@@ -36,11 +36,12 @@ def get_country(num):
     except: return "Global"
 
 @st.cache_data
-def load_team_numbers():
+def load_team_dict():
     try:
+        # File mein 'Phone Number' aur 'Name' ke columns honay chahiyen
         df = pd.read_csv(TEAM_FILE)
-        return df['Phone Number'].astype(str).tolist()
-    except: return []
+        return pd.Series(df.Name.values, index=df['Phone Number'].astype(str)).to_dict()
+    except: return {}
 
 # Header Section
 st.markdown('<div class="main-title">🎯 HUNTING RADAR</div>', unsafe_allow_html=True)
@@ -53,7 +54,7 @@ with col_in1:
 with col_in2:
     msg_limit = st.number_input("📥 Live Feed Limit:", min_value=1, max_value=500, value=25)
 
-team_numbers = load_team_numbers()
+team_dict = load_team_dict()
 placeholder = st.empty()
 
 while True:
@@ -67,7 +68,7 @@ while True:
                 df['dt'] = pd.to_datetime(df['dt'])
                 now = datetime.now()
 
-                # --- BACKGROUND 5 AM LOGIC ---
+                # --- 5 AM RESET LOGIC ---
                 if now.hour < 5:
                     start_of_day = (now - timedelta(days=1)).replace(hour=5, minute=0, second=0, microsecond=0)
                 else:
@@ -75,7 +76,6 @@ while True:
 
                 # --- TARGETED CLI REPORT ---
                 df_target = df[df['cli'].str.contains(target_cli, case=False, na=False)].copy()
-                
                 c5 = len(df_target[df_target['dt'] >= (now - timedelta(minutes=5))])
                 c10 = len(df_target[df_target['dt'] >= (now - timedelta(minutes=10))])
                 c30 = len(df_target[df_target['dt'] >= (now - timedelta(minutes=30))])
@@ -91,9 +91,18 @@ while True:
                 # --- LIVE FEED PREVIEW ---
                 df_live = df.head(msg_limit).copy()
                 df_live['Country'] = df_live['num'].apply(get_country)
+                
+                # Naya Function: Name add karna Number ke saath
+                def attach_name(num):
+                    num_str = str(num)
+                    if num_str in team_dict:
+                        return f"👤 {team_dict[num_str]} ({num_str})"
+                    return num_str
+
+                df_live['DisplayNum'] = df_live['num'].apply(attach_name)
 
                 with placeholder.container():
-                    # THE CLEAN REPORT BOX
+                    # REPORT BOX
                     st.markdown(f"""
                     <div class="report-box">
                         <h2 style="color:#00ff00; margin-top:0;">📊 {target_cli.upper()} ANALYSIS</h2>
@@ -109,19 +118,17 @@ while True:
                     </div>
                     """, unsafe_allow_html=True)
 
-                    # LIVE FEED TABLE (FIXED)
+                    # LIVE FEED TABLE
                     st.subheader(f"🚀 Latest {msg_limit} Global Records")
                     
-                    # Formatting Display Data
-                    display_df = df_live[['dt', 'cli', 'num', 'Country', 'message']].copy()
-                    display_df.columns = ['Time', 'App', 'Number', 'Country', 'Message']
+                    display_df = df_live[['dt', 'cli', 'DisplayNum', 'Country', 'message']].copy()
+                    display_df.columns = ['Time', 'App', 'User/Number', 'Country', 'Message']
                     
-                    # Highlighter function with correct column reference
                     def highlight_team(row):
-                        is_team = str(row['Number']) in team_numbers
+                        # Agar "👤" symbol hai to matlab team ka banda hai
+                        is_team = "👤" in str(row['User/Number'])
                         return ['background-color: #1d3557; color: #ffb703; font-weight: bold' if is_team else '' for _ in row]
 
-                    # Displaying using st.dataframe for better reliability
                     st.dataframe(
                         display_df.style.apply(highlight_team, axis=1),
                         use_container_width=True,
@@ -135,4 +142,4 @@ while True:
         st.rerun()
     except Exception as e:
         time.sleep(5)
-        
+                    
