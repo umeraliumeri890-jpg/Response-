@@ -81,7 +81,6 @@ while True:
                 c30 = len(df_target[df_target['dt'] >= (now - timedelta(minutes=30))])
                 c_today = len(df_target[df_target['dt'] >= start_of_day])
                 
-                # Active Regions
                 if not df_target.empty:
                     df_target['Country'] = df_target['num'].head(50).apply(get_country)
                     top_regions = df_target['Country'].value_counts().head(3).index.tolist()
@@ -110,23 +109,30 @@ while True:
                     </div>
                     """, unsafe_allow_html=True)
 
-                    # LIVE FEED
+                    # LIVE FEED TABLE (FIXED)
                     st.subheader(f"🚀 Latest {msg_limit} Global Records")
                     
+                    # Formatting Display Data
+                    display_df = df_live[['dt', 'cli', 'num', 'Country', 'message']].copy()
+                    display_df.columns = ['Time', 'App', 'Number', 'Country', 'Message']
+                    
+                    # Highlighter function with correct column reference
                     def highlight_team(row):
-                        if str(row['num']) in team_numbers:
-                            return ['background-color: #1d3557; color: #ffb703; font-weight: bold'] * len(row)
-                        return [''] * len(row)
+                        is_team = str(row['Number']) in team_numbers
+                        return ['background-color: #1d3557; color: #ffb703; font-weight: bold' if is_team else '' for _ in row]
 
-                    display_df = df_live[['dt', 'cli', 'num', 'Country', 'message']]
-                    display_df.columns = ['Time', 'CLI (App)', 'Number', 'Country', 'Message']
-                    st.table(display_df.style.apply(highlight_team, axis=1))
+                    # Displaying using st.dataframe for better reliability
+                    st.dataframe(
+                        display_df.style.apply(highlight_team, axis=1),
+                        use_container_width=True,
+                        height=500
+                    )
 
             else:
                 st.info("Searching market data...")
 
         time.sleep(15)
         st.rerun()
-    except Exception:
+    except Exception as e:
         time.sleep(5)
         
