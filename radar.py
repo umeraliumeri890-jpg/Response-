@@ -22,6 +22,7 @@ st.markdown("""
     .report-box { 
         background-color: #111; border: 2px solid #00ff00; 
         padding: 15px; border-radius: 10px; margin-bottom: 20px;
+        box-shadow: 0px 0px 10px #00ff00;
     }
     .cli-header { color: #ffb703; font-size: 24px; font-weight: bold; margin-bottom: 10px; }
 </style>
@@ -36,25 +37,24 @@ def get_country(num):
     except: return "Global"
 
 @st.cache_data
-def load_team_dict():
+def load_team_numbers():
     try:
         df = pd.read_csv(TEAM_FILE)
-        # Phone Number column ko string mein convert karna zaroori hai
-        return pd.Series(df.Name.values, index=df['Phone Number'].astype(str)).to_dict()
-    except: return {}
+        return df['Phone Number'].astype(str).tolist()
+    except: return []
 
-# Header
+# Header Section
 st.markdown('<div class="main-title">🎯 HUNTING RADAR</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">Powered by Umer Ali</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">✨ Powered by <b>Umer Ali</b> ✨</div>', unsafe_allow_html=True)
 
-# Controls
+# Input Controls
 col_in1, col_in2 = st.columns([2, 1])
 with col_in1:
     target_cli = st.text_input("🔍 Search App (CLI):", "MYOB").strip()
 with col_in2:
     msg_limit = st.number_input("📥 Global Feed Limit:", min_value=1, max_value=500, value=25)
 
-team_dict = load_team_dict()
+team_numbers = load_team_numbers()
 placeholder = st.empty()
 
 while True:
@@ -68,6 +68,7 @@ while True:
                 df['dt'] = pd.to_datetime(df['dt'])
                 now = datetime.now()
 
+                # --- BACKGROUND 5 AM LOGIC ---
                 if now.hour < 5:
                     start_day = (now - timedelta(days=1)).replace(hour=5, minute=0, second=0, microsecond=0)
                 else:
@@ -75,61 +76,54 @@ while True:
 
                 # --- 1: TARGETED CLI DATA ---
                 df_target_all = df[df['cli'].str.contains(target_cli, case=False, na=False)].copy()
+                
                 c5 = len(df_target_all[df_target_all['dt'] >= (now - timedelta(minutes=5))])
                 c10 = len(df_target_all[df_target_all['dt'] >= (now - timedelta(minutes=10))])
                 c30 = len(df_target_all[df_target_all['dt'] >= (now - timedelta(minutes=30))])
                 c_today = len(df_target_all[df_target_all['dt'] >= start_day])
                 
-                # --- 2: LIVE FEED PREP ---
+                # --- 2: LIVE FEED PREVIEW ---
                 df_live = df.head(msg_limit).copy()
-                
-                # Number mapping for team names
-                def format_user(num):
-                    n_str = str(num).strip()
-                    if n_str in team_dict:
-                        return f"👤 {team_dict[n_str]} ({n_str})"
-                    return n_str
+                df_live['Country'] = df_live['num'].apply(get_country)
 
                 with placeholder.container():
                     # SECTION A: DEDICATED CLI REPORT BOX
-                    st.markdown(f'<div class="report-box"><div class="cli-header">📊 {target_cli.upper()} LIVE REPORT</div>', unsafe_allow_html=True)
-                    m1, m2, m3, m4 = st.columns(4)
-                    m1.metric("Last 5m", f"{c5}")
-                    m2.metric("Last 10m", f"{c10}")
-                    m3.metric("Last 30m", f"{c30}")
-                    m4.metric("Today (5AM)", f"{c_today}")
-                    st.markdown('</div>', unsafe_allow_html=True)
+                    st.markdown(f"""
+                    <div class="report-box">
+                        <div class="cli-header">📊 {target_cli.upper()} LIVE ANALYSIS</div>
+                        <table style="width:100%; color:white; font-size:20px;">
+                            <tr>
+                                <td><b>Last 5m:</b> {c5}</td>
+                                <td><b>Last 10m:</b> {c10}</td>
+                                <td><b>Last 30m:</b> {c30}</td>
+                                <td style="color:#00ff00;"><b>Total Today:</b> {c_today}</td>
+                            </tr>
+                        </table>
+                    </div>
+                    """, unsafe_allow_html=True)
 
                     # SECTION B: GLOBAL MONITORING
-                    st.subheader(f"🚀 Global Market Feed (Last {msg_limit})")
+                    st.subheader(f"🚀 Global Market Feed (Last {msg_limit} Records)")
                     
-                    df_live['User/Number'] = df_live['num'].apply(format_user)
-                    df_live['Country'] = df_live['num'].apply(get_country)
+                    display_df = df_live[['dt', 'cli', 'num', 'Country', 'message']].copy()
+                    display_df.columns = ['Time', 'App', 'Number', 'Country', 'Message']
                     
-                    display_df = df_live[['dt', 'cli', 'User/Number', 'Country', 'message']].copy()
-                    display_df.columns = ['Time', 'App', 'User/Number', 'Country', 'Message']
-                    
-                    # --- FIXED HIGHLIGHT LOGIC ---
-                    def apply_team_style(row):
-                        # Agar "👤" symbol User column mein hai to matlab team ka banda hai
-                        highlight = 'background-color: #1d3557; color: #ffb703; font-weight: bold;'
-                        default = ''
-                        if "👤" in str(row['User/Number']):
-                            return [highlight] * len(row)
-                        return [default] * len(row)
+                    # --- HIGHLIGHT CODE INTEGRATED ---
+                    def highlight_team(row):
+                        is_team = str(row['Number']) in team_numbers
+                        return ['background-color: #1d3557; color: #ffb703; font-weight: bold' if is_team else '' for _ in row]
 
                     st.dataframe(
-                        display_df.style.apply(apply_team_style, axis=1),
-                        use_container_width=True, 
+                        display_df.style.apply(highlight_team, axis=1),
+                        use_container_width=True,
                         height=500,
                         hide_index=True
                     )
 
             else:
-                st.info("Searching market...")
+                st.info("Searching market data...")
 
         time.sleep(15)
         st.rerun()
     except Exception as e:
         time.sleep(5)
-                                                                                     
