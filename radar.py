@@ -13,19 +13,24 @@ TEAM_FILE = "Numbers_Export.csv"
 
 st.set_page_config(page_title="HUNTING RADAR - UMER ALI", layout="wide")
 
-# Stylish UI Design
+# Stylish UI Design with ZOOM-OUT Fix
 st.markdown("""
 <style>
+    html, body, [data-testid="stAppViewContainer"] {
+        zoom: 0.9; /* Yeh poori site ko 90% zoom-out kar dega */
+        -moz-transform: scale(0.9);
+        -moz-transform-origin: 0 0;
+    }
     .stApp { background-color: #050505; color: #00ff00; }
     .main-title { text-align: center; color: #00ff00; font-size: 35px; font-weight: bold; }
     .sub-title { text-align: center; color: #ffffff; font-size: 16px; margin-bottom: 20px; }
     .report-box { 
         background-color: #111; border: 2px solid #00ff00; 
-        padding: 20px; border-radius: 15px; margin-bottom: 25px;
+        padding: 15px; border-radius: 15px; margin-bottom: 20px;
         box-shadow: 0px 0px 15px #00ff00;
     }
-    .cli-header { color: #ffb703; font-size: 24px; font-weight: bold; margin-bottom: 15px; text-align: center; }
-    .section-label { color: #00ff00; font-size: 20px; font-weight: bold; margin-bottom: 10px; border-left: 5px solid #00ff00; padding-left: 10px; }
+    .cli-header { color: #ffb703; font-size: 24px; font-weight: bold; margin-bottom: 10px; text-align: center; }
+    .section-label { color: #00ff00; font-size: 18px; font-weight: bold; margin-bottom: 10px; border-left: 5px solid #00ff00; padding-left: 10px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -53,7 +58,7 @@ col_in1, col_in2 = st.columns([2, 1])
 with col_in1:
     target_cli = st.text_input("🔍 Search App (CLI):", "MYOB").strip()
 with col_in2:
-    msg_limit = st.number_input("📥 Live Feed Limit:", min_value=1, max_value=500, value=25)
+    msg_limit = st.number_input("📥 Global Feed Limit:", min_value=1, max_value=500, value=25)
 
 team_numbers = load_team_numbers()
 placeholder = st.empty()
@@ -93,7 +98,7 @@ while True:
                     st.markdown(f"""
                     <div class="report-box">
                         <div class="cli-header">📊 {target_cli.upper()} ANALYSIS</div>
-                        <table style="width:100%; color:white; font-size:22px; text-align:center;">
+                        <table style="width:100%; color:white; font-size:20px; text-align:center;">
                             <tr>
                                 <td><b>5m:</b> {c5}</td>
                                 <td><b>10m:</b> {c10}</td>
@@ -114,7 +119,7 @@ while True:
                         
                         st.dataframe(
                             display_target.style.apply(highlight_team, axis=1),
-                            use_container_width=True, height=300, hide_index=True
+                            use_container_width=True, height=250, hide_index=True
                         )
                     else:
                         st.warning(f"No live data found for {target_cli}")
@@ -128,7 +133,7 @@ while True:
 
                     st.dataframe(
                         display_global.style.apply(highlight_team, axis=1),
-                        use_container_width=True, height=400, hide_index=True
+                        use_container_width=True, height=350, hide_index=True
                     )
 
             else:
@@ -136,6 +141,6 @@ while True:
 
         time.sleep(15)
         st.rerun()
-    except Exception as e:
+    except Exception:
         time.sleep(5)
-                    
+                
