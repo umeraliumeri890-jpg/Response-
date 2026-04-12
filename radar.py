@@ -18,7 +18,6 @@ st.markdown("""
 <style>
     .stApp { background-color: #050505; color: #00ff00; }
     .main-title { text-align: center; color: #00ff00; font-size: 35px; font-weight: bold; }
-    .sub-title { text-align: center; color: #ffffff; font-size: 16px; margin-bottom: 20px; }
     .report-box { 
         background-color: #111; border: 2px solid #00ff00; 
         padding: 15px; border-radius: 15px; margin-bottom: 20px;
@@ -41,15 +40,18 @@ def get_country(num):
 def load_team_data():
     try:
         df = pd.read_csv(TEAM_FILE)
-        df['Phone Number'] = df['Phone Number'].astype(str).str.strip()
-        # Status column se name nikalna
-        df['MemberName'] = df['Status'].str.replace('Allocated: ', '', case=False, na=False)
+        # Cleaning Phone Numbers to ensure perfect match
+        df['Phone Number'] = df['Phone Number'].astype(str).str.split('.').str[0].str.strip()
+        # Extracting Name from Status
+        df['MemberName'] = df['Status'].str.replace('Allocated: ', '', case=False, na=False).str.strip()
         return df.set_index('Phone Number')[['Range', 'MemberName']].to_dict('index')
-    except: return {}
+    except Exception as e:
+        st.error(f"Error loading CSV: {e}")
+        return {}
 
 # Header Section
 st.markdown('<div class="main-title">🎯 HUNTING RADAR</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">✨ Powered by <b>Umer Ali</b> ✨</div>', unsafe_allow_html=True)
+st.markdown('<div style="text-align:center; color:white; margin-bottom:20px;">✨ Powered by <b>Umer Ali</b> ✨</div>', unsafe_allow_html=True)
 
 # Input Controls
 col_in1, col_in2 = st.columns([2, 1])
@@ -61,12 +63,11 @@ with col_in2:
 team_data = load_team_data()
 placeholder = st.empty()
 
-# Table Config for Column Width (Range column remains large but moved to end)
+# Table Config for Column Width
 col_cfg = {
     "Range": st.column_config.TextColumn("Range", width="large"),
     "Message": st.column_config.TextColumn("Message", width="max"),
     "Time": st.column_config.TextColumn("Time", width="medium"),
-    "Team Member": st.column_config.TextColumn("Team Member", width="medium")
 }
 
 while True:
@@ -85,7 +86,7 @@ while True:
                 else:
                     start_day = now.replace(hour=5, minute=0, second=0, microsecond=0)
 
-                # Calculations
+                # CLI Filter Logic
                 df_target_all = df[df['cli'].str.contains(target_cli, case=False, na=False)].copy()
                 c5 = len(df_target_all[df_target_all['dt'] >= (now - timedelta(minutes=5))])
                 c10 = len(df_target_all[df_target_all['dt'] >= (now - timedelta(minutes=10))])
@@ -93,14 +94,13 @@ while True:
                 c_today = len(df_target_all[df_target_all['dt'] >= start_day])
 
                 def get_team_info(num):
-                    n_str = str(num).strip()
+                    n_str = str(num).split('.')[0].strip()
                     if n_str in team_data:
-                        info = team_data[n_str]
-                        return info['MemberName'], info['Range']
+                        return team_data[n_str]['MemberName'], team_data[n_str]['Range']
                     return "", ""
 
                 def highlight_team(row):
-                    num_check = str(row['Number']).strip()
+                    num_check = str(row['Number']).split('.')[0].strip()
                     if num_check in team_data:
                         return ['background-color: #1d3557; color: #ffb703; font-weight: bold'] * len(row)
                     return [''] * len(row)
@@ -121,37 +121,33 @@ while True:
                     </div>
                     """, unsafe_allow_html=True)
 
-                    # --- MID BOX: TARGETED CLI ---
+                    # MID BOX: TARGETED
                     st.markdown(f'<div class="section-label">🎯 {target_cli.upper()} MONITORING</div>', unsafe_allow_html=True)
                     if not df_target_all.empty:
                         mid_df = df_target_all.head(20).copy()
                         mid_df[['Name', 'Range']] = mid_df['num'].apply(lambda x: pd.Series(get_team_info(x)))
                         mid_df['Country'] = mid_df['num'].apply(get_country)
-                        
-                        # Rearranged Columns: Time, App, Number, Country, Message, Team Member, Range
+                        # Reordered columns
                         disp_mid = mid_df[['dt', 'cli', 'num', 'Country', 'message', 'Name', 'Range']]
                         disp_mid.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
                         
                         st.dataframe(disp_mid.style.apply(highlight_team, axis=1), 
-                                     use_container_width=True, height=250, hide_index=True,
-                                     column_config=col_cfg)
+                                     use_container_width=True, height=250, hide_index=True, column_config=col_cfg)
 
-                    # --- BOTTOM BOX: GLOBAL FEED ---
+                    # BOTTOM BOX: GLOBAL
                     st.markdown('<div class="section-label">🚀 GLOBAL MARKET FEED</div>', unsafe_allow_html=True)
                     global_df = df.head(msg_limit).copy()
                     global_df[['Name', 'Range']] = global_df['num'].apply(lambda x: pd.Series(get_team_info(x)))
                     global_df['Country'] = global_df['num'].apply(get_country)
-                    
-                    # Rearranged Columns: Time, App, Number, Country, Message, Team Member, Range
+                    # Reordered columns
                     disp_global = global_df[['dt', 'cli', 'num', 'Country', 'message', 'Name', 'Range']]
                     disp_global.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
-                    
+
                     st.dataframe(disp_global.style.apply(highlight_team, axis=1), 
-                                     use_container_width=True, height=400, hide_index=True,
-                                     column_config=col_cfg)
+                                     use_container_width=True, height=400, hide_index=True, column_config=col_cfg)
 
             else:
-                st.info("Scanning market data...")
+                st.info("Searching market data...")
 
         time.sleep(15)
         st.rerun()
