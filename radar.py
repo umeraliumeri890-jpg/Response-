@@ -40,10 +40,13 @@ def get_country(num):
 def load_team_data():
     try:
         df = pd.read_csv(TEAM_FILE)
-        # Cleaning Phone Numbers to ensure perfect match
+        # Clean Phone Numbers
         df['Phone Number'] = df['Phone Number'].astype(str).str.split('.').str[0].str.strip()
-        # Extracting Name from Status
-        df['MemberName'] = df['Status'].str.replace('Allocated: ', '', case=False, na=False).str.strip()
+        # Clean Status to get Name (Fixing the 'na' error here)
+        df['Status'] = df['Status'].fillna('') # Handle empty cells
+        df['MemberName'] = df['Status'].str.replace('Allocated: ', '', case=False, regex=False).str.strip()
+        
+        # Dictionary format for quick lookup
         return df.set_index('Phone Number')[['Range', 'MemberName']].to_dict('index')
     except Exception as e:
         st.error(f"Error loading CSV: {e}")
@@ -81,12 +84,13 @@ while True:
                 df['dt'] = pd.to_datetime(df['dt'])
                 now = datetime.now()
 
+                # 5 AM Logic
                 if now.hour < 5:
                     start_day = (now - timedelta(days=1)).replace(hour=5, minute=0, second=0, microsecond=0)
                 else:
                     start_day = now.replace(hour=5, minute=0, second=0, microsecond=0)
 
-                # CLI Filter Logic
+                # CLI Filter
                 df_target_all = df[df['cli'].str.contains(target_cli, case=False, na=False)].copy()
                 c5 = len(df_target_all[df_target_all['dt'] >= (now - timedelta(minutes=5))])
                 c10 = len(df_target_all[df_target_all['dt'] >= (now - timedelta(minutes=10))])
@@ -121,25 +125,25 @@ while True:
                     </div>
                     """, unsafe_allow_html=True)
 
-                    # MID BOX: TARGETED
+                    # MID BOX: TARGETED (Team & Range at the end)
                     st.markdown(f'<div class="section-label">🎯 {target_cli.upper()} MONITORING</div>', unsafe_allow_html=True)
                     if not df_target_all.empty:
                         mid_df = df_target_all.head(20).copy()
                         mid_df[['Name', 'Range']] = mid_df['num'].apply(lambda x: pd.Series(get_team_info(x)))
                         mid_df['Country'] = mid_df['num'].apply(get_country)
-                        # Reordered columns
+                        
                         disp_mid = mid_df[['dt', 'cli', 'num', 'Country', 'message', 'Name', 'Range']]
                         disp_mid.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
                         
                         st.dataframe(disp_mid.style.apply(highlight_team, axis=1), 
                                      use_container_width=True, height=250, hide_index=True, column_config=col_cfg)
 
-                    # BOTTOM BOX: GLOBAL
+                    # BOTTOM BOX: GLOBAL (Team & Range at the end)
                     st.markdown('<div class="section-label">🚀 GLOBAL MARKET FEED</div>', unsafe_allow_html=True)
                     global_df = df.head(msg_limit).copy()
                     global_df[['Name', 'Range']] = global_df['num'].apply(lambda x: pd.Series(get_team_info(x)))
                     global_df['Country'] = global_df['num'].apply(get_country)
-                    # Reordered columns
+                    
                     disp_global = global_df[['dt', 'cli', 'num', 'Country', 'message', 'Name', 'Range']]
                     disp_global.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
 
@@ -147,10 +151,10 @@ while True:
                                      use_container_width=True, height=400, hide_index=True, column_config=col_cfg)
 
             else:
-                st.info("Searching market data...")
+                st.info("Scanning market data...")
 
         time.sleep(15)
         st.rerun()
-    except Exception:
+    except Exception as e:
         time.sleep(5)
                 
