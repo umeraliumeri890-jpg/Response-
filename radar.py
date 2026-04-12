@@ -42,7 +42,8 @@ def load_team_data():
     try:
         df = pd.read_csv(TEAM_FILE)
         df['Phone Number'] = df['Phone Number'].astype(str).str.strip()
-        df['MemberName'] = df['Status'].str.replace('Allocated: ', '', case=False)
+        # Status column se name nikalna
+        df['MemberName'] = df['Status'].str.replace('Allocated: ', '', case=False, na=False)
         return df.set_index('Phone Number')[['Range', 'MemberName']].to_dict('index')
     except: return {}
 
@@ -60,11 +61,12 @@ with col_in2:
 team_data = load_team_data()
 placeholder = st.empty()
 
-# Table Config for Column Width
+# Table Config for Column Width (Range column remains large but moved to end)
 col_cfg = {
     "Range": st.column_config.TextColumn("Range", width="large"),
     "Message": st.column_config.TextColumn("Message", width="max"),
-    "Time": st.column_config.TextColumn("Time", width="medium")
+    "Time": st.column_config.TextColumn("Time", width="medium"),
+    "Team Member": st.column_config.TextColumn("Team Member", width="medium")
 }
 
 while True:
@@ -119,26 +121,30 @@ while True:
                     </div>
                     """, unsafe_allow_html=True)
 
-                    # MID BOX: TARGETED
+                    # --- MID BOX: TARGETED CLI ---
                     st.markdown(f'<div class="section-label">🎯 {target_cli.upper()} MONITORING</div>', unsafe_allow_html=True)
                     if not df_target_all.empty:
                         mid_df = df_target_all.head(20).copy()
                         mid_df[['Name', 'Range']] = mid_df['num'].apply(lambda x: pd.Series(get_team_info(x)))
                         mid_df['Country'] = mid_df['num'].apply(get_country)
-                        disp_mid = mid_df[['dt', 'Name', 'Range', 'num', 'Country', 'message']]
-                        disp_mid.columns = ['Time', 'Team Member', 'Range', 'Number', 'Country', 'Message']
+                        
+                        # Rearranged Columns: Time, App, Number, Country, Message, Team Member, Range
+                        disp_mid = mid_df[['dt', 'cli', 'num', 'Country', 'message', 'Name', 'Range']]
+                        disp_mid.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
                         
                         st.dataframe(disp_mid.style.apply(highlight_team, axis=1), 
                                      use_container_width=True, height=250, hide_index=True,
                                      column_config=col_cfg)
 
-                    # BOTTOM BOX: GLOBAL
+                    # --- BOTTOM BOX: GLOBAL FEED ---
                     st.markdown('<div class="section-label">🚀 GLOBAL MARKET FEED</div>', unsafe_allow_html=True)
                     global_df = df.head(msg_limit).copy()
                     global_df[['Name', 'Range']] = global_df['num'].apply(lambda x: pd.Series(get_team_info(x)))
                     global_df['Country'] = global_df['num'].apply(get_country)
-                    disp_global = global_df[['dt', 'Name', 'Range', 'num', 'Country', 'message']]
-                    disp_global.columns = ['Time', 'Team Member', 'Range', 'Number', 'Country', 'Message']
+                    
+                    # Rearranged Columns: Time, App, Number, Country, Message, Team Member, Range
+                    disp_global = global_df[['dt', 'cli', 'num', 'Country', 'message', 'Name', 'Range']]
+                    disp_global.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
                     
                     st.dataframe(disp_global.style.apply(highlight_team, axis=1), 
                                      use_container_width=True, height=400, hide_index=True,
@@ -151,4 +157,4 @@ while True:
         st.rerun()
     except Exception:
         time.sleep(5)
-    
+                
