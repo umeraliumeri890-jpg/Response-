@@ -61,7 +61,8 @@ col_in1, col_in2 = st.columns([2, 1])
 with col_in1:
     target_cli = st.text_input("🔍 Search App (CLI):", "MYOB").strip()
 with col_in2:
-    msg_limit = st.number_input("📥 Global Feed Limit:", min_value=1, max_value=500, value=25)
+    # Yahan Limit 500 se badha kar 2000 kar di gayi hai
+    msg_limit = st.number_input("📥 Global Feed Limit:", min_value=1, max_value=2000, value=25)
 
 team_data = load_team_data()
 placeholder = st.empty()
@@ -157,4 +158,3 @@ while True:
         st.rerun()
     except Exception as e:
         time.sleep(5)
-                
