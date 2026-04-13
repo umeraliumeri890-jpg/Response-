@@ -40,13 +40,9 @@ def get_country(num):
 def load_team_data():
     try:
         df = pd.read_csv(TEAM_FILE)
-        # Clean Phone Numbers
         df['Phone Number'] = df['Phone Number'].astype(str).str.split('.').str[0].str.strip()
-        # Clean Status to get Name (Fixing the 'na' error here)
-        df['Status'] = df['Status'].fillna('') # Handle empty cells
+        df['Status'] = df['Status'].fillna('') 
         df['MemberName'] = df['Status'].str.replace('Allocated: ', '', case=False, regex=False).str.strip()
-        
-        # Dictionary format for quick lookup
         return df.set_index('Phone Number')[['Range', 'MemberName']].to_dict('index')
     except Exception as e:
         st.error(f"Error loading CSV: {e}")
@@ -61,13 +57,12 @@ col_in1, col_in2 = st.columns([2, 1])
 with col_in1:
     target_cli = st.text_input("🔍 Search App (CLI):", "MYOB").strip()
 with col_in2:
-    # Yahan Limit 500 se badha kar 2000 kar di gayi hai
-    msg_limit = st.number_input("📥 Global Feed Limit:", min_value=1, max_value=2000, value=25)
+    # Limit barha kar 2000 kar di aur default 1000 rakha
+    msg_limit = st.number_input("📥 Global Feed Limit:", min_value=1, max_value=2000, value=1000)
 
 team_data = load_team_data()
 placeholder = st.empty()
 
-# Table Config for Column Width
 col_cfg = {
     "Range": st.column_config.TextColumn("Range", width="large"),
     "Message": st.column_config.TextColumn("Message", width="max"),
@@ -76,7 +71,8 @@ col_cfg = {
 
 while True:
     try:
-        r = requests.get(URL, params={"token": TOKEN, "records": 3500})
+        # Records ko 5000 kar diya taaki data pura fetch ho
+        r = requests.get(URL, params={"token": TOKEN, "records": 5000})
         if r.status_code == 200:
             data = r.json().get("data", [])
             df = pd.DataFrame(data)
@@ -85,13 +81,11 @@ while True:
                 df['dt'] = pd.to_datetime(df['dt'])
                 now = datetime.now()
 
-                # 5 AM Logic
                 if now.hour < 5:
                     start_day = (now - timedelta(days=1)).replace(hour=5, minute=0, second=0, microsecond=0)
                 else:
                     start_day = now.replace(hour=5, minute=0, second=0, microsecond=0)
 
-                # CLI Filter
                 df_target_all = df[df['cli'].str.contains(target_cli, case=False, na=False)].copy()
                 c5 = len(df_target_all[df_target_all['dt'] >= (now - timedelta(minutes=5))])
                 c10 = len(df_target_all[df_target_all['dt'] >= (now - timedelta(minutes=10))])
@@ -111,7 +105,6 @@ while True:
                     return [''] * len(row)
 
                 with placeholder.container():
-                    # STATS BOX
                     st.markdown(f"""
                     <div class="report-box">
                         <div class="cli-header">📊 {target_cli.upper()} LIVE ANALYSIS</div>
@@ -126,7 +119,6 @@ while True:
                     </div>
                     """, unsafe_allow_html=True)
 
-                    # MID BOX: TARGETED (Team & Range at the end)
                     st.markdown(f'<div class="section-label">🎯 {target_cli.upper()} MONITORING</div>', unsafe_allow_html=True)
                     if not df_target_all.empty:
                         mid_df = df_target_all.head(20).copy()
@@ -139,7 +131,6 @@ while True:
                         st.dataframe(disp_mid.style.apply(highlight_team, axis=1), 
                                      use_container_width=True, height=250, hide_index=True, column_config=col_cfg)
 
-                    # BOTTOM BOX: GLOBAL (Team & Range at the end)
                     st.markdown('<div class="section-label">🚀 GLOBAL MARKET FEED</div>', unsafe_allow_html=True)
                     global_df = df.head(msg_limit).copy()
                     global_df[['Name', 'Range']] = global_df['num'].apply(lambda x: pd.Series(get_team_info(x)))
@@ -148,8 +139,9 @@ while True:
                     disp_global = global_df[['dt', 'cli', 'num', 'Country', 'message', 'Name', 'Range']]
                     disp_global.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
 
+                    # Height barha kar 800 kar di taaki zyada data screen par nazar aaye
                     st.dataframe(disp_global.style.apply(highlight_team, axis=1), 
-                                     use_container_width=True, height=400, hide_index=True, column_config=col_cfg)
+                                     use_container_width=True, height=800, hide_index=True, column_config=col_cfg)
 
             else:
                 st.info("Scanning market data...")
@@ -158,3 +150,4 @@ while True:
         st.rerun()
     except Exception as e:
         time.sleep(5)
+                                
