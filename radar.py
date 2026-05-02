@@ -8,7 +8,7 @@ from phonenumbers import geocoder
 
 # --- CONFIG ---
 URL = "http://51.77.216.195/crapi/lamix/viewstats"
-TOKEN = "SVdVRTRSQmiGX4FWYJJzgF-Hi4mHX41TglBhWVtieEOEUHhleGFy"
+TOKEN = "SVdVRTRSQkd-ZVZEYWVgfmiViFmCg3ZYX5FuZUJoUGZlgJWFhoyS"
 TEAM_FILE = "Numbers_Export.csv"
 
 st.set_page_config(page_title="HUNTING RADAR - UMER ALI", layout="wide")
