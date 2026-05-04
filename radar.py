@@ -11,78 +11,89 @@ URL = "http://51.77.216.195/crapi/lamix/viewstats"
 TOKEN = "SVdVRTRSQkd-ZVZEYWVgfmiViFmCg3ZYX5FuZUJoUGZlgJWFhoyS"
 TEAM_FILE = "Numbers_Export.csv"
 
-# Updated Page Title for Browser Tab
+# Page Config
 st.set_page_config(page_title="DOUBLE FACER HUNTER - UMER ALI", layout="wide")
 
-# --- PROFESSIONAL COLOR GRADING & UI ---
+# --- DREAMHOST STYLE UI DESIGN ---
 st.markdown("""
 <style>
-    /* Main Background with a deep radial gradient */
+    /* Main Background - Clean White/Light Grey */
     .stApp { 
-        background: radial-gradient(circle, #0a0a0a 0%, #050505 100%);
-        color: #e0e0e0; 
+        background-color: #ffffff;
+        color: #333333; 
     }
     
-    /* Neon Glow Title with Sharp Typography */
+    /* Top Header Banner Style */
     .main-title { 
         text-align: center; 
-        color: #00ff00; 
-        font-size: 42px; 
+        color: #0073eb; 
+        font-size: 38px; 
         font-weight: 800;
-        text-shadow: 0px 0px 20px rgba(0, 255, 0, 0.5);
-        letter-spacing: 2px;
         padding-top: 20px;
-        font-family: 'Courier New', Courier, monospace;
+        font-family: 'Inter', sans-serif;
     }
 
-    /* Glassmorphism Analysis Box */
+    /* Professional Content Box (DreamHost Style) */
     .report-box { 
-        background: rgba(20, 20, 20, 0.85);
-        border: 1px solid rgba(0, 255, 0, 0.3);
-        padding: 20px; 
-        border-radius: 12px; 
+        background: #f8f9fa;
+        border: 1px solid #e1e4e8;
+        padding: 25px; 
+        border-radius: 8px; 
         margin-bottom: 25px;
-        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.9);
-        backdrop-filter: blur(8px);
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
     }
 
-    /* Professional Header for Live Stats */
+    /* Analysis Header */
     .cli-header { 
-        color: #ffb703; 
-        font-size: 26px; 
-        font-weight: bold; 
+        color: #111111; 
+        font-size: 24px; 
+        font-weight: 700; 
         margin-bottom: 15px; 
         text-align: center;
-        text-transform: uppercase;
-        border-bottom: 1px solid #333;
+        border-bottom: 2px solid #0073eb;
         padding-bottom: 10px;
+        display: inline-block;
+        width: 100%;
     }
 
-    /* Neon Accent Section Labels */
+    /* Section Labels with Blue Accent */
     .section-label { 
-        color: #00ff00; 
-        font-size: 22px; 
+        color: #0073eb; 
+        font-size: 20px; 
         font-weight: 700; 
         margin-top: 25px;
         margin-bottom: 15px; 
-        border-left: 5px solid #00ff00; 
+        border-left: 5px solid #0073eb; 
         padding-left: 15px;
-        background: linear-gradient(90deg, rgba(0,255,0,0.15) 0%, rgba(0,0,0,0) 100%);
     }
 
-    /* Input Field Styling - Cyber Look */
-    .stTextInput>div>div>input, .stNumberInput>div>div>input {
-        background-color: #111 !important;
-        color: #00ff00 !important;
-        border: 1px solid #00ff0033 !important;
-        border-radius: 5px;
+    /* Input Controls Customization */
+    .stTextInput>div>div>input {
+        border: 1px solid #ced4da !important;
+        border-radius: 4px !important;
+        padding: 10px !important;
     }
 
-    /* Scrollbar Styling */
-    ::-webkit-scrollbar { width: 8px; }
-    ::-webkit-scrollbar-track { background: #050505; }
-    ::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
-    ::-webkit-scrollbar-thumb:hover { background: #00ff00; }
+    /* Blue Button Style for Numbers */
+    .stNumberInput>div>div>input {
+        border: 1px solid #0073eb !important;
+        color: #0073eb !important;
+        font-weight: bold;
+    }
+
+    /* Footer Text */
+    .footer-sub {
+        text-align: center;
+        color: #666;
+        font-size: 14px;
+        margin-bottom: 30px;
+    }
+
+    /* DataFrame Styling */
+    [data-testid="stTable"] {
+        border-radius: 8px;
+        overflow: hidden;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -106,16 +117,16 @@ def load_team_data():
         st.error(f"Error loading CSV: {e}")
         return {}
 
-# --- HEADER SECTION ---
-st.markdown('<div class="main-title">🎯 DOUBLE FACER HUNTER</div>', unsafe_allow_html=True)
-st.markdown('<div style="text-align:center; color:#888; margin-bottom:25px; font-size: 14px;">🛠️ System Secure | Powered by <b>Umer Ali</b></div>', unsafe_allow_html=True)
+# --- HEADER ---
+st.markdown('<div class="main-title">DOUBLE FACER HUNTER</div>', unsafe_allow_html=True)
+st.markdown('<div class="footer-sub">Verified System | Managed by <b>Umer Ali</b></div>', unsafe_allow_html=True)
 
-# Input Controls
+# Inputs
 col_in1, col_in2 = st.columns([2, 1])
 with col_in1:
-    target_cli = st.text_input("🔍 Search App (CLI):", "MYOB").strip()
+    target_cli = st.text_input("🔍 Search Application (CLI):", "MYOB").strip()
 with col_in2:
-    msg_limit = st.number_input("📥 Global Feed Limit:", min_value=1, max_value=2000, value=1000)
+    msg_limit = st.number_input("📥 Feed Limit:", min_value=1, max_value=2000, value=1000)
 
 team_data = load_team_data()
 placeholder = st.empty()
@@ -129,7 +140,6 @@ col_cfg = {
 # --- MAIN LOOP ---
 while True:
     try:
-        # Fetching data with high records count
         r = requests.get(URL, params={"token": TOKEN, "records": 5000})
         if r.status_code == 200:
             data = r.json().get("data", [])
@@ -139,7 +149,6 @@ while True:
                 df['dt'] = pd.to_datetime(df['dt'])
                 now = datetime.now()
 
-                # Daily Reset logic (5 AM)
                 if now.hour < 5:
                     start_day = (now - timedelta(days=1)).replace(hour=5, minute=0, second=0, microsecond=0)
                 else:
@@ -160,28 +169,27 @@ while True:
                 def highlight_team(row):
                     num_check = str(row['Number']).split('.')[0].strip()
                     if num_check in team_data:
-                        # Professional highlight for team members
-                        return ['background-color: #1d3557; color: #ffb703; font-weight: bold'] * len(row)
+                        # Professional Blue/White highlight
+                        return ['background-color: #e7f3ff; color: #0073eb; font-weight: bold'] * len(row)
                     return [''] * len(row)
 
                 with placeholder.container():
-                    # LIVE ANALYSIS BOX
+                    # STATS BOX
                     st.markdown(f"""
                     <div class="report-box">
-                        <div class="cli-header">📊 {target_cli.upper()} LIVE ANALYSIS</div>
-                        <table style="width:100%; color:white; font-size:22px; text-align:center; border-collapse: collapse;">
+                        <div class="cli-header">📊 {target_cli.upper()} LIVE ANALYTICS</div>
+                        <table style="width:100%; color:#333; font-size:20px; text-align:center;">
                             <tr>
-                                <td style="padding:10px;"><b>5m:</b> <span style="color:#00ff00;">{c5}</span></td>
-                                <td style="padding:10px;"><b>10m:</b> <span style="color:#00ff00;">{c10}</span></td>
-                                <td style="padding:10px;"><b>30m:</b> <span style="color:#00ff00;">{c30}</span></td>
-                                <td style="color:#00ff00; border-left: 2px solid #333; padding:10px;"><b>Today: {c_today}</b></td>
+                                <td><small>5 Min</small><br><b style="color:#0073eb;">{c5}</b></td>
+                                <td><small>10 Min</small><br><b style="color:#0073eb;">{c10}</b></td>
+                                <td><small>30 Min</small><br><b style="color:#0073eb;">{c30}</b></td>
+                                <td style="border-left: 1px solid #ddd;"><small>Total Today</small><br><b style="color:#28a745;">{c_today}</b></td>
                             </tr>
                         </table>
                     </div>
                     """, unsafe_allow_html=True)
 
-                    # TARGET MONITORING TABLE
-                    st.markdown(f'<div class="section-label">🎯 {target_cli.upper()} MONITORING</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="section-label">🎯 {target_cli.upper()} LIVE MONITOR</div>', unsafe_allow_html=True)
                     if not df_target_all.empty:
                         mid_df = df_target_all.head(20).copy()
                         mid_df[['Name', 'Range']] = mid_df['num'].apply(lambda x: pd.Series(get_team_info(x)))
@@ -191,10 +199,9 @@ while True:
                         disp_mid.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
                         
                         st.dataframe(disp_mid.style.apply(highlight_team, axis=1), 
-                                     use_container_width=True, height=300, hide_index=True, column_config=col_cfg)
+                                     use_container_width=True, height=250, hide_index=True, column_config=col_cfg)
 
-                    # GLOBAL FEED TABLE
-                    st.markdown('<div class="section-label">🚀 GLOBAL MARKET FEED</div>', unsafe_allow_html=True)
+                    st.markdown('<div class="section-label">🌐 GLOBAL NETWORK FEED</div>', unsafe_allow_html=True)
                     global_df = df.head(msg_limit).copy()
                     global_df[['Name', 'Range']] = global_df['num'].apply(lambda x: pd.Series(get_team_info(x)))
                     global_df['Country'] = global_df['num'].apply(get_country)
@@ -206,10 +213,10 @@ while True:
                                      use_container_width=True, height=800, hide_index=True, column_config=col_cfg)
 
             else:
-                st.info("Searching for data in the shadows...")
+                st.info("Awaiting incoming data stream...")
 
         time.sleep(15)
         st.rerun()
     except Exception as e:
-        st.error(f"System Glitch: {e}")
+        st.error(f"Connection Alert: {e}")
         time.sleep(5)
