@@ -14,85 +14,88 @@ TEAM_FILE = "Numbers_Export.csv"
 # Page Config
 st.set_page_config(page_title="DOUBLE FACER HUNTER - UMER ALI", layout="wide")
 
-# --- DREAMHOST BLUE THEME DESIGN ---
+# --- MODERN WHITE & BLUE UI DESIGN ---
 st.markdown("""
 <style>
-    /* Main Background - DreamHost Royal Blue */
+    /* Main Background - Soft Light Grey for a clean look */
     .stApp { 
-        background-color: #0073eb;
-        color: #ffffff; 
+        background-color: #f4f7f9;
+        color: #2d3436; 
     }
     
-    /* Main Title - White & Bold */
+    /* Top Header Section with Blue Gradient */
+    .header-container {
+        background: linear-gradient(90deg, #0073eb 0%, #0056b3 100%);
+        padding: 30px;
+        border-radius: 0px 0px 20px 20px;
+        margin: -60px -20px 30px -20px;
+        text-align: center;
+        box-shadow: 0px 4px 15px rgba(0,0,0,0.1);
+    }
+
     .main-title { 
-        text-align: center; 
         color: #ffffff; 
         font-size: 40px; 
         font-weight: 800;
-        padding-top: 20px;
-        text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        margin-bottom: 5px;
+        letter-spacing: 1px;
     }
 
-    /* Professional Content Box - Slightly darker blue for contrast */
+    .footer-sub {
+        color: rgba(255, 255, 255, 0.9);
+        font-size: 15px;
+    }
+
+    /* Professional Content Card */
     .report-box { 
-        background: rgba(255, 255, 255, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.2);
+        background: #ffffff;
+        border: 1px solid #e1e8ed;
         padding: 25px; 
-        border-radius: 12px; 
+        border-radius: 15px; 
         margin-bottom: 25px;
-        backdrop-filter: blur(10px);
+        box-shadow: 0 10px 25px rgba(0,0,0,0.05);
     }
 
-    /* Analysis Header */
+    /* Analysis Header inside card */
     .cli-header { 
-        color: #ffffff; 
+        color: #0073eb; 
         font-size: 24px; 
         font-weight: 700; 
-        margin-bottom: 15px; 
+        margin-bottom: 20px; 
         text-align: center;
-        border-bottom: 2px solid rgba(255, 255, 255, 0.3);
-        padding-bottom: 10px;
+        text-transform: uppercase;
     }
 
-    /* Section Labels */
+    /* Section Labels with Blue Accent */
     .section-label { 
-        color: #ffffff; 
-        font-size: 22px; 
+        color: #0073eb; 
+        font-size: 20px; 
         font-weight: 700; 
         margin-top: 25px;
         margin-bottom: 15px; 
-        border-left: 5px solid #ffffff; 
+        border-left: 6px solid #0073eb; 
         padding-left: 15px;
     }
 
-    /* Input Controls Customization */
+    /* Input Field Styling */
     .stTextInput>div>div>input {
-        background-color: rgba(255, 255, 255, 0.9) !important;
-        color: #0073eb !important;
-        border-radius: 6px !important;
-        font-weight: bold;
+        border: 2px solid #e1e8ed !important;
+        border-radius: 10px !important;
+        padding: 12px !important;
+        transition: 0.3s;
+    }
+    
+    .stTextInput>div>div>input:focus {
+        border-color: #0073eb !important;
+        box-shadow: 0 0 8px rgba(0,115,235,0.2);
     }
 
-    .stNumberInput>div>div>input {
-        background-color: rgba(255, 255, 255, 0.9) !important;
-        color: #0073eb !important;
-        border: none !important;
-        font-weight: bold;
-    }
-
-    /* Sub-text */
-    .footer-sub {
-        text-align: center;
-        color: rgba(255, 255, 255, 0.8);
-        font-size: 14px;
-        margin-bottom: 30px;
-    }
-
-    /* Table Styling for Blue Background */
+    /* Table styling to make it pop */
     .stDataFrame {
-        background-color: white;
-        border-radius: 8px;
-        padding: 5px;
+        background: white;
+        padding: 10px;
+        border-radius: 15px;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.02);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -117,14 +120,18 @@ def load_team_data():
         st.error(f"Error loading CSV: {e}")
         return {}
 
-# --- HEADER ---
-st.markdown('<div class="main-title">🎯 DOUBLE FACER HUNTER</div>', unsafe_allow_html=True)
-st.markdown('<div class="footer-sub">System Secure | Managed by <b>Umer Ali</b></div>', unsafe_allow_html=True)
+# --- HEADER SECTION ---
+st.markdown("""
+<div class="header-container">
+    <div class="main-title">🎯 DOUBLE FACER HUNTER</div>
+    <div class="footer-sub">Live Monitoring System | Developed by <b>Umer Ali</b></div>
+</div>
+""", unsafe_allow_html=True)
 
 # Inputs
 col_in1, col_in2 = st.columns([2, 1])
 with col_in1:
-    target_cli = st.text_input("🔍 Search App (CLI):", "MYOB").strip()
+    target_cli = st.text_input("🔍 Search App Name (CLI):", "MYOB").strip()
 with col_in2:
     msg_limit = st.number_input("📥 Global Feed Limit:", min_value=1, max_value=2000, value=1000)
 
@@ -169,27 +176,27 @@ while True:
                 def highlight_team(row):
                     num_check = str(row['Number']).split('.')[0].strip()
                     if num_check in team_data:
-                        # Highlighting team members with a distinct color on white background
-                        return ['background-color: #ffd700; color: #000; font-weight: bold'] * len(row)
+                        # Professional Blue highlight for team members
+                        return ['background-color: #e7f3ff; color: #0073eb; font-weight: bold; border: 1px solid #0073eb'] * len(row)
                     return [''] * len(row)
 
                 with placeholder.container():
-                    # STATS BOX (Glassmorphism effect on Blue)
+                    # STATS BOX
                     st.markdown(f"""
                     <div class="report-box">
-                        <div class="cli-header">📊 {target_cli.upper()} LIVE ANALYTICS</div>
-                        <table style="width:100%; color:white; font-size:22px; text-align:center;">
-                            <tr>
-                                <td><b>5m:</b> {c5}</td>
-                                <td><b>10m:</b> {c10}</td>
-                                <td><b>30m:</b> {c30}</td>
-                                <td style="border-left: 2px solid rgba(255,255,255,0.3);"><b>Today: {c_today}</b></td>
-                            </tr>
-                        </table>
+                        <div class="cli-header">📊 {target_cli.upper()} REAL-TIME STATS</div>
+                        <div style="display: flex; justify-content: space-around; text-align: center;">
+                            <div><p style="color:#636e72; margin-bottom:0;">5 Min</p><h2 style="color:#0073eb; margin-top:0;">{c5}</h2></div>
+                            <div><p style="color:#636e72; margin-bottom:0;">10 Min</p><h2 style="color:#0073eb; margin-top:0;">{c10}</h2></div>
+                            <div><p style="color:#636e72; margin-bottom:0;">30 Min</p><h2 style="color:#0073eb; margin-top:0;">{c30}</h2></div>
+                            <div style="border-left: 2px solid #eee; padding-left: 40px;">
+                                <p style="color:#636e72; margin-bottom:0;">Today's Total</p><h2 style="color:#2ecc71; margin-top:0;">{c_today}</h2>
+                            </div>
+                        </div>
                     </div>
                     """, unsafe_allow_html=True)
 
-                    st.markdown(f'<div class="section-label">🎯 {target_cli.upper()} MONITORING</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="section-label">🎯 {target_cli.upper()} LIVE MONITOR</div>', unsafe_allow_html=True)
                     if not df_target_all.empty:
                         mid_df = df_target_all.head(20).copy()
                         mid_df[['Name', 'Range']] = mid_df['num'].apply(lambda x: pd.Series(get_team_info(x)))
@@ -213,10 +220,10 @@ while True:
                                      use_container_width=True, height=800, hide_index=True, column_config=col_cfg)
 
             else:
-                st.info("Searching for live data...")
+                st.info("Scanning network for incoming data...")
 
         time.sleep(15)
         st.rerun()
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"Alert: {e}")
         time.sleep(5)
