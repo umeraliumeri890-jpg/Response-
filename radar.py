@@ -14,50 +14,54 @@ TEAM_FILE = "Numbers_Export.csv"
 # Page Config
 st.set_page_config(page_title="DOUBLE FACER HUNTER - UMER ALI", layout="wide")
 
-# --- DREAMHOST BLUE THEME DESIGN ---
+# --- CUSTOM BLUE & WHITE ANALYTICS UI ---
 st.markdown("""
 <style>
-    /* Main Background - DreamHost Royal Blue */
+    /* Main Background - Royal Blue */
     .stApp { 
         background-color: #0073eb;
         color: #ffffff; 
     }
     
-    /* Main Title - White & Bold */
+    /* Main Title */
     .main-title { 
         text-align: center; 
         color: #ffffff; 
         font-size: 40px; 
         font-weight: 800;
         padding-top: 20px;
-        text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
     }
 
-    /* Professional Content Box - Slightly darker blue for contrast */
+    /* FULL WHITE ANALYTICS BOX */
     .report-box { 
-        background: rgba(255, 255, 255, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.2);
+        background-color: #ffffff; /* Pure White Background */
+        border: none;
         padding: 25px; 
         border-radius: 12px; 
         margin-bottom: 25px;
-        backdrop-filter: blur(10px);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.2);
     }
 
-    /* Analysis Header */
+    /* Inside Analytics Box Text - Blue */
     .cli-header { 
-        color: #ffffff; 
+        color: #0073eb; 
         font-size: 24px; 
         font-weight: 700; 
         margin-bottom: 15px; 
         text-align: center;
-        border-bottom: 2px solid rgba(255, 255, 255, 0.3);
+        border-bottom: 1px solid #eee;
         padding-bottom: 10px;
+    }
+
+    .stats-text {
+        color: #0073eb !important; /* Blue text for stats */
+        font-weight: bold;
     }
 
     /* Section Labels */
     .section-label { 
         color: #ffffff; 
-        font-size: 22px; 
+        font-size: 20px; 
         font-weight: 700; 
         margin-top: 25px;
         margin-bottom: 15px; 
@@ -65,30 +69,19 @@ st.markdown("""
         padding-left: 15px;
     }
 
-    /* Input Controls Customization */
+    /* Input Field Styling */
     .stTextInput>div>div>input {
-        background-color: rgba(255, 255, 255, 0.9) !important;
+        background-color: white !important;
         color: #0073eb !important;
         border-radius: 6px !important;
-        font-weight: bold;
     }
 
     .stNumberInput>div>div>input {
-        background-color: rgba(255, 255, 255, 0.9) !important;
+        background-color: white !important;
         color: #0073eb !important;
-        border: none !important;
-        font-weight: bold;
     }
 
-    /* Sub-text */
-    .footer-sub {
-        text-align: center;
-        color: rgba(255, 255, 255, 0.8);
-        font-size: 14px;
-        margin-bottom: 30px;
-    }
-
-    /* Table Styling for Blue Background */
+    /* Table Styling */
     .stDataFrame {
         background-color: white;
         border-radius: 8px;
@@ -119,14 +112,14 @@ def load_team_data():
 
 # --- HEADER ---
 st.markdown('<div class="main-title">🎯 DOUBLE FACER HUNTER</div>', unsafe_allow_html=True)
-st.markdown('<div class="footer-sub">System Secure | Managed by <b>Umer Ali</b></div>', unsafe_allow_html=True)
+st.markdown('<div style="text-align:center; color:white; opacity:0.8; margin-bottom:20px;">System Secure | Managed by <b>Umer Ali</b></div>', unsafe_allow_html=True)
 
 # Inputs
 col_in1, col_in2 = st.columns([2, 1])
 with col_in1:
-    target_cli = st.text_input("🔍 Search App (CLI):", "MYOB").strip()
+    target_cli = st.text_input("🔍 Search CLI:", "MYOB").strip()
 with col_in2:
-    msg_limit = st.number_input("📥 Global Feed Limit:", min_value=1, max_value=2000, value=1000)
+    msg_limit = st.number_input("📥 Limit:", min_value=1, max_value=2000, value=1000)
 
 team_data = load_team_data()
 placeholder = st.empty()
@@ -169,21 +162,21 @@ while True:
                 def highlight_team(row):
                     num_check = str(row['Number']).split('.')[0].strip()
                     if num_check in team_data:
-                        # Highlighting team members with a distinct color on white background
+                        # Gold highlight for team members in the white table
                         return ['background-color: #ffd700; color: #000; font-weight: bold'] * len(row)
                     return [''] * len(row)
 
                 with placeholder.container():
-                    # STATS BOX (Glassmorphism effect on Blue)
+                    # WHITE ANALYTICS BOX
                     st.markdown(f"""
                     <div class="report-box">
                         <div class="cli-header">📊 {target_cli.upper()} LIVE ANALYTICS</div>
-                        <table style="width:100%; color:white; font-size:22px; text-align:center;">
-                            <tr>
-                                <td><b>5m:</b> {c5}</td>
-                                <td><b>10m:</b> {c10}</td>
-                                <td><b>30m:</b> {c30}</td>
-                                <td style="border-left: 2px solid rgba(255,255,255,0.3);"><b>Today: {c_today}</b></td>
+                        <table style="width:100%; text-align:center; border-collapse: collapse;">
+                            <tr class="stats-text" style="font-size:22px;">
+                                <td style="padding:10px;">5m: {c5}</td>
+                                <td style="padding:10px;">10m: {c10}</td>
+                                <td style="padding:10px;">30m: {c30}</td>
+                                <td style="border-left: 2px solid #ddd; padding:10px; color: #28a745;">Today: {c_today}</td>
                             </tr>
                         </table>
                     </div>
@@ -213,7 +206,7 @@ while True:
                                      use_container_width=True, height=800, hide_index=True, column_config=col_cfg)
 
             else:
-                st.info("Searching for live data...")
+                st.info("Searching for incoming signals...")
 
         time.sleep(15)
         st.rerun()
