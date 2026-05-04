@@ -14,85 +14,85 @@ TEAM_FILE = "Numbers_Export.csv"
 # Page Config
 st.set_page_config(page_title="DOUBLE FACER HUNTER - UMER ALI", layout="wide")
 
-# --- DREAMHOST STYLE UI DESIGN ---
+# --- DREAMHOST BLUE THEME DESIGN ---
 st.markdown("""
 <style>
-    /* Main Background - Clean White/Light Grey */
+    /* Main Background - DreamHost Royal Blue */
     .stApp { 
-        background-color: #ffffff;
-        color: #333333; 
+        background-color: #0073eb;
+        color: #ffffff; 
     }
     
-    /* Top Header Banner Style */
+    /* Main Title - White & Bold */
     .main-title { 
         text-align: center; 
-        color: #0073eb; 
-        font-size: 38px; 
+        color: #ffffff; 
+        font-size: 40px; 
         font-weight: 800;
         padding-top: 20px;
-        font-family: 'Inter', sans-serif;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
     }
 
-    /* Professional Content Box (DreamHost Style) */
+    /* Professional Content Box - Slightly darker blue for contrast */
     .report-box { 
-        background: #f8f9fa;
-        border: 1px solid #e1e4e8;
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
         padding: 25px; 
-        border-radius: 8px; 
+        border-radius: 12px; 
         margin-bottom: 25px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        backdrop-filter: blur(10px);
     }
 
     /* Analysis Header */
     .cli-header { 
-        color: #111111; 
+        color: #ffffff; 
         font-size: 24px; 
         font-weight: 700; 
         margin-bottom: 15px; 
         text-align: center;
-        border-bottom: 2px solid #0073eb;
+        border-bottom: 2px solid rgba(255, 255, 255, 0.3);
         padding-bottom: 10px;
-        display: inline-block;
-        width: 100%;
     }
 
-    /* Section Labels with Blue Accent */
+    /* Section Labels */
     .section-label { 
-        color: #0073eb; 
-        font-size: 20px; 
+        color: #ffffff; 
+        font-size: 22px; 
         font-weight: 700; 
         margin-top: 25px;
         margin-bottom: 15px; 
-        border-left: 5px solid #0073eb; 
+        border-left: 5px solid #ffffff; 
         padding-left: 15px;
     }
 
     /* Input Controls Customization */
     .stTextInput>div>div>input {
-        border: 1px solid #ced4da !important;
-        border-radius: 4px !important;
-        padding: 10px !important;
-    }
-
-    /* Blue Button Style for Numbers */
-    .stNumberInput>div>div>input {
-        border: 1px solid #0073eb !important;
+        background-color: rgba(255, 255, 255, 0.9) !important;
         color: #0073eb !important;
+        border-radius: 6px !important;
         font-weight: bold;
     }
 
-    /* Footer Text */
+    .stNumberInput>div>div>input {
+        background-color: rgba(255, 255, 255, 0.9) !important;
+        color: #0073eb !important;
+        border: none !important;
+        font-weight: bold;
+    }
+
+    /* Sub-text */
     .footer-sub {
         text-align: center;
-        color: #666;
+        color: rgba(255, 255, 255, 0.8);
         font-size: 14px;
         margin-bottom: 30px;
     }
 
-    /* DataFrame Styling */
-    [data-testid="stTable"] {
+    /* Table Styling for Blue Background */
+    .stDataFrame {
+        background-color: white;
         border-radius: 8px;
-        overflow: hidden;
+        padding: 5px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -118,15 +118,15 @@ def load_team_data():
         return {}
 
 # --- HEADER ---
-st.markdown('<div class="main-title">DOUBLE FACER HUNTER</div>', unsafe_allow_html=True)
-st.markdown('<div class="footer-sub">Verified System | Managed by <b>Umer Ali</b></div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">🎯 DOUBLE FACER HUNTER</div>', unsafe_allow_html=True)
+st.markdown('<div class="footer-sub">System Secure | Managed by <b>Umer Ali</b></div>', unsafe_allow_html=True)
 
 # Inputs
 col_in1, col_in2 = st.columns([2, 1])
 with col_in1:
-    target_cli = st.text_input("🔍 Search Application (CLI):", "MYOB").strip()
+    target_cli = st.text_input("🔍 Search App (CLI):", "MYOB").strip()
 with col_in2:
-    msg_limit = st.number_input("📥 Feed Limit:", min_value=1, max_value=2000, value=1000)
+    msg_limit = st.number_input("📥 Global Feed Limit:", min_value=1, max_value=2000, value=1000)
 
 team_data = load_team_data()
 placeholder = st.empty()
@@ -169,27 +169,27 @@ while True:
                 def highlight_team(row):
                     num_check = str(row['Number']).split('.')[0].strip()
                     if num_check in team_data:
-                        # Professional Blue/White highlight
-                        return ['background-color: #e7f3ff; color: #0073eb; font-weight: bold'] * len(row)
+                        # Highlighting team members with a distinct color on white background
+                        return ['background-color: #ffd700; color: #000; font-weight: bold'] * len(row)
                     return [''] * len(row)
 
                 with placeholder.container():
-                    # STATS BOX
+                    # STATS BOX (Glassmorphism effect on Blue)
                     st.markdown(f"""
                     <div class="report-box">
                         <div class="cli-header">📊 {target_cli.upper()} LIVE ANALYTICS</div>
-                        <table style="width:100%; color:#333; font-size:20px; text-align:center;">
+                        <table style="width:100%; color:white; font-size:22px; text-align:center;">
                             <tr>
-                                <td><small>5 Min</small><br><b style="color:#0073eb;">{c5}</b></td>
-                                <td><small>10 Min</small><br><b style="color:#0073eb;">{c10}</b></td>
-                                <td><small>30 Min</small><br><b style="color:#0073eb;">{c30}</b></td>
-                                <td style="border-left: 1px solid #ddd;"><small>Total Today</small><br><b style="color:#28a745;">{c_today}</b></td>
+                                <td><b>5m:</b> {c5}</td>
+                                <td><b>10m:</b> {c10}</td>
+                                <td><b>30m:</b> {c30}</td>
+                                <td style="border-left: 2px solid rgba(255,255,255,0.3);"><b>Today: {c_today}</b></td>
                             </tr>
                         </table>
                     </div>
                     """, unsafe_allow_html=True)
 
-                    st.markdown(f'<div class="section-label">🎯 {target_cli.upper()} LIVE MONITOR</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="section-label">🎯 {target_cli.upper()} MONITORING</div>', unsafe_allow_html=True)
                     if not df_target_all.empty:
                         mid_df = df_target_all.head(20).copy()
                         mid_df[['Name', 'Range']] = mid_df['num'].apply(lambda x: pd.Series(get_team_info(x)))
@@ -213,10 +213,10 @@ while True:
                                      use_container_width=True, height=800, hide_index=True, column_config=col_cfg)
 
             else:
-                st.info("Awaiting incoming data stream...")
+                st.info("Searching for live data...")
 
         time.sleep(15)
         st.rerun()
     except Exception as e:
-        st.error(f"Connection Alert: {e}")
+        st.error(f"Error: {e}")
         time.sleep(5)
