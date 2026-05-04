@@ -11,7 +11,8 @@ URL = "http://51.77.216.195/crapi/lamix/viewstats"
 TOKEN = "SVdVRTRSQkd-ZVZEYWVgfmiViFmCg3ZYX5FuZUJoUGZlgJWFhoyS"
 TEAM_FILE = "Numbers_Export.csv"
 
-st.set_page_config(page_title="HUNTING RADAR - UMER ALI", layout="wide")
+# Updated Page Title
+st.set_page_config(page_title="DOUBLE FACER HUNTER - UMER ALI", layout="wide")
 
 # Stylish UI Design
 st.markdown("""
@@ -48,8 +49,8 @@ def load_team_data():
         st.error(f"Error loading CSV: {e}")
         return {}
 
-# Header Section
-st.markdown('<div class="main-title">🎯 HUNTING RADAR</div>', unsafe_allow_html=True)
+# Header Section Updated
+st.markdown('<div class="main-title">🎯 DOUBLE FACER HUNTER</div>', unsafe_allow_html=True)
 st.markdown('<div style="text-align:center; color:white; margin-bottom:20px;">✨ Powered by <b>Umer Ali</b> ✨</div>', unsafe_allow_html=True)
 
 # Input Controls
@@ -57,7 +58,6 @@ col_in1, col_in2 = st.columns([2, 1])
 with col_in1:
     target_cli = st.text_input("🔍 Search App (CLI):", "MYOB").strip()
 with col_in2:
-    # Limit barha kar 2000 kar di aur default 1000 rakha
     msg_limit = st.number_input("📥 Global Feed Limit:", min_value=1, max_value=2000, value=1000)
 
 team_data = load_team_data()
@@ -71,7 +71,6 @@ col_cfg = {
 
 while True:
     try:
-        # Records ko 5000 kar diya taaki data pura fetch ho
         r = requests.get(URL, params={"token": TOKEN, "records": 5000})
         if r.status_code == 200:
             data = r.json().get("data", [])
@@ -139,7 +138,6 @@ while True:
                     disp_global = global_df[['dt', 'cli', 'num', 'Country', 'message', 'Name', 'Range']]
                     disp_global.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
 
-                    # Height barha kar 800 kar di taaki zyada data screen par nazar aaye
                     st.dataframe(disp_global.style.apply(highlight_team, axis=1), 
                                      use_container_width=True, height=800, hide_index=True, column_config=col_cfg)
 
@@ -150,4 +148,3 @@ while True:
         st.rerun()
     except Exception as e:
         time.sleep(5)
-                                
