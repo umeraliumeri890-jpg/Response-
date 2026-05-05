@@ -14,7 +14,7 @@ TEAM_FILE = "Numbers_Export.csv"
 # Page Config
 st.set_page_config(page_title="DOUBLE FACER HUNTER - UMER ALI", layout="wide")
 
-# --- UI DESIGN UPDATED ---
+# --- UI DESIGN ---
 st.markdown("""
 <style>
     /* Main Background */
@@ -45,11 +45,11 @@ st.markdown("""
         text-transform: uppercase;
     }
 
-    /* TABLE HEADER FIX - Is se upper wali line alag nazar ayegi */
+    /* TABLE HEADER FIX */
     .stDataFrame thead tr th {
-        background-color: #f0f2f6 !important; /* Light Grey Background for Header */
-        color: #31333f !important; /* Dark Text */
-        font-weight: 800 !important; /* Extra Bold Headings */
+        background-color: #f0f2f6 !important;
+        color: #31333f !important;
+        font-weight: 800 !important;
         border: 1px solid #dee2e6 !important;
     }
 
@@ -74,7 +74,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Helper Functions
+# --- HELPER FUNCTIONS ---
 def get_country(num):
     try:
         full_num = "+" + str(num).strip()
@@ -91,6 +91,24 @@ def load_team_data():
         df['MemberName'] = df['Status'].str.replace('Allocated: ', '', case=False, regex=False).str.strip()
         return df.set_index('Phone Number')[['Range', 'MemberName']].to_dict('index')
     except Exception: return {}
+
+def get_team_info(num, team_data):
+    """Returns MemberName and Range, but ignores specific users."""
+    n_str = str(num).split('.')[0].strip()
+    if n_str in team_data:
+        name = team_data[n_str]['MemberName']
+        # EXCLUSION LOGIC: In names ka data normal show hoga
+        if name in ["UTS_Umer1", "UTS_Khadija"]:
+            return "", ""
+        return name, team_data[n_str]['Range']
+    return "", ""
+
+def highlight_team(row):
+    """Highlights rows ONLY if a team member name exists (after exclusion)."""
+    # Check if 'Team Member' column has a value
+    if row['Team Member'] != "":
+        return ['background-color: #ffd700; color: #000; font-weight: bold'] * len(row)
+    return [''] * len(row)
 
 # --- HEADER ---
 st.markdown('<div class="main-title">🎯 DOUBLE FACER HUNTER</div>', unsafe_allow_html=True)
@@ -122,27 +140,24 @@ while True:
             if not df.empty:
                 df['dt'] = pd.to_datetime(df['dt'])
                 now = datetime.now()
-                if now.hour < 5: start_day = (now - timedelta(days=1)).replace(hour=5, minute=0, second=0, microsecond=0)
-                else: start_day = now.replace(hour=5, minute=0, second=0, microsecond=0)
+                
+                # Shift calculation (starting 5 AM)
+                if now.hour < 5: 
+                    start_day = (now - timedelta(days=1)).replace(hour=5, minute=0, second=0, microsecond=0)
+                else: 
+                    start_day = now.replace(hour=5, minute=0, second=0, microsecond=0)
 
+                # Filter Target CLI
                 df_target_all = df[df['cli'].str.contains(target_cli, case=False, na=False)].copy()
+                
+                # Analytics
                 c5 = len(df_target_all[df_target_all['dt'] >= (now - timedelta(minutes=5))])
                 c10 = len(df_target_all[df_target_all['dt'] >= (now - timedelta(minutes=10))])
                 c30 = len(df_target_all[df_target_all['dt'] >= (now - timedelta(minutes=30))])
                 c_today = len(df_target_all[df_target_all['dt'] >= start_day])
 
-                def get_team_info(num):
-                    n_str = str(num).split('.')[0].strip()
-                    if n_str in team_data: return team_data[n_str]['MemberName'], team_data[n_str]['Range']
-                    return "", ""
-
-                def highlight_team(row):
-                    num_check = str(row['Number']).split('.')[0].strip()
-                    if num_check in team_data: return ['background-color: #ffd700; color: #000; font-weight: bold'] * len(row)
-                    return [''] * len(row)
-
                 with placeholder.container():
-                    # Analytics Table-Style
+                    # Analytics Table
                     st.markdown(f"""
                     <div class="report-box">
                         <div class="analytics-header-row">
@@ -156,24 +171,34 @@ while True:
                     </div>
                     """, unsafe_allow_html=True)
 
+                    # 1. Target Monitoring Table
                     st.markdown(f'<div class="section-label">🎯 {target_cli.upper()} MONITORING</div>', unsafe_allow_html=True)
                     if not df_target_all.empty:
-                        mid_df = df_target_all.head(20).copy()
-                        mid_df[['Name', 'Range']] = mid_df['num'].apply(lambda x: pd.Series(get_team_info(x)))
+                        mid_df = df_target_all.head(25).copy()
+                        # Apply team info logic with exclusion
+                        mid_df[['Team Member', 'Range']] = mid_df['num'].apply(lambda x: pd.Series(get_team_info(x, team_data)))
                         mid_df['Country'] = mid_df['num'].apply(get_country)
-                        disp_mid = mid_df[['dt', 'cli', 'num', 'Country', 'message', 'Name', 'Range']]
+                        
+                        disp_mid = mid_df[['dt', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
                         disp_mid.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
-                        st.dataframe(disp_mid.style.apply(highlight_team, axis=1), use_container_width=True, height=250, hide_index=True, column_config=col_cfg)
+                        
+                        st.dataframe(disp_mid.style.apply(highlight_team, axis=1), 
+                                     use_container_width=True, height=350, hide_index=True, column_config=col_cfg)
 
+                    # 2. Global Feed Table
                     st.markdown('<div class="section-label">🌐 GLOBAL NETWORK FEED</div>', unsafe_allow_html=True)
                     global_df = df.head(msg_limit).copy()
-                    global_df[['Name', 'Range']] = global_df['num'].apply(lambda x: pd.Series(get_team_info(x)))
+                    global_df[['Team Member', 'Range']] = global_df['num'].apply(lambda x: pd.Series(get_team_info(x, team_data)))
                     global_df['Country'] = global_df['num'].apply(get_country)
-                    disp_global = global_df[['dt', 'cli', 'num', 'Country', 'message', 'Name', 'Range']]
+                    
+                    disp_global = global_df[['dt', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
                     disp_global.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
-                    st.dataframe(disp_global.style.apply(highlight_team, axis=1), use_container_width=True, height=800, hide_index=True, column_config=col_cfg)
+                    
+                    st.dataframe(disp_global.style.apply(highlight_team, axis=1), 
+                                 use_container_width=True, height=800, hide_index=True, column_config=col_cfg)
 
         time.sleep(15)
         st.rerun()
-    except Exception:
+    except Exception as e:
+        # st.error(f"Error: {e}") # Debugging ke liye on kar sakte hain
         time.sleep(5)
