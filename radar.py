@@ -97,15 +97,13 @@ def get_team_info(num, team_data):
     n_str = str(num).split('.')[0].strip()
     if n_str in team_data:
         name = team_data[n_str]['MemberName']
-        # EXCLUSION LOGIC: In names ka data normal show hoga
         if name in ["UTS_Umer1", "UTS_Khadija"]:
             return "", ""
         return name, team_data[n_str]['Range']
     return "", ""
 
 def highlight_team(row):
-    """Highlights rows ONLY if a team member name exists (after exclusion)."""
-    # Check if 'Team Member' column has a value
+    """Highlights rows ONLY if a team member name exists."""
     if row['Team Member'] != "":
         return ['background-color: #ffd700; color: #000; font-weight: bold'] * len(row)
     return [''] * len(row)
@@ -139,6 +137,11 @@ while True:
             
             if not df.empty:
                 df['dt'] = pd.to_datetime(df['dt'])
+                
+                # --- FILTER: EXCLUDE ADMIRAL ---
+                # Is line se "Admiral" wali tamam records delete ho jayengi
+                df = df[~df['cli'].str.contains("Admiral", case=False, na=False)].copy()
+                
                 now = datetime.now()
                 
                 # Shift calculation (starting 5 AM)
@@ -147,7 +150,7 @@ while True:
                 else: 
                     start_day = now.replace(hour=5, minute=0, second=0, microsecond=0)
 
-                # Filter Target CLI
+                # Filter Target CLI (Admiral pehle hi filter ho chuka hai)
                 df_target_all = df[df['cli'].str.contains(target_cli, case=False, na=False)].copy()
                 
                 # Analytics
@@ -175,7 +178,6 @@ while True:
                     st.markdown(f'<div class="section-label">🎯 {target_cli.upper()} MONITORING</div>', unsafe_allow_html=True)
                     if not df_target_all.empty:
                         mid_df = df_target_all.head(25).copy()
-                        # Apply team info logic with exclusion
                         mid_df[['Team Member', 'Range']] = mid_df['num'].apply(lambda x: pd.Series(get_team_info(x, team_data)))
                         mid_df['Country'] = mid_df['num'].apply(get_country)
                         
@@ -200,5 +202,4 @@ while True:
         time.sleep(15)
         st.rerun()
     except Exception as e:
-        # st.error(f"Error: {e}") # Debugging ke liye on kar sakte hain
         time.sleep(5)
