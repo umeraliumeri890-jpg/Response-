@@ -105,7 +105,6 @@ def get_team_info(num, team_data):
 
 def highlight_team(row):
     """Highlights rows ONLY if a team member name exists (after exclusion)."""
-    # Check if 'Team Member' column has a value
     if row['Team Member'] != "":
         return ['background-color: #ffd700; color: #000; font-weight: bold'] * len(row)
     return [''] * len(row)
@@ -137,6 +136,11 @@ while True:
             data = r.json().get("data", [])
             df = pd.DataFrame(data)
             
+            if not df.empty:
+                # FILTER EXCLUSION: ADAHI aur SherryFitz dono CLIs ko shuru me hi clean kar diya
+                excluded_clis = ['ADAHI', 'SherryFitz']
+                df = df[~df['cli'].str.contains('|'.join(excluded_clis), case=False, na=False)].copy()
+                
             if not df.empty:
                 df['dt'] = pd.to_datetime(df['dt'])
                 now = datetime.now()
@@ -200,5 +204,4 @@ while True:
         time.sleep(15)
         st.rerun()
     except Exception as e:
-        # st.error(f"Error: {e}") # Debugging ke liye on kar sakte hain
         time.sleep(5)
