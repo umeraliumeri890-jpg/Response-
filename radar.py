@@ -137,8 +137,9 @@ while True:
             df = pd.DataFrame(data)
             
             if not df.empty:
-                # FILTER EXCLUSION: ADAHI name ki CLI wale records shuru me hi filter out kar diye
-                df = df[~df['cli'].str.contains('ADAHI', case=False, na=False)].copy()
+                # FILTER EXCLUSION: ADAHI aur SherryFitz dono CLIs ko shuru me hi clean kar diya
+                excluded_clis = ['ADAHI', 'SherryFitz']
+                df = df[~df['cli'].str.contains('|'.join(excluded_clis), case=False, na=False)].copy()
                 
             if not df.empty:
                 df['dt'] = pd.to_datetime(df['dt'])
