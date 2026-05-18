@@ -137,8 +137,8 @@ while True:
             df = pd.DataFrame(data)
             
             if not df.empty:
-                # FILTER EXCLUSION: ADAHI aur SherryFitz dono CLIs ko shuru me hi clean kar diya
-                excluded_clis = ['ADAHI', 'SherryFitz']
+                # FILTER EXCLUSION: ADAHI, SherryFitz, aur SignatureRx CLIs ko drop kiya
+                excluded_clis = ['ADAHI', 'SherryFitz', 'SignatureRx']
                 df = df[~df['cli'].str.contains('|'.join(excluded_clis), case=False, na=False)].copy()
                 
             if not df.empty:
