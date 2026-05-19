@@ -14,62 +14,98 @@ TEAM_FILE = "Numbers_Export.csv"
 # Page Config
 st.set_page_config(page_title="DOUBLE FACER HUNTER - UMER ALI", layout="wide")
 
-# --- UI DESIGN ---
+# --- UI DESIGN (PROFESSIONAL DARK & NEON INTERFACE) ---
 st.markdown("""
 <style>
-    /* Main Background */
+    /* Global Background and Typography */
     .stApp { 
-        background-color: #0073eb;
-        color: #ffffff; 
+        background: radial-gradient(circle at top left, #0d1117, #161b22);
+        color: #c9d1d9; 
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
     
-    /* Main Title */
+    /* Main Dashboard Header */
     .main-title { 
         text-align: center; 
         color: #ffffff; 
-        font-size: 35px; 
+        font-size: 38px; 
         font-weight: 800;
-        padding-top: 10px;
-        margin-bottom: 20px;
+        padding: 20px 0px 5px 0px;
+        letter-spacing: 1.5px;
+        text-shadow: 0 0 20px rgba(0, 115, 235, 0.4);
+    }
+    .main-subtitle {
+        text-align: center;
+        color: #8b949e;
+        font-size: 14px;
+        margin-bottom: 30px;
+        text-transform: uppercase;
+        letter-spacing: 2px;
     }
 
-    /* SECTION HEADINGS */
+    /* Section Headings */
     .section-label { 
         color: #ffffff; 
-        font-size: 22px; 
-        font-weight: 900; 
+        font-size: 20px; 
+        font-weight: 700; 
         margin-top: 35px;
         margin-bottom: 15px; 
-        border-left: 6px solid #ffffff; 
-        padding-left: 15px;
-        text-transform: uppercase;
+        border-left: 4px solid #58a6ff; 
+        padding-left: 12px;
+        letter-spacing: 0.5px;
     }
 
-    /* TABLE HEADER FIX */
-    .stDataFrame thead tr th {
-        background-color: #f0f2f6 !important;
-        color: #31333f !important;
-        font-weight: 800 !important;
-        border: 1px solid #dee2e6 !important;
-    }
-
-    /* Analytics Box */
-    .report-box { 
-        background-color: #ffffff; 
-        border-radius: 8px; 
-        margin-bottom: 25px;
-        border: 1px solid #ddd;
-    }
-    .analytics-header-row { background-color: #f8f9fa; display: flex; border-bottom: 1px solid #dee2e6; }
-    .header-item { flex: 1; padding: 10px; color: #6c757d; font-size: 14px; font-weight: 800; border-right: 1px solid #dee2e6; padding-left: 15px; }
-    .analytics-data-row { display: flex; background-color: white; }
-    .data-item { flex: 1; padding: 15px; color: #000; font-size: 24px; font-weight: 700; border-right: 1px solid #eee; padding-left: 15px; }
-
-    /* Inputs */
+    /* Streamlit Components Overrides (Inputs) */
     .stTextInput>div>div>input, .stNumberInput>div>div>input {
-        background-color: white !important;
-        color: #0073eb !important;
-        font-weight: bold;
+        background-color: #21262d !important;
+        color: #ffffff !important;
+        border: 1px solid #30363d !important;
+        border-radius: 6px !important;
+        font-weight: 600;
+    }
+    .stTextInput>div>div>input:focus, .stNumberInput>div>div>input:focus {
+        border-color: #58a6ff !important;
+        box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2) !important;
+    }
+    label {
+        color: #8b949e !important;
+        font-weight: 600 !important;
+    }
+
+    /* Professional Analytics Container */
+    .analytics-container {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 20px;
+        margin-bottom: 25px;
+    }
+    .card {
+        background-color: #161b22;
+        border: 1px solid #30363d;
+        border-radius: 8px;
+        padding: 15px 20px;
+        text-align: left;
+        transition: transform 0.2s, border-color 0.2s;
+    }
+    .card:hover {
+        border-color: #484f58;
+    }
+    .card-label {
+        color: #8b949e;
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 5px;
+    }
+    .card-value {
+        color: #ffffff;
+        font-size: 28px;
+        font-weight: 700;
+    }
+    .card-value.highlight {
+        color: #2ea043; /* Green highlight for 'Today' count */
+        text-shadow: 0 0 10px rgba(46, 160, 67, 0.2);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -80,7 +116,8 @@ def get_country(num):
         full_num = "+" + str(num).strip()
         parsed = phonenumbers.parse(full_num)
         return geocoder.description_for_number(parsed, "en")
-    except: return "Global"
+    except: 
+        return "Global"
 
 @st.cache_data
 def load_team_data():
@@ -90,7 +127,8 @@ def load_team_data():
         df['Status'] = df['Status'].fillna('') 
         df['MemberName'] = df['Status'].str.replace('Allocated: ', '', case=False, regex=False).str.strip()
         return df.set_index('Phone Number')[['Range', 'MemberName']].to_dict('index')
-    except Exception: return {}
+    except Exception: 
+        return {}
 
 def get_team_info(num, team_data):
     """Returns MemberName and Range, but ignores specific users."""
@@ -104,32 +142,39 @@ def get_team_info(num, team_data):
     return "", ""
 
 def highlight_team(row):
-    """Highlights rows ONLY if a team member name exists (after exclusion)."""
-    # Check if 'Team Member' column has a value
+    """Highlights rows with an elegant amber accent color if a team member matches."""
     if row['Team Member'] != "":
-        return ['background-color: #ffd700; color: #000; font-weight: bold'] * len(row)
+        # Professional Dark Amber Overlay
+        return ['background-color: rgba(210, 153, 34, 0.15); color: #ffcb47; font-weight: bold; border-left: 3px solid #d29922;'] * len(row)
     return [''] * len(row)
 
 # --- HEADER ---
 st.markdown('<div class="main-title">🎯 DOUBLE FACER HUNTER</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-subtitle">Real-time Advanced Telecom Monitoring Control Center</div>', unsafe_allow_html=True)
 
-# Inputs
-col_in1, col_in2 = st.columns([2, 1])
-with col_in1:
-    target_cli = st.text_input("Search App (CLI):", "MYOB").strip()
-with col_in2:
-    msg_limit = st.number_input("Global Feed Limit:", min_value=1, max_value=2000, value=1000)
+# Control Panel Inputs
+with st.container():
+    col_in1, col_in2 = st.columns([2, 1])
+    with col_in1:
+        target_cli = st.text_input("📊 Search Target App (CLI):", "MYOB").strip()
+    with col_in2:
+        msg_limit = st.number_input("🌐 Global Feed Limit:", min_value=1, max_value=2000, value=1000)
 
 team_data = load_team_data()
 placeholder = st.empty()
 
+# Table Configuration Matrix
 col_cfg = {
-    "Range": st.column_config.TextColumn("Range", width="large"),
-    "Message": st.column_config.TextColumn("Message", width="max"),
-    "Time": st.column_config.TextColumn("Time", width="medium"),
+    "Time": st.column_config.TextColumn("⏰ Time", width="medium"),
+    "App": st.column_config.TextColumn("📱 App/CLI", width="small"),
+    "Number": st.column_config.TextColumn("📞 Phone Number", width="medium"),
+    "Country": st.column_config.TextColumn("🌍 Country", width="small"),
+    "Message": st.column_config.TextColumn("💬 Message Log", width="max"),
+    "Team Member": st.column_config.TextColumn("👤 Team Member", width="medium"),
+    "Range": st.column_config.TextColumn("📡 Range Area", width="large"),
 }
 
-# --- MAIN LOOP ---
+# --- MAIN REAL-TIME LOOP ---
 while True:
     try:
         r = requests.get(URL, params={"token": TOKEN, "records": 5000})
@@ -150,55 +195,79 @@ while True:
                 # Filter Target CLI
                 df_target_all = df[df['cli'].str.contains(target_cli, case=False, na=False)].copy()
                 
-                # Analytics
+                # Analytics Parsing
                 c5 = len(df_target_all[df_target_all['dt'] >= (now - timedelta(minutes=5))])
                 c10 = len(df_target_all[df_target_all['dt'] >= (now - timedelta(minutes=10))])
                 c30 = len(df_target_all[df_target_all['dt'] >= (now - timedelta(minutes=30))])
                 c_today = len(df_target_all[df_target_all['dt'] >= start_day])
 
                 with placeholder.container():
-                    # Analytics Table
+                    # HTML Grid-based Metric Cards (Modern look instead of old style tables)
                     st.markdown(f"""
-                    <div class="report-box">
-                        <div class="analytics-header-row">
-                            <div class="header-item">5m</div><div class="header-item">10m</div>
-                            <div class="header-item">30m</div><div class="header-item" style="border-right:none;">Today</div>
+                    <div class="analytics-container">
+                        <div class="card">
+                            <div class="card-label">Traffic (Last 5 Mins)</div>
+                            <div class="card-value">{c5}</div>
                         </div>
-                        <div class="analytics-data-row">
-                            <div class="data-item">{c5}</div><div class="data-item">{c10}</div>
-                            <div class="data-item">{c30}</div><div class="data-item" style="border-right:none; color:#28a745;">{c_today}</div>
+                        <div class="card">
+                            <div class="card-label">Traffic (Last 10 Mins)</div>
+                            <div class="card-value">{c10}</div>
+                        </div>
+                        <div class="card">
+                            <div class="card-label">Traffic (Last 30 Mins)</div>
+                            <div class="card-value">{c30}</div>
+                        </div>
+                        <div class="card">
+                            <div class="card-label">Total Today Shift</div>
+                            <div class="card-value highlight">{c_today}</div>
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
 
                     # 1. Target Monitoring Table
-                    st.markdown(f'<div class="section-label">🎯 {target_cli.upper()} MONITORING</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="section-label">🎯 TARGET DETECTOR: {target_cli.upper()}</div>', unsafe_allow_html=True)
                     if not df_target_all.empty:
                         mid_df = df_target_all.head(25).copy()
-                        # Apply team info logic with exclusion
+                        
+                        # Data processing
                         mid_df[['Team Member', 'Range']] = mid_df['num'].apply(lambda x: pd.Series(get_team_info(x, team_data)))
                         mid_df['Country'] = mid_df['num'].apply(get_country)
                         
                         disp_mid = mid_df[['dt', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
                         disp_mid.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
                         
-                        st.dataframe(disp_mid.style.apply(highlight_team, axis=1), 
-                                     use_container_width=True, height=350, hide_index=True, column_config=col_cfg)
+                        # Rendering DataFrame
+                        st.dataframe(
+                            disp_mid.style.apply(highlight_team, axis=1), 
+                            use_container_width=True, 
+                            height=350, 
+                            hide_index=True, 
+                            column_config=col_cfg
+                        )
+                    else:
+                        st.info("No active logs matching target CLI found right now.")
 
                     # 2. Global Feed Table
-                    st.markdown('<div class="section-label">🌐 GLOBAL NETWORK FEED</div>', unsafe_allow_html=True)
+                    st.markdown('<div class="section-label">🌐 GLOBAL NETWORK INTERCEPT FEED</div>', unsafe_allow_html=True)
                     global_df = df.head(msg_limit).copy()
+                    
+                    # Data processing
                     global_df[['Team Member', 'Range']] = global_df['num'].apply(lambda x: pd.Series(get_team_info(x, team_data)))
                     global_df['Country'] = global_df['num'].apply(get_country)
                     
                     disp_global = global_df[['dt', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
                     disp_global.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
                     
-                    st.dataframe(disp_global.style.apply(highlight_team, axis=1), 
-                                 use_container_width=True, height=800, hide_index=True, column_config=col_cfg)
+                    # Rendering DataFrame
+                    st.dataframe(
+                        disp_global.style.apply(highlight_team, axis=1), 
+                        use_container_width=True, 
+                        height=700, 
+                        hide_index=True, 
+                        column_config=col_cfg
+                    )
 
         time.sleep(15)
         st.rerun()
     except Exception as e:
-        # st.error(f"Error: {e}") # Debugging ke liye on kar sakte hain
         time.sleep(5)
