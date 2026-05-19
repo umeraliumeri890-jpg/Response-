@@ -74,40 +74,52 @@ st.markdown("""
         letter-spacing: 1px;
     }
 
-    /* Terminal Analytics Cards */
-    .terminal-grid {
+    /* Dynamic Leaderboard Cards */
+    .leaderboard-grid {
         display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 15px;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 20px;
         margin-bottom: 30px;
     }
-    .t-card {
+    .rank-card {
         background: linear-gradient(135deg, #121214, #1a1a1e);
         border: 1px solid #222222;
-        border-left: 4px solid #333333;
         border-radius: 4px;
-        padding: 15px;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        padding: 20px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+        position: relative;
+        overflow: hidden;
     }
-    .t-card.active-shift {
-        border-left: 4px solid #00ff66;
-        box-shadow: 0 0 10px rgba(0,255,102,0.05);
-    }
-    .t-label {
-        color: #888888;
+    /* Distinct left glow colors for ranks */
+    .rank-1 { border-left: 5px solid #ffcc00; box-shadow: 0 0 10px rgba(255,204,0,0.1); }
+    .rank-2 { border-left: 5px solid #cccccc; }
+    .rank-3 { border-left: 5px solid #cd7f32; }
+    
+    .rank-badge {
         font-size: 11px;
-        text-transform: uppercase;
-        letter-spacing: 1.5px;
+        font-weight: bold;
+        letter-spacing: 2px;
         margin-bottom: 8px;
     }
-    .t-value {
+    .rank-1 .rank-badge { color: #ffcc00; }
+    .rank-2 .rank-badge { color: #cccccc; }
+    .rank-3 .rank-badge { color: #cd7f32; }
+
+    .rank-cli {
         color: #ffffff;
-        font-size: 32px;
-        font-weight: bold;
+        font-size: 28px;
+        font-weight: 900;
+        letter-spacing: 1px;
+        margin-bottom: 5px;
+        text-transform: uppercase;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
-    .t-value.neon {
+    .rank-count {
         color: #00ff66;
-        text-shadow: 0 0 10px rgba(0,255,102,0.3);
+        font-size: 14px;
+        font-weight: bold;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -137,7 +149,6 @@ def get_team_info(num, team_data):
     n_str = str(num).split('.')[0].strip()
     if n_str in team_data:
         name = team_data[n_str]['MemberName']
-        # EXCLUSION LOGIC
         if name in ["UTS_Umer1", "UTS_Khadija"]:
             return "", ""
         return name, team_data[n_str]['Range']
@@ -146,7 +157,6 @@ def get_team_info(num, team_data):
 def highlight_team(row):
     """Highlights rows with a Toxic Cyber Red/Neon Pink theme for alerts."""
     if row['Team Member'] != "":
-        # Matrix Red Highlight for Target Detection
         return ['background-color: rgba(255, 0, 85, 0.12); color: #ff3366; font-weight: bold; border-right: 4px solid #ff0055;'] * len(row)
     return [''] * len(row)
 
@@ -187,40 +197,47 @@ while True:
                 df['dt'] = pd.to_datetime(df['dt'])
                 now = datetime.now()
                 
-                # Shift calculation
-                if now.hour < 5: 
-                    start_day = (now - timedelta(days=1)).replace(hour=5, minute=0, second=0, microsecond=0)
-                else: 
-                    start_day = now.replace(hour=5, minute=0, second=0, microsecond=0)
-
-                # Filter Target CLI
-                df_target_all = df[df['cli'].str.contains(target_cli, case=False, na=False)].copy()
+                # --- TOP 3 APP/CLI CALCULATION (LAST 5 MINS) ---
+                five_mins_ago = now - timedelta(minutes=5)
+                df_5m = df[df['dt'] >= five_mins_ago]
                 
-                # Analytics Metrics
-                c5 = len(df_target_all[df_target_all['dt'] >= (now - timedelta(minutes=5))])
-                c10 = len(df_target_all[df_target_all['dt'] >= (now - timedelta(minutes=10))])
-                c30 = len(df_target_all[df_target_all['dt'] >= (now - timedelta(minutes=30))])
-                c_today = len(df_target_all[df_target_all['dt'] >= start_day])
+                # Default empty placeholders
+                top1_name, top1_count = "NO_DATA", 0
+                top2_name, top2_count = "NO_DATA", 0
+                top3_name, top3_count = "NO_DATA", 0
+                
+                if not df_5m.empty and 'cli' in df_5m.columns:
+                    # Group by CLI and count occurrences, then get top 3
+                    top_clis = df_5m['cli'].value_counts().head(3)
+                    
+                    if len(top_clis) >= 1:
+                        top1_name, top1_count = top_clis.index[0], top_clis.iloc[0]
+                    if len(top_clis) >= 2:
+                        top2_name, top2_count = top_clis.index[1], top_clis.iloc[1]
+                    if len(top_clis) >= 3:
+                        top3_name, top3_count = top_clis.index[2], top_clis.iloc[2]
+
+                # Filter Target CLI for tables
+                df_target_all = df[df['cli'].str.contains(target_cli, case=False, na=False)].copy()
 
                 with placeholder.container():
-                    # Terminal Style Cards Grid
+                    # --- NEW TOP 3 LEADERBOARD GRID UI ---
                     st.markdown(f"""
-                    <div class="terminal-grid">
-                        <div class="t-card">
-                            <div class="t-label">PING_5M</div>
-                            <div class="t-value">{c5}</div>
+                    <div class="leaderboard-grid">
+                        <div class="rank-card rank-1">
+                            <div class="rank-badge">🏆 TOP 1 (LAST 5M)</div>
+                            <div class="rank-cli">{top1_name}</div>
+                            <div class="rank-count">🔥 {top1_count} OTPs</div>
                         </div>
-                        <div class="t-card">
-                            <div class="t-label">PING_10M</div>
-                            <div class="t-value">{c10}</div>
+                        <div class="rank-card rank-2">
+                            <div class="rank-badge">🥈 TOP 2 (LAST 5M)</div>
+                            <div class="rank-cli">{top2_name}</div>
+                            <div class="rank-count">⚡ {top2_count} OTPs</div>
                         </div>
-                        <div class="t-card">
-                            <div class="t-label">PING_30M</div>
-                            <div class="t-value">{c30}</div>
-                        </div>
-                        <div class="t-card active-shift">
-                            <div class="t-label">SHIFT_TOTAL</div>
-                            <div class="t-value neon">{c_today}</div>
+                        <div class="rank-card rank-3">
+                            <div class="rank-badge">🥉 TOP 3 (LAST 5M)</div>
+                            <div class="rank-cli">{top3_name}</div>
+                            <div class="rank-count">📡 {top3_count} OTPs</div>
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
