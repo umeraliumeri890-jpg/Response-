@@ -195,11 +195,6 @@ while True:
             
             if not df.empty:
                 df['dt'] = pd.to_datetime(df['dt'])
-                
-                # --- FILTER: EXCLUDE SPECIFIC CLI (15412293970) ---
-                # Is line se "15412293970" naam ki CLI ka poora data gayab ho jayega
-                df = df[~df['cli'].astype(str).str.contains("15412293970", case=False, na=False)].copy()
-                
                 now = datetime.now()
                 
                 # --- TOP 3 APP/CLI CALCULATION (LAST 5 MINS) ---
@@ -212,6 +207,7 @@ while True:
                 top3_name, top3_count = "NO_DATA", 0
                 
                 if not df_5m.empty and 'cli' in df_5m.columns:
+                    # Group by CLI and count occurrences, then get top 3
                     top_clis = df_5m['cli'].value_counts().head(3)
                     
                     if len(top_clis) >= 1:
