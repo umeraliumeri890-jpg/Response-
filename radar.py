@@ -65,7 +65,7 @@ def get_webdriver():
     except:
         return webdriver.Chrome(service=Service("/usr/lib/chromium-browser/chromedriver"), options=options)
 
-@st.cache_data(ttl=300)  # 5 minutes cache taaki baar baar login na karna pare
+@st.cache_data(ttl=300)
 def fetch_live_panel_options(admin_user, admin_pass):
     """Matrix Panel par login karke real dropdown choices scrape karta ha"""
     driver = get_webdriver()
@@ -88,6 +88,11 @@ def fetch_live_panel_options(admin_user, admin_pass):
         # Step 2: Go to allocation page
         driver.get("https://matrix-panel.tech/agent/allocate")
         time.sleep(3)
+        
+        # [FIX] Sab se pehle beech wale 'Allocate' tab par click karo taaki form open ho
+        allocate_tab = wait.until(EC.element_to_be_clickable((By.XPATH, "//a[contains(., 'Allocate')]|//button[contains(., 'Allocate')]|//li[contains(., 'Allocate')]")))
+        driver.execute_script("arguments[0].click();", allocate_tab)
+        time.sleep(2)
         
         # Ranges Options Scrape
         range_elements = driver.find_elements(By.XPATH, "//select[contains(@id, 'range_name') or contains(@name, 'range_name')]/option")
@@ -129,6 +134,11 @@ def run_matrix_allocation(admin_user, admin_pass, selected_range, quantity, targ
         # Step 2: Allocation Dashboard Page Link
         driver.get("https://matrix-panel.tech/agent/allocate")
         time.sleep(4)
+        
+        # [FIX] Beech wale 'Allocate' tab click event sequence trigger karein
+        allocate_tab = wait.until(EC.element_to_be_clickable((By.XPATH, "//a[contains(., 'Allocate')]|//button[contains(., 'Allocate')]|//li[contains(., 'Allocate')]")))
+        driver.execute_script("arguments[0].click();", allocate_tab)
+        time.sleep(2)
         
         # Step 3: Select2 Handling for 'Ranges' Dropdown Field
         range_container = wait.until(EC.element_to_be_clickable((By.XPATH, "//select[@id='range_name']/following-sibling::span[contains(@class, 'select2')]|//textarea[contains(@aria-describedby, 'select2-range_name')]/..")))
@@ -217,113 +227,3 @@ st.sidebar.caption("DEVELOPED BY: UTS TEAM")
 
 # ==========================================
 # PAGE 1: LIVE SNIFFER DASHBOARD
-# ==========================================
-if st.session_state.current_page == "Dashboard":
-    st.markdown('<div class="main-title">⚡ DOUBLE FACER HUNTER ⚡</div>', unsafe_allow_html=True)
-    st.markdown('<div class="main-subtitle">> SYSTEM CONTROL PANEL // NETWORK SNIFFER</div>', unsafe_allow_html=True)
-
-    col_in1, col_in2 = st.columns([2, 1])
-    with col_in1: target_cli = st.text_input("⚙️ ENTER TARGET AGENT (CLI):", "MYOB").strip()
-    with col_in2: msg_limit = st.number_input("📡 STREAM BUFFER LIMIT:", min_value=1, max_value=2000, value=1000)
-
-    placeholder = st.empty()
-    team_df = load_team_data()
-
-    col_cfg = {
-        "Time": st.column_config.TextColumn("TIMESTAMP", width="medium"),
-        "App": st.column_config.TextColumn("IDENT/CLI", width="small"),
-        "Number": st.column_config.TextColumn("DATA_STREAM", width="medium"),
-        "Country": st.column_config.TextColumn("LOCATION", width="small"),
-        "Message": st.column_config.TextColumn("DECRYPTED_MSG", width="max"),
-        "Team Member": st.column_config.TextColumn("OPERATOR", width="medium"),
-        "Range": st.column_config.TextColumn("NETWORK_RANGE", width="large"),
-    }
-
-    while st.session_state.current_page == "Dashboard":
-        try:
-            r = requests.get(URL, params={"token": TOKEN, "records": 5000})
-            if r.status_code == 200:
-                data = r.json().get("data", [])
-                df = pd.DataFrame(data)
-                
-                if not df.empty:
-                    df['dt'] = pd.to_datetime(df['dt'])
-                    df_5m = df[df['dt'] >= (datetime.now() - timedelta(minutes=5))]
-                    
-                    top1, top2, top3 = ("NO_DATA", 0), ("NO_DATA", 0), ("NO_DATA", 0)
-                    if not df_5m.empty and 'cli' in df_5m.columns:
-                        top = df_5m['cli'].value_counts().head(3)
-                        if len(top) >= 1: top1 = (top.index[0], top.iloc[0])
-                        if len(top) >= 2: top2 = (top.index[1], top.iloc[1])
-                        if len(top) >= 3: top3 = (top.index[2], top.iloc[2])
-
-                    df_target_all = df[df['cli'].str.contains(target_cli, case=False, na=False)].copy()
-
-                    with placeholder.container():
-                        st.markdown(f"""
-                        <div class="leaderboard-grid">
-                            <div class="rank-card rank-1"><div class="rank-badge">🏆 TOP 1 (LAST 5M)</div><div class="rank-cli">{top1[0]}</div><div class="rank-count">🔥 {top1[1]} OTPs</div></div>
-                            <div class="rank-card rank-2"><div class="rank-badge">🥈 TOP 2 (LAST 5M)</div><div class="rank-cli">{top2[0]}</div><div class="rank-count">⚡ {top2[1]} OTPs</div></div>
-                            <div class="rank-card rank-3"><div class="rank-badge">🥉 TOP 3 (LAST 5M)</div><div class="rank-cli">{top3[0]}</div><div class="rank-count">📡 {top3[1]} OTPs</div></div>
-                        </div>
-                        """, unsafe_allow_html=True)
-
-                        st.markdown(f'<div class="section-label">LIVE TARGET TRACKER // ACCESSED: {target_cli.upper()}</div>', unsafe_allow_html=True)
-                        if not df_target_all.empty:
-                            mid_df = df_target_all.head(25).copy()
-                            mid_df[['Team Member', 'Range']] = mid_df['num'].apply(lambda x: pd.Series(get_team_info(x, team_df)))
-                            mid_df['Country'] = mid_df['num'].apply(get_country)
-                            disp_mid = mid_df[['dt', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
-                            disp_mid.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
-                            st.dataframe(disp_mid.style.apply(highlight_team, axis=1), use_container_width=True, height=300, hide_index=True, column_config=col_cfg)
-                        else:
-                            st.caption("NO PACKETS DETECTED FOR CURRENT AGENT.")
-
-                        st.markdown('<div class="section-label">GLOBAL NETWORK LOG STREAM</div>', unsafe_allow_html=True)
-                        global_df = df.head(msg_limit).copy()
-                        global_df[['Team Member', 'Range']] = global_df['num'].apply(lambda x: pd.Series(get_team_info(x, team_df)))
-                        global_df['Country'] = global_df['num'].apply(get_country)
-                        disp_global = global_df[['dt', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
-                        disp_global.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
-                        st.dataframe(disp_global.style.apply(highlight_team, axis=1), use_container_width=True, height=600, hide_index=True, column_config=col_cfg)
-
-            time.sleep(15)
-            st.rerun()
-        except:
-            time.sleep(5)
-
-# ==========================================
-# PAGE 2: LINK NUMBERS ALLOCATION (PANEL SYNCED)
-# ==========================================
-elif st.session_state.current_page == "LinkNumbers":
-    st.markdown('<div class="main-title">⚡ SECURE LINK NUMBERS BRIDGE ⚡</div>', unsafe_allow_html=True)
-    
-    with st.spinner("🔄 Synchronizing live data options from Matrix Panel account..."):
-        live_ranges, live_clients = fetch_live_panel_options(ADMIN_USER, ADMIN_PASS)
-    
-    if not live_ranges or not live_clients:
-        st.warning("⚠️ Warning: Could not connect or retrieve choices dynamically. Retrying container tunnel...")
-        live_ranges = ["-- No Live Ranges Detected --"] if not live_ranges else live_ranges
-        live_clients = ["-- No Live Clients Detected --"] if not live_clients else live_clients
-
-    with st.form("secure_allocation_form"):
-        st.subheader("Allocation Parameters Config (Live Synced)")
-        
-        selected_range = st.selectbox("Range(s) (Fetched Live From Your Quota)", options=["-- Select Ranges --"] + live_ranges)
-        quantity = st.number_input("Quantity (Maximum batch limit: 50)", min_value=1, max_value=50, value=10, step=1)
-        target_client = st.selectbox("Target Client(s) (Fetched Live from Panel)", options=["-- Select Target Clients --"] + live_clients)
-        
-        st.markdown("---")
-        submit_action = st.form_submit_button("⚡ Execute Safe Allocation")
-        
-        if submit_action:
-            if "Select" in selected_range or "Select" in target_client or "--" in selected_range:
-                st.error("Meharbani karke live values mein se valid Range aur Target Client select karein!")
-            else:
-                with st.spinner("Executing dynamic injection on Matrix Panel Core..."):
-                    success, msg = run_matrix_allocation(ADMIN_USER, ADMIN_PASS, selected_range, quantity, target_client)
-                    if success:
-                        st.success(msg)
-                        st.balloons()
-                    else:
-                        st.error(msg)
