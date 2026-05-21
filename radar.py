@@ -5,6 +5,7 @@ import time
 from datetime import datetime, timedelta
 import phonenumbers
 from phonenumbers import geocoder
+from bs4 import BeautifulSoup
 
 # --- CONFIG ---
 URL = "http://51.77.216.195/crapi/lamix/viewstats"
@@ -44,46 +45,116 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- BACKEND EXECUTOR ENGINE ---
-def run_direct_matrix_allocation(selected_range, quantity, target_client):
-    """Direct transmission layer that mimics secure browser post headers"""
+# --- ADVANCED REQUESTS ENGINE (SELECT2 MIGRATED) ---
+def get_authenticated_session(username, password):
     session = requests.Session()
     session.headers.update({
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        "Origin": BASE_PANEL_URL,
-        "Referer": f"{BASE_PANEL_URL}/auth/login"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
     })
-    
     try:
-        # Step 1: Initialize Session Cookie Context
-        login_init = session.get(f"{BASE_PANEL_URL}/auth/login", timeout=10)
-        
-        # Step 2: Fire Secure Core Authentication Payload
-        login_payload = {
-            "username": ADMIN_USER,
-            "email": ADMIN_USER,
-            "password": ADMIN_PASS
+        login_page = session.get(f"{BASE_PANEL_URL}/auth/login", timeout=10)
+        soup = BeautifulSoup(login_page.text, "html.parser")
+        csrf_token = ""
+        csrf_input = soup.find("input", {"name": "_token"})
+        if csrf_input:
+            csrf_token = csrf_input.get("value", "")
+
+        payload = {
+            "username": username,
+            "email": username,
+            "password": password
         }
-        auth_res = session.post(f"{BASE_PANEL_URL}/auth/login", data=login_payload, timeout=10, allow_redirects=True)
+        if csrf_token:
+            payload["_token"] = csrf_token
+
+        post_response = session.post(f"{BASE_PANEL_URL}/auth/login", data=payload, timeout=10, allow_redirects=True)
+        if post_response.status_code in [200, 302]:
+            return session
+    except:
+        pass
+    return None
+
+@st.cache_data(ttl=30)
+def fetch_live_panel_options_api(username, password):
+    """Dynamic parser targeting underlying options attached to Select2 fields"""
+    session = get_authenticated_session(username, password)
+    if not session:
+        return [], []
+    try:
+        res = session.get(f"{BASE_PANEL_URL}/agent/allocate", timeout=10)
+        soup = BeautifulSoup(res.text, "html.parser")
         
-        # Step 3: Dispatch Payload Endpoint Parameters
+        ranges = []
+        clients = []
+        
+        # Select2 fields populate hidden original options in DOM structure
+        # Targetting both name 'range_name[]' (multiple arrays) and regular select definitions
+        range_select = soup.find("select", {"name": "range_name[]"}) or soup.find("select", {"id": "range_name"})
+        if range_select:
+            for opt in range_select.find_all("option"):
+                val_text = opt.text.strip()
+                if val_text and "--" not in val_text:
+                    ranges.append(val_text)
+                    
+        client_select = soup.find("select", {"id": "allocate_target"}) or soup.find("select", {"name": "allocate_target"})
+        if client_select:
+            for opt in client_select.find_all("option"):
+                val_text = opt.text.strip()
+                if val_text and "--" not in val_text:
+                    clients.append(val_text)
+                    
+        return sorted(list(set(ranges))), sorted(list(set(clients)))
+    except:
+        return [], []
+
+def run_matrix_allocation_api(username, password, selected_range, quantity, target_client):
+    """Fires internal application payload to dynamic destination parameters map"""
+    session = get_authenticated_session(username, password)
+    if not session:
+        return False, "Authentication Engine Error: Connection to backend node refused."
+    try:
+        alloc_page = session.get(f"{BASE_PANEL_URL}/agent/allocate", timeout=10)
+        soup = BeautifulSoup(alloc_page.text, "html.parser")
+        
+        csrf_token = ""
+        csrf_input = soup.find("input", {"name": "_token"})
+        if csrf_input:
+            csrf_token = csrf_input.get("value", "")
+            
+        range_val, client_val = selected_range, target_client
+        
+        # Resolving mapped text descriptors to backend ID payloads
+        r_select = soup.find("select", {"name": "range_name[]"}) or soup.find("select", {"id": "range_name"})
+        if r_select:
+            for opt in r_select.find_all("option"):
+                if opt.text.strip() == selected_range:
+                    range_val = opt.get("value", selected_range)
+                    
+        c_select = soup.find("select", {"id": "allocate_target"}) or soup.find("select", {"name": "allocate_target"})
+        if c_select:
+            for opt in c_select.find_all("option"):
+                if opt.text.strip() == target_client:
+                    client_val = opt.get("value", target_client)
+
+        # Mirroring payload pattern with Select2 multi-array data compatibility
         post_payload = {
-            "range_name": str(selected_range).strip(),
+            "range_name[]": range_val, # Dispatched as multi-field mapping array
             "qty": int(quantity),
-            "allocate_target": str(target_client).strip(),
+            "allocate_target": client_val,
             "payout_pattern": "Daily",
             "client_payout": "0.013"
         }
-        
+        if csrf_token:
+            post_payload["_token"] = csrf_token
+            
         session.headers.update({"Referer": f"{BASE_PANEL_URL}/agent/allocate"})
-        action_res = session.post(f"{BASE_PANEL_URL}/agent/allocate", data=post_payload, timeout=12, allow_redirects=True)
+        action_res = session.post(f"{BASE_PANEL_URL}/agent/allocate", data=post_payload, timeout=12)
         
         if action_res.status_code in [200, 302]:
-            return True, f"Successfully Processed allocation of {quantity} units to '{target_client}'!"
-        return False, f"Server returned unexpected state response code: {action_res.status_code}"
-        
+            return True, f"Successfully Allocated {quantity} Items from '{selected_range}' to '{target_client}'!"
+        return False, f"Server denied request execution. Status: {action_res.status_code}"
     except Exception as e:
-        return False, f"Interface Communication Exception: {str(e)}"
+        return False, f"Tunnel interface processing error: {str(e)}"
 
 # --- SNIFFER AUXILIARY LOGIC ---
 def get_country(num):
@@ -209,41 +280,37 @@ if st.session_state.current_page == "Dashboard":
         st.rerun()
 
 # ==========================================
-# PAGE 2: LINK NUMBERS ALLOCATION (HYBRID AUTOMATION)
+# PAGE 2: LINK NUMBERS ALLOCATION (SELECT2 RE-MAPPED)
 # ==========================================
 elif st.session_state.current_page == "LinkNumbers":
     st.markdown('<div class="main-title">⚡ SECURE LINK NUMBERS BRIDGE ⚡</div>', unsafe_allow_html=True)
     
-    # Smart Data Loader from Local Exporter Storage
-    team_df = load_team_data()
-    detected_ranges = ["Afghanistan (K) Cellular 9374404xxxx"] # Default fail-safe fallback
-    detected_clients = ["UTS_Amjad"]
+    with st.spinner("🔄 Live syncing dynamic Select2 dropdown buffers from Matrix Panel..."):
+        live_ranges, live_clients = fetch_live_panel_options_api(ADMIN_USER, ADMIN_PASS)
     
-    if not team_df.empty:
-        if 'Range' in team_df.columns:
-            extracted_ranges = sorted(list(set(team_df['Range'].dropna().astype(str).tolist())))
-            if extracted_ranges: detected_ranges = extracted_ranges
-        if 'MemberName' in team_df.columns:
-            extracted_clients = sorted(list(set(team_df['MemberName'].dropna().astype(str).tolist())))
-            extracted_clients = [c for c in extracted_clients if c.strip() and c not in ["UTS_Umer1", "UTS_Khadija"]]
-            if extracted_clients: detected_clients = extracted_clients
+    if not live_ranges or not live_clients:
+        st.error("⚠️ Sync Warning: Failed to populate dynamic drop-down nodes. Retrying pipeline connection...")
+        live_ranges = ["-- No Live Ranges Filtered --"] if not live_ranges else live_ranges
+        live_clients = ["-- No Live Clients Filtered --"] if not live_clients else live_clients
 
     with st.form("secure_allocation_form"):
-        st.subheader("Allocation Parameters Dynamic Manual Setup")
+        st.subheader("Allocation Parameters Config (Select2 Multi-Engine Patched)")
         
-        # Dropdowns mapping from active configurations natively
-        selected_range = st.selectbox("Select Target Range:", options=detected_ranges)
-        quantity = st.number_input("Quantity (Batch limit ceiling: 50):", min_value=1, max_value=50, value=10, step=1)
-        target_client = st.selectbox("Select Target Client:", options=detected_clients)
+        selected_range = st.selectbox("Range(s) (Fetched directly from Select2 Searchbox)", options=["-- Select Ranges --"] + live_ranges)
+        quantity = st.number_input("Quantity (Maximum batch limit: 50)", min_value=1, max_value=50, value=10, step=1)
+        target_client = st.selectbox("Target Client(s) (Fetched directly from Client Selection Box)", options=["-- Select Target Clients --"] + live_clients)
         
         st.markdown("---")
         submit_action = st.form_submit_button("⚡ Execute Safe Allocation")
         
         if submit_action:
-            with st.spinner("Injecting allocation vectors directly into safe channel tunnel..."):
-                success, msg = run_direct_matrix_allocation(selected_range, quantity, target_client)
-                if success:
-                    st.success(msg)
-                    st.balloons()
-                else:
-                    st.error(msg)
+            if "Select" in selected_range or "Select" in target_client or "--" in selected_range:
+                st.error("Meharbani karke valid list items select karein!")
+            else:
+                with st.spinner("Executing direct post request matching Select2 array elements..."):
+                    success, msg = run_matrix_allocation_api(ADMIN_USER, ADMIN_PASS, selected_range, quantity, target_client)
+                    if success:
+                        st.success(msg)
+                        st.balloons()
+                    else:
+                        st.error(msg)
