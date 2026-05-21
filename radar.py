@@ -80,9 +80,9 @@ def run_matrix_allocation_api(username, password, selected_range, quantity, targ
         if alloc_csrf_input:
             alloc_csrf = alloc_csrf_input.get("value", "")
 
-        # Step 4: Dispatch targeting structural Select2 Array Parameters
+        # Step 4: Dispatch parameters matched with true backend raw keys
         post_payload = {
-            "range_name[]": str(selected_range).strip(),
+            "range_name": str(selected_range).strip(),
             "qty": int(quantity),
             "allocate_target": str(target_client).strip(),
             "payout_pattern": "Daily",
@@ -255,19 +255,3 @@ elif st.session_state.current_page == "LinkNumbers":
 
     with st.form("secure_allocation_form"):
         st.subheader("Allocation Parameters Config (Fail-Safe Pipeline Active)")
-        
-        selected_range = st.selectbox("Select Target Range (From Active Nodes):", options=base_ranges)
-        quantity = st.number_input("Quantity (Maximum batch limit: 50):", min_value=1, max_value=50, value=10, step=1)
-        target_client = st.selectbox("Select Target Client:", options=base_clients)
-        
-        st.markdown("---")
-        submit_action = st.form_submit_button("⚡ Execute Safe Allocation")
-        
-        if submit_action:
-            with st.spinner("Injecting values into encryption tunnel..."):
-                success, msg = run_matrix_allocation_api(ADMIN_USER, ADMIN_PASS, selected_range, quantity, target_client)
-                if success:
-                    st.success(msg)
-                    st.balloons()
-                else:
-                    st.error(msg)
