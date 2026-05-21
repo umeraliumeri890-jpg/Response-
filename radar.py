@@ -47,14 +47,11 @@ st.markdown("""
 
 # --- LIGHTWEIGHT REQUESTS-BASED INTERFACE ENGINE ---
 def get_authenticated_session(username, password):
-    """Bypasses browser entirely using HTTP session state tracking"""
     session = requests.Session()
     session.headers.update({
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     })
-    
     try:
-        # Get login page to extract CSRF if any exists
         login_page = session.get(f"{BASE_PANEL_URL}/auth/login", timeout=10)
         soup = BeautifulSoup(login_page.text, "html.parser")
         csrf_token = ""
@@ -62,7 +59,6 @@ def get_authenticated_session(username, password):
         if csrf_input:
             csrf_token = csrf_input.get("value", "")
 
-        # Target dynamic key payload match
         payload = {
             "username": username,
             "email": username,
@@ -71,7 +67,6 @@ def get_authenticated_session(username, password):
         if csrf_token:
             payload["_token"] = csrf_token
 
-        # Perform secure login pipeline redirection
         post_response = session.post(f"{BASE_PANEL_URL}/auth/login", data=payload, timeout=10)
         if post_response.status_code in [200, 302]:
             return session
@@ -81,11 +76,9 @@ def get_authenticated_session(username, password):
 
 @st.cache_data(ttl=60)
 def fetch_live_panel_options_api(username, password):
-    """Direct API parsing from allocation portal layout DOM structure"""
     session = get_authenticated_session(username, password)
     if not session:
         return [], []
-    
     try:
         res = session.get(f"{BASE_PANEL_URL}/agent/allocate", timeout=10)
         soup = BeautifulSoup(res.text, "html.parser")
@@ -112,22 +105,18 @@ def fetch_live_panel_options_api(username, password):
         return [], []
 
 def run_matrix_allocation_api(username, password, selected_range, quantity, target_client):
-    """Fast backend execution via form endpoints"""
     session = get_authenticated_session(username, password)
     if not session:
         return False, "Authentication Engine Error: Failed to drop gateway into portal backend."
-        
     try:
         alloc_page = session.get(f"{BASE_PANEL_URL}/agent/allocate", timeout=10)
         soup = BeautifulSoup(alloc_page.text, "html.parser")
         
-        # Pull current CSRF token context
         csrf_token = ""
         csrf_input = soup.find("input", {"name": "_token"})
         if csrf_input:
             csrf_token = csrf_input.get("value", "")
             
-        # Match value matching options fields mapping keys
         range_val, client_val = selected_range, target_client
         r_select = soup.find("select", {"id": "range_name"})
         if r_select:
@@ -154,9 +143,9 @@ def run_matrix_allocation_api(username, password, selected_range, quantity, targ
         action_res = session.post(f"{BASE_PANEL_URL}/agent/allocate", data=post_payload, timeout=12)
         if action_res.status_code in [200, 302]:
             return True, f"Successfully Processed allocation of {quantity} items to {target_client}!"
-        return False, f"Server rejected payload. Status Code returned: {action_res.status_code}"
+        return False, f"Server rejected payload. Status Code: {action_res.status_code}"
     except Exception as e:
-        return False, f"Network payload connection crash: {str(e)}"
+        return False, f"Network connection crash: {str(e)}"
 
 # --- SNIFFER AUXILIARY LOGIC ---
 def get_country(num):
