@@ -34,7 +34,7 @@ st.markdown("""
     label { color: #ffffff !important; }
     .stSidebar .stButton>button { background-color: #161b22; color: #a855f7; border: 1px solid #a855f7; font-weight: bold; }
     .stSidebar .stButton>button:hover { background-color: #a855f7; color: #000000; box-shadow: 0 0 10px #a855f7; }
-    div[data-testid="stForm"] { border: 2px solid #a855f7; border-radius: 8px; padding: 25px; background-color: #111827; }
+    .allocation-box { border: 2px solid #a855f7; border-radius: 8px; padding: 25px; background-color: #111827; margin-bottom: 20px; }
     .leaderboard-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 30px; }
     .rank-card { background: linear-gradient(135deg, #121214, #1a1a1e); border: 1px solid #222222; border-radius: 4px; padding: 20px; }
     .rank-1 { border-left: 5px solid #ffcc00; } .rank-2 { border-left: 5px solid #cccccc; } .rank-3 { border-left: 5px solid #cd7f32; }
@@ -52,7 +52,7 @@ def run_matrix_allocation_api(username, password, selected_range, quantity, targ
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
     })
     try:
-        # Step 1: Initialize CSRF & Session Context
+        # Step 1: Login Context Setup
         login_page = session.get(f"{BASE_PANEL_URL}/auth/login", timeout=10)
         soup = BeautifulSoup(login_page.text, "html.parser")
         csrf_token = ""
@@ -60,7 +60,6 @@ def run_matrix_allocation_api(username, password, selected_range, quantity, targ
         if csrf_input:
             csrf_token = csrf_input.get("value", "")
 
-        # Step 2: Authenticate User Node
         payload = {
             "username": username,
             "email": username,
@@ -71,7 +70,7 @@ def run_matrix_allocation_api(username, password, selected_range, quantity, targ
 
         session.post(f"{BASE_PANEL_URL}/auth/login", data=payload, timeout=10, allow_redirects=True)
         
-        # Step 3: Fetch allocation page to get active form unique tokens
+        # Step 2: Fetch Active Tokens from target 'allocate' endpoint
         alloc_page = session.get(f"{BASE_PANEL_URL}/agent/allocate", timeout=10)
         alloc_soup = BeautifulSoup(alloc_page.text, "html.parser")
         
@@ -80,11 +79,11 @@ def run_matrix_allocation_api(username, password, selected_range, quantity, targ
         if alloc_csrf_input:
             alloc_csrf = alloc_csrf_input.get("value", "")
 
-        # Step 4: Dispatch parameters matched with true backend raw keys
+        # Step 3: Exact mapping matching your true layout parameters
         post_payload = {
-            "range_name": str(selected_range).strip(),
-            "qty": int(quantity),
-            "allocate_target": str(target_client).strip(),
+            "range_name[]": str(selected_range).strip(),        # Array format for select2 multiple search field
+            "volume": int(quantity),                            # re-mapped matching name="volume" HTML parameter
+            "allocate_target[]": str(target_client).strip(),    # Array format matching multiple destination tags
             "payout_pattern": "Daily",
             "client_payout": "0.013"
         }
@@ -95,10 +94,10 @@ def run_matrix_allocation_api(username, password, selected_range, quantity, targ
         action_res = session.post(f"{BASE_PANEL_URL}/agent/allocate", data=post_payload, timeout=12)
         
         if action_res.status_code in [200, 302]:
-            return True, f"Successfully Allocated {quantity} Items from '{selected_range}' to '{target_client}'!"
-        return False, f"Server denied request execution. Status Code: {action_res.status_code}"
+            return True, f"Successfully Processed! Allocated {quantity} Numbers from '{selected_range}' to '{target_client}'."
+        return False, f"Server rejected payload. Status Code: {action_res.status_code}"
     except Exception as e:
-        return False, f"Tunnel bridge connectivity error: {str(e)}"
+        return False, f"Network tunnel routing error: {str(e)}"
 
 # --- SNIFFER AUXILIARY LOGIC ---
 def get_country(num):
@@ -200,7 +199,7 @@ if st.session_state.current_page == "Dashboard":
                     <div class="leaderboard-grid">
                         <div class="rank-card rank-1"><div class="rank-badge">🏆 TOP 1 (LAST 5M)</div><div class="rank-cli">{top1[0]}</div><div class="rank-count">🔥 {top1[1]} OTPs</div></div>
                         <div class="rank-card rank-2"><div class="rank-badge">🥈 TOP 2 (LAST 5M)</div><div class="rank-cli">{top2[0]}</div><div class="rank-count">⚡ {top2[1]} OTPs</div></div>
-                        <div class="rank-card rank-3"><div class="rank-badge">🥉 TOP 3 (LAST 5M)</div><div class="rank-cli">{top3[0]}</div><div class="rank-count">📡 {top3[1]} OTPs</div></div>
+                        <div class="rank-card rank-3"><div class="rank-badge">🥉 TOP 3 (LAST 5M)</div><div class="rank-cli">{top3[0]}</div><div class="rank-count">📡 {top3[2]} OTPs</div></div>
                     </div>
                     """, unsafe_allow_html=True)
 
@@ -230,15 +229,13 @@ if st.session_state.current_page == "Dashboard":
         st.rerun()
 
 # ==========================================
-# PAGE 2: LINK NUMBERS ALLOCATION (SOLID BULLETPROOF)
+# PAGE 2: LINK NUMBERS ALLOCATION (FAIL-SAFE, NO FORM BUG)
 # ==========================================
 elif st.session_state.current_page == "LinkNumbers":
     st.markdown('<div class="main-title">⚡ SECURE LINK NUMBERS BRIDGE ⚡</div>', unsafe_allow_html=True)
     
-    # Smart Fallback Data parsing layer from local storage context
+    # Load dynamic options safely from CSV file records
     team_df = load_team_data()
-    
-    # Built-in direct target maps mapping active network fields
     base_ranges = ["Afghanistan (K) Cellular 9374404xxxx"]
     base_clients = ["UTS_Amjad"]
     
@@ -253,5 +250,24 @@ elif st.session_state.current_page == "LinkNumbers":
             if csv_clients:
                 base_clients = csv_clients
 
-    with st.form("secure_allocation_form"):
-        st.subheader("Allocation Parameters Config (Fail-Safe Pipeline Active)")
+    # Rendered inside normal native divs to bypass any potential form submission crash
+    st.markdown('<div class="allocation-box">', unsafe_allow_html=True)
+    st.subheader("Allocation Parameters Config (Real-Time Layout Synced)")
+    
+    selected_range = st.selectbox("Select Target Range (Select2 Field Match):", options=base_ranges)
+    quantity = st.number_input("Quantity (e.g. 500, Max: 4333):", min_value=1, max_value=4333, value=10, step=1)
+    target_client = st.selectbox("Select Target Client (Destination Node Match):", options=base_clients)
+    
+    st.markdown("---")
+    submit_action = st.button("⚡ Allocate Numbers") # Regular dynamic button execution trigger
+    
+    if submit_action:
+        with st.spinner("Executing secure pipeline payload matching raw variables..."):
+            success, msg = run_matrix_allocation_api(ADMIN_USER, ADMIN_PASS, selected_range, quantity, target_client)
+            if success:
+                st.success(msg)
+                st.balloons()
+            else:
+                st.error(msg)
+                
+    st.markdown('</div>', unsafe_allow_html=True)
