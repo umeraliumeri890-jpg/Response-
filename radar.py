@@ -8,13 +8,13 @@ from phonenumbers import geocoder
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.webdriver.support import expected_conditions as EC
 
 # --- CONFIG ---
 URL = "http://51.77.216.195/crapi/lamix/viewstats"
 TOKEN = "SVdVRTRSQkd-ZVZEYWVgfmiViFmCg3ZYX5FuZUJoUGZlgJWFhoyS"
-TEAM_FILE = "Numbers_Export.csv"  # Sirf sniffer dashboard par operators match karne ke liye use hogi
+TEAM_FILE = "Numbers_Export.csv"
 
 # Page Config
 st.set_page_config(page_title="HUNTING SYSTEM - UMER ALI", layout="wide")
@@ -65,16 +65,14 @@ def get_webdriver():
     except:
         return webdriver.Chrome(service=Service("/usr/lib/chromium-browser/chromedriver"), options=options)
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=120)
 def fetch_live_panel_options(admin_user, admin_pass):
-    """Matrix Panel par login karke real dropdown choices scrape karta ha"""
     driver = get_webdriver()
-    wait = WebDriverWait(driver, 20)
+    wait = WebDriverWait(driver, 15)
     ranges_list = []
     clients_list = []
     
     try:
-        # Step 1: Login
         driver.get("https://matrix-panel.tech/auth/login")
         email_field = wait.until(EC.presence_of_element_located((By.XPATH, "//input[@type='text' or @name='username' or @name='email']")))
         password_field = driver.find_element(By.XPATH, "//input[@type='password' or @name='password']")
@@ -83,26 +81,23 @@ def fetch_live_panel_options(admin_user, admin_pass):
         email_field.send_keys(admin_user)
         password_field.send_keys(admin_pass)
         login_btn.click()
-        time.sleep(4)
+        time.sleep(3)
         
-        # Step 2: Go to allocation page
         driver.get("https://matrix-panel.tech/agent/allocate")
         time.sleep(3)
         
-        # [FIX] Sab se pehle beech wale 'Allocate' tab par click karo taaki form open ho
-        allocate_tab = wait.until(EC.element_to_be_clickable((By.XPATH, "//a[contains(., 'Allocate')]|//button[contains(., 'Allocate')]|//li[contains(., 'Allocate')]")))
+        # Click central 'Allocate' Tab
+        allocate_tab = wait.until(EC.element_to_be_clickable((By.XPATH, "//a[contains(text(), 'Allocate')]|//button[contains(., 'Allocate')]|//span[contains(text(), 'Allocate')]")))
         driver.execute_script("arguments[0].click();", allocate_tab)
         time.sleep(2)
         
-        # Ranges Options Scrape
-        range_elements = driver.find_elements(By.XPATH, "//select[contains(@id, 'range_name') or contains(@name, 'range_name')]/option")
+        range_elements = driver.find_elements(By.XPATH, "//select[@id='range_name']/option")
         for el in range_elements:
             text = el.text.strip()
             if text and "--" not in text:
                 ranges_list.append(text)
                 
-        # Target Clients Options Scrape
-        client_elements = driver.find_elements(By.XPATH, "//select[contains(@id, 'allocate_target') or contains(@name, 'allocate_target')]/option")
+        client_elements = driver.find_elements(By.XPATH, "//select[@id='allocate_target']/option")
         for el in client_elements:
             text = el.text.strip()
             if text and "--" not in text:
@@ -115,12 +110,10 @@ def fetch_live_panel_options(admin_user, admin_pass):
         return [], []
 
 def run_matrix_allocation(admin_user, admin_pass, selected_range, quantity, target_client):
-    """Select2 targets ko robust tareeqay se handle karne wali main pipeline"""
     driver = get_webdriver()
-    wait = WebDriverWait(driver, 25)
+    wait = WebDriverWait(driver, 20)
     
     try:
-        # Step 1: Login
         driver.get("https://matrix-panel.tech/auth/login")
         email_field = wait.until(EC.presence_of_element_located((By.XPATH, "//input[@type='text' or @name='username' or @name='email']")))
         password_field = driver.find_element(By.XPATH, "//input[@type='password' or @name='password']")
@@ -129,55 +122,39 @@ def run_matrix_allocation(admin_user, admin_pass, selected_range, quantity, targ
         email_field.send_keys(admin_user)
         password_field.send_keys(admin_pass)
         login_btn.click()
-        time.sleep(4)
+        time.sleep(3)
         
-        # Step 2: Allocation Dashboard Page Link
         driver.get("https://matrix-panel.tech/agent/allocate")
-        time.sleep(4)
+        time.sleep(3)
         
-        # [FIX] Beech wale 'Allocate' tab click event sequence trigger karein
-        allocate_tab = wait.until(EC.element_to_be_clickable((By.XPATH, "//a[contains(., 'Allocate')]|//button[contains(., 'Allocate')]|//li[contains(., 'Allocate')]")))
+        # Target main 'Allocate' central tab wrapper explicitly
+        allocate_tab = wait.until(EC.element_to_be_clickable((By.XPATH, "//a[contains(text(), 'Allocate')]|//button[contains(., 'Allocate')]|//span[contains(text(), 'Allocate')]")))
         driver.execute_script("arguments[0].click();", allocate_tab)
         time.sleep(2)
         
-        # Step 3: Select2 Handling for 'Ranges' Dropdown Field
-        range_container = wait.until(EC.element_to_be_clickable((By.XPATH, "//select[@id='range_name']/following-sibling::span[contains(@class, 'select2')]|//textarea[contains(@aria-describedby, 'select2-range_name')]/..")))
-        driver.execute_script("arguments[0].click();", range_container)
-        time.sleep(1.5)
-        
-        range_search = wait.until(EC.presence_of_element_located((By.XPATH, "//input[@class='select2-search__field']|//textarea[contains(@class, 'select2-search__field')]")))
-        range_search.send_keys(selected_range)
-        time.sleep(1.5)
-        range_search.send_keys("\n")  # Hit Enter key
+        # Direct Select Value Injection (Bypasses manual layout searches entirely)
+        range_select = Select(driver.find_element(By.ID, "range_name"))
+        range_select.select_by_visible_text(selected_range)
         time.sleep(1)
         
-        # Step 4: Quantity Field Setup
-        qty_field = driver.find_element(By.XPATH, "//input[contains(@name, 'qty') or @type='number' or @placeholder='e.g. 500']")
+        qty_field = driver.find_element(By.XPATH, "//input[@id='qty' or @name='qty' or @type='number']")
         qty_field.clear()
         qty_field.send_keys(str(quantity))
         time.sleep(1)
         
-        # Step 5: Select2 Handling for 'Target Clients' Dropdown
-        client_container = driver.find_element(By.XPATH, "//select[@id='allocate_target']/following-sibling::span[contains(@class, 'select2')]|//textarea[contains(@aria-describedby, 'select2-allocate_target')]/..")
-        driver.execute_script("arguments[0].click();", client_container)
-        time.sleep(1.5)
+        client_select = Select(driver.find_element(By.ID, "allocate_target"))
+        client_select.select_by_visible_text(target_client)
+        time.sleep(1)
         
-        client_search = wait.until(EC.presence_of_element_located((By.XPATH, "//input[@class='select2-search__field']|//textarea[contains(@class, 'select2-search__field')]")))
-        client_search.send_keys(target_client)
-        time.sleep(1.5)
-        client_search.send_keys("\n")  # Hit Enter key
-        time.sleep(1.5)
-        
-        # Step 6: Final Submission Allocation Button Click
-        final_allocate_btn = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Allocate Numbers')]|//button[@id='allocate_btn']")))
+        final_allocate_btn = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[@id='allocate_btn' or contains(., 'Allocate Numbers')]")))
         driver.execute_script("arguments[0].click();", final_allocate_btn)
-        time.sleep(5)   # Success confirmation delay
+        time.sleep(4)
         
         driver.quit()
-        return True, f"Successfully Allocated {quantity} numbers from '{selected_range}' to '{target_client}'!"
+        return True, f"Successfully Allocated {quantity} units from '{selected_range}' to '{target_client}'!"
     except Exception as e:
         driver.quit()
-        return False, f"Select2 Link Automation Error: {str(e)}"
+        return False, f"Dynamic Execution Error: {str(e)}"
 
 # --- SNIFFER AUXILIARY LOGIC ---
 def get_country(num):
@@ -227,3 +204,113 @@ st.sidebar.caption("DEVELOPED BY: UTS TEAM")
 
 # ==========================================
 # PAGE 1: LIVE SNIFFER DASHBOARD
+# ==========================================
+if st.session_state.current_page == "Dashboard":
+    st.markdown('<div class="main-title">⚡ DOUBLE FACER HUNTER ⚡</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-subtitle">> SYSTEM CONTROL PANEL // NETWORK SNIFFER</div>', unsafe_allow_html=True)
+
+    col_in1, col_in2 = st.columns([2, 1])
+    with col_in1: target_cli = st.text_input("⚙️ ENTER TARGET AGENT (CLI):", "MYOB").strip()
+    with col_in2: msg_limit = st.number_input("📡 STREAM BUFFER LIMIT:", min_value=1, max_value=2000, value=1000)
+
+    placeholder = st.empty()
+    team_df = load_team_data()
+
+    col_cfg = {
+        "Time": st.column_config.TextColumn("TIMESTAMP", width="medium"),
+        "App": st.column_config.TextColumn("IDENT/CLI", width="small"),
+        "Number": st.column_config.TextColumn("DATA_STREAM", width="medium"),
+        "Country": st.column_config.TextColumn("LOCATION", width="small"),
+        "Message": st.column_config.TextColumn("DECRYPTED_MSG", width="max"),
+        "Team Member": st.column_config.TextColumn("OPERATOR", width="medium"),
+        "Range": st.column_config.TextColumn("NETWORK_RANGE", width="large"),
+    }
+
+    try:
+        r = requests.get(URL, params={"token": TOKEN, "records": 5000})
+        if r.status_code == 200:
+            data = r.json().get("data", [])
+            df = pd.DataFrame(data)
+            
+            if not df.empty:
+                df['dt'] = pd.to_datetime(df['dt'])
+                df_5m = df[df['dt'] >= (datetime.now() - timedelta(minutes=5))]
+                
+                top1, top2, top3 = ("NO_DATA", 0), ("NO_DATA", 0), ("NO_DATA", 0)
+                if not df_5m.empty and 'cli' in df_5m.columns:
+                    top = df_5m['cli'].value_counts().head(3)
+                    if len(top) >= 1: top1 = (top.index[0], top.iloc[0])
+                    if len(top) >= 2: top2 = (top.index[1], top.iloc[1])
+                    if len(top) >= 3: top3 = (top.index[2], top.iloc[2])
+
+                df_target_all = df[df['cli'].str.contains(target_cli, case=False, na=False)].copy()
+
+                with placeholder.container():
+                    st.markdown(f"""
+                    <div class="leaderboard-grid">
+                        <div class="rank-card rank-1"><div class="rank-badge">🏆 TOP 1 (LAST 5M)</div><div class="rank-cli">{top1[0]}</div><div class="rank-count">🔥 {top1[1]} OTPs</div></div>
+                        <div class="rank-card rank-2"><div class="rank-badge">🥈 TOP 2 (LAST 5M)</div><div class="rank-cli">{top2[0]}</div><div class="rank-count">⚡ {top2[1]} OTPs</div></div>
+                        <div class="rank-card rank-3"><div class="rank-badge">🥉 TOP 3 (LAST 5M)</div><div class="rank-cli">{top3[0]}</div><div class="rank-count">📡 {top3[1]} OTPs</div></div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    st.markdown(f'<div class="section-label">LIVE TARGET TRACKER // ACCESSED: {target_cli.upper()}</div>', unsafe_allow_html=True)
+                    if not df_target_all.empty:
+                        mid_df = df_target_all.head(25).copy()
+                        mid_df[['Team Member', 'Range']] = mid_df['num'].apply(lambda x: pd.Series(get_team_info(x, team_df)))
+                        mid_df['Country'] = mid_df['num'].apply(get_country)
+                        disp_mid = mid_df[['dt', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
+                        disp_mid.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
+                        st.dataframe(disp_mid.style.apply(highlight_team, axis=1), use_container_width=True, height=300, hide_index=True, column_config=col_cfg)
+                    else:
+                        st.caption("NO PACKETS DETECTED FOR CURRENT AGENT.")
+
+                    st.markdown('<div class="section-label">GLOBAL NETWORK LOG STREAM</div>', unsafe_allow_html=True)
+                    global_df = df.head(msg_limit).copy()
+                    global_df[['Team Member', 'Range']] = global_df['num'].apply(lambda x: pd.Series(get_team_info(x, team_df)))
+                    global_df['Country'] = global_df['num'].apply(get_country)
+                    disp_global = global_df[['dt', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
+                    disp_global.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
+                    st.dataframe(disp_global.style.apply(highlight_team, axis=1), use_container_width=True, height=600, hide_index=True, column_config=col_cfg)
+
+        time.sleep(12)
+        st.rerun()
+    except Exception as e:
+        time.sleep(4)
+        st.rerun()
+
+# ==========================================
+# PAGE 2: LINK NUMBERS ALLOCATION
+# ==========================================
+elif st.session_state.current_page == "LinkNumbers":
+    st.markdown('<div class="main-title">⚡ SECURE LINK NUMBERS BRIDGE ⚡</div>', unsafe_allow_html=True)
+    
+    with st.spinner("🔄 Synchronizing data directly from central Allocate Matrix Panel..."):
+        live_ranges, live_clients = fetch_live_panel_options(ADMIN_USER, ADMIN_PASS)
+    
+    if not live_ranges or not live_clients:
+        st.error("⚠️ System Interface Error: Dropdowns could not be populated. Please ensure your cloud containers have Chrome dependencies installed.")
+        live_ranges = ["-- No Live Ranges Detected --"] if not live_ranges else live_ranges
+        live_clients = ["-- No Live Clients Detected --"] if not live_clients else live_clients
+
+    with st.form("secure_allocation_form"):
+        st.subheader("Allocation Parameters Config (Live Synced)")
+        
+        selected_range = st.selectbox("Range(s) (Fetched Live From Your Quota)", options=["-- Select Ranges --"] + live_ranges)
+        quantity = st.number_input("Quantity (Maximum batch limit: 50)", min_value=1, max_value=50, value=10, step=1)
+        target_client = st.selectbox("Target Client(s) (Fetched Live from Panel)", options=["-- Select Target Clients --"] + live_clients)
+        
+        st.markdown("---")
+        submit_action = st.form_submit_button("⚡ Execute Safe Allocation")
+        
+        if submit_action:
+            if "Select" in selected_range or "Select" in target_client or "--" in selected_range:
+                st.error("Meharbani karke valid values select karein!")
+            else:
+                with st.spinner("Executing direct injection on Matrix Panel Core..."):
+                    success, msg = run_matrix_allocation(ADMIN_USER, ADMIN_PASS, selected_range, quantity, target_client)
+                    if success:
+                        st.success(msg)
+                        st.balloons()
+                    else:
+                        st.error(msg)
