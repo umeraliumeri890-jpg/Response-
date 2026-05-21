@@ -1,8 +1,5 @@
 streamlit
-requests
-pandas
-plotly
-phonenumbers
-streamlit
 selenium
-webdriver-manager
+phonenumbers
+pandas
+requests
