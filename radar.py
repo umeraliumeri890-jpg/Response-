@@ -5,11 +5,7 @@ import time
 from datetime import datetime, timedelta
 import phonenumbers
 from phonenumbers import geocoder
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.support.ui import WebDriverWait, Select
-from selenium.webdriver.support import expected_conditions as EC
+from bs4 import BeautifulSoup
 
 # --- CONFIG ---
 URL = "http://51.77.216.195/crapi/lamix/viewstats"
@@ -22,6 +18,7 @@ st.set_page_config(page_title="HUNTING SYSTEM - UMER ALI", layout="wide")
 # Static Panel Credentials Locked
 ADMIN_USER = "UTS"
 ADMIN_PASS = "@Umer123456"
+BASE_PANEL_URL = "https://matrix-panel.tech"
 
 # --- UI DESIGN (CYBERPUNK THEME) ---
 st.markdown("""
@@ -48,113 +45,118 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- PANEL DATA SCRAPER & AUTOMATION ENGINE ---
-def get_selenium_options():
-    options = webdriver.ChromeOptions()
-    options.add_argument("--headless=new")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-gpu")
-    options.binary_location = "/usr/bin/chromium"
-    return options
-
-def get_webdriver():
-    options = get_selenium_options()
-    try:
-        return webdriver.Chrome(service=Service("/usr/bin/chromedriver"), options=options)
-    except:
-        return webdriver.Chrome(service=Service("/usr/lib/chromium-browser/chromedriver"), options=options)
-
-@st.cache_data(ttl=120)
-def fetch_live_panel_options(admin_user, admin_pass):
-    driver = get_webdriver()
-    wait = WebDriverWait(driver, 15)
-    ranges_list = []
-    clients_list = []
+# --- LIGHTWEIGHT REQUESTS-BASED INTERFACE ENGINE ---
+def get_authenticated_session(username, password):
+    """Bypasses browser entirely using HTTP session state tracking"""
+    session = requests.Session()
+    session.headers.update({
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    })
     
     try:
-        driver.get("https://matrix-panel.tech/auth/login")
-        email_field = wait.until(EC.presence_of_element_located((By.XPATH, "//input[@type='text' or @name='username' or @name='email']")))
-        password_field = driver.find_element(By.XPATH, "//input[@type='password' or @name='password']")
-        login_btn = driver.find_element(By.XPATH, "//button[@type='submit']")
+        # Get login page to extract CSRF if any exists
+        login_page = session.get(f"{BASE_PANEL_URL}/auth/login", timeout=10)
+        soup = BeautifulSoup(login_page.text, "html.parser")
+        csrf_token = ""
+        csrf_input = soup.find("input", {"name": "_token"})
+        if csrf_input:
+            csrf_token = csrf_input.get("value", "")
+
+        # Target dynamic key payload match
+        payload = {
+            "username": username,
+            "email": username,
+            "password": password
+        }
+        if csrf_token:
+            payload["_token"] = csrf_token
+
+        # Perform secure login pipeline redirection
+        post_response = session.post(f"{BASE_PANEL_URL}/auth/login", data=payload, timeout=10)
+        if post_response.status_code in [200, 302]:
+            return session
+    except:
+        pass
+    return None
+
+@st.cache_data(ttl=60)
+def fetch_live_panel_options_api(username, password):
+    """Direct API parsing from allocation portal layout DOM structure"""
+    session = get_authenticated_session(username, password)
+    if not session:
+        return [], []
+    
+    try:
+        res = session.get(f"{BASE_PANEL_URL}/agent/allocate", timeout=10)
+        soup = BeautifulSoup(res.text, "html.parser")
         
-        email_field.send_keys(admin_user)
-        password_field.send_keys(admin_pass)
-        login_btn.click()
-        time.sleep(3)
+        ranges = []
+        clients = []
         
-        driver.get("https://matrix-panel.tech/agent/allocate")
-        time.sleep(3)
-        
-        # Click central 'Allocate' Tab
-        allocate_tab = wait.until(EC.element_to_be_clickable((By.XPATH, "//a[contains(text(), 'Allocate')]|//button[contains(., 'Allocate')]|//span[contains(text(), 'Allocate')]")))
-        driver.execute_script("arguments[0].click();", allocate_tab)
-        time.sleep(2)
-        
-        range_elements = driver.find_elements(By.XPATH, "//select[@id='range_name']/option")
-        for el in range_elements:
-            text = el.text.strip()
-            if text and "--" not in text:
-                ranges_list.append(text)
-                
-        client_elements = driver.find_elements(By.XPATH, "//select[@id='allocate_target']/option")
-        for el in client_elements:
-            text = el.text.strip()
-            if text and "--" not in text:
-                clients_list.append(text)
-                
-        driver.quit()
-        return sorted(list(set(ranges_list))), sorted(list(set(clients_list)))
-    except Exception as e:
-        driver.quit()
+        range_select = soup.find("select", {"id": "range_name"})
+        if range_select:
+            for opt in range_select.find_all("option"):
+                val = opt.text.strip()
+                if val and "--" not in val:
+                    ranges.append(val)
+                    
+        client_select = soup.find("select", {"id": "allocate_target"})
+        if client_select:
+            for opt in client_select.find_all("option"):
+                val = opt.text.strip()
+                if val and "--" not in val:
+                    clients.append(val)
+                    
+        return sorted(list(set(ranges))), sorted(list(set(clients)))
+    except:
         return [], []
 
-def run_matrix_allocation(admin_user, admin_pass, selected_range, quantity, target_client):
-    driver = get_webdriver()
-    wait = WebDriverWait(driver, 20)
-    
+def run_matrix_allocation_api(username, password, selected_range, quantity, target_client):
+    """Fast backend execution via form endpoints"""
+    session = get_authenticated_session(username, password)
+    if not session:
+        return False, "Authentication Engine Error: Failed to drop gateway into portal backend."
+        
     try:
-        driver.get("https://matrix-panel.tech/auth/login")
-        email_field = wait.until(EC.presence_of_element_located((By.XPATH, "//input[@type='text' or @name='username' or @name='email']")))
-        password_field = driver.find_element(By.XPATH, "//input[@type='password' or @name='password']")
-        login_btn = driver.find_element(By.XPATH, "//button[@type='submit']")
+        alloc_page = session.get(f"{BASE_PANEL_URL}/agent/allocate", timeout=10)
+        soup = BeautifulSoup(alloc_page.text, "html.parser")
         
-        email_field.send_keys(admin_user)
-        password_field.send_keys(admin_pass)
-        login_btn.click()
-        time.sleep(3)
-        
-        driver.get("https://matrix-panel.tech/agent/allocate")
-        time.sleep(3)
-        
-        # Target main 'Allocate' central tab wrapper explicitly
-        allocate_tab = wait.until(EC.element_to_be_clickable((By.XPATH, "//a[contains(text(), 'Allocate')]|//button[contains(., 'Allocate')]|//span[contains(text(), 'Allocate')]")))
-        driver.execute_script("arguments[0].click();", allocate_tab)
-        time.sleep(2)
-        
-        # Direct Select Value Injection (Bypasses manual layout searches entirely)
-        range_select = Select(driver.find_element(By.ID, "range_name"))
-        range_select.select_by_visible_text(selected_range)
-        time.sleep(1)
-        
-        qty_field = driver.find_element(By.XPATH, "//input[@id='qty' or @name='qty' or @type='number']")
-        qty_field.clear()
-        qty_field.send_keys(str(quantity))
-        time.sleep(1)
-        
-        client_select = Select(driver.find_element(By.ID, "allocate_target"))
-        client_select.select_by_visible_text(target_client)
-        time.sleep(1)
-        
-        final_allocate_btn = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[@id='allocate_btn' or contains(., 'Allocate Numbers')]")))
-        driver.execute_script("arguments[0].click();", final_allocate_btn)
-        time.sleep(4)
-        
-        driver.quit()
-        return True, f"Successfully Allocated {quantity} units from '{selected_range}' to '{target_client}'!"
+        # Pull current CSRF token context
+        csrf_token = ""
+        csrf_input = soup.find("input", {"name": "_token"})
+        if csrf_input:
+            csrf_token = csrf_input.get("value", "")
+            
+        # Match value matching options fields mapping keys
+        range_val, client_val = selected_range, target_client
+        r_select = soup.find("select", {"id": "range_name"})
+        if r_select:
+            for opt in r_select.find_all("option"):
+                if opt.text.strip() == selected_range:
+                    range_val = opt.get("value", selected_range)
+                    
+        c_select = soup.find("select", {"id": "allocate_target"})
+        if c_select:
+            for opt in c_select.find_all("option"):
+                if opt.text.strip() == target_client:
+                    client_val = opt.get("value", target_client)
+
+        post_payload = {
+            "range_name": range_val,
+            "qty": int(quantity),
+            "allocate_target": client_val,
+            "payout_pattern": "Daily",
+            "client_payout": "0.013"
+        }
+        if csrf_token:
+            post_payload["_token"] = csrf_token
+            
+        action_res = session.post(f"{BASE_PANEL_URL}/agent/allocate", data=post_payload, timeout=12)
+        if action_res.status_code in [200, 302]:
+            return True, f"Successfully Processed allocation of {quantity} items to {target_client}!"
+        return False, f"Server rejected payload. Status Code returned: {action_res.status_code}"
     except Exception as e:
-        driver.quit()
-        return False, f"Dynamic Execution Error: {str(e)}"
+        return False, f"Network payload connection crash: {str(e)}"
 
 # --- SNIFFER AUXILIARY LOGIC ---
 def get_country(num):
@@ -280,21 +282,21 @@ if st.session_state.current_page == "Dashboard":
         st.rerun()
 
 # ==========================================
-# PAGE 2: LINK NUMBERS ALLOCATION
+# PAGE 2: LINK NUMBERS ALLOCATION (PURE API)
 # ==========================================
 elif st.session_state.current_page == "LinkNumbers":
     st.markdown('<div class="main-title">⚡ SECURE LINK NUMBERS BRIDGE ⚡</div>', unsafe_allow_html=True)
     
-    with st.spinner("🔄 Synchronizing data directly from central Allocate Matrix Panel..."):
-        live_ranges, live_clients = fetch_live_panel_options(ADMIN_USER, ADMIN_PASS)
+    with st.spinner("🔄 Intercepting live data drops from Matrix Panel core secure tunnel..."):
+        live_ranges, live_clients = fetch_live_panel_options_api(ADMIN_USER, ADMIN_PASS)
     
     if not live_ranges or not live_clients:
-        st.error("⚠️ System Interface Error: Dropdowns could not be populated. Please ensure your cloud containers have Chrome dependencies installed.")
+        st.error("⚠️ Connection Error: Failed to pull real-time dropdown choices. Please check your credentials.")
         live_ranges = ["-- No Live Ranges Detected --"] if not live_ranges else live_ranges
         live_clients = ["-- No Live Clients Detected --"] if not live_clients else live_clients
 
     with st.form("secure_allocation_form"):
-        st.subheader("Allocation Parameters Config (Live Synced)")
+        st.subheader("Allocation Parameters Config (Live Synced API)")
         
         selected_range = st.selectbox("Range(s) (Fetched Live From Your Quota)", options=["-- Select Ranges --"] + live_ranges)
         quantity = st.number_input("Quantity (Maximum batch limit: 50)", min_value=1, max_value=50, value=10, step=1)
@@ -305,10 +307,10 @@ elif st.session_state.current_page == "LinkNumbers":
         
         if submit_action:
             if "Select" in selected_range or "Select" in target_client or "--" in selected_range:
-                st.error("Meharbani karke valid values select karein!")
+                st.error("Meharbani karke drops list mein se valid fields select karein!")
             else:
-                with st.spinner("Executing direct injection on Matrix Panel Core..."):
-                    success, msg = run_matrix_allocation(ADMIN_USER, ADMIN_PASS, selected_range, quantity, target_client)
+                with st.spinner("Injecting parameters directly via API endpoint secure handshake..."):
+                    success, msg = run_matrix_allocation_api(ADMIN_USER, ADMIN_PASS, selected_range, quantity, target_client)
                     if success:
                         st.success(msg)
                         st.balloons()
