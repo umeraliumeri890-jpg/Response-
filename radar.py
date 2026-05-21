@@ -79,11 +79,11 @@ def run_matrix_allocation_api(username, password, selected_range, quantity, targ
         if alloc_csrf_input:
             alloc_csrf = alloc_csrf_input.get("value", "")
 
-        # Step 3: Exact mapping matching your true layout parameters
+        # Step 3: Precise raw request parameters formatting
         post_payload = {
-            "range_name[]": str(selected_range).strip(),        # Array format for select2 multiple search field
-            "volume": int(quantity),                            # re-mapped matching name="volume" HTML parameter
-            "allocate_target[]": str(target_client).strip(),    # Array format matching multiple destination tags
+            "range_name[]": str(selected_range).strip(),
+            "volume": int(quantity),
+            "allocate_target[]": str(target_client).strip(),
             "payout_pattern": "Daily",
             "client_payout": "0.013"
         }
@@ -95,7 +95,7 @@ def run_matrix_allocation_api(username, password, selected_range, quantity, targ
         
         if action_res.status_code in [200, 302]:
             return True, f"Successfully Processed! Allocated {quantity} Numbers from '{selected_range}' to '{target_client}'."
-        return False, f"Server rejected payload. Status Code: {action_res.status_code}"
+        return False, f"Server rejected payload pipeline. Status Code: {action_res.status_code}"
     except Exception as e:
         return False, f"Network tunnel routing error: {str(e)}"
 
@@ -229,14 +229,13 @@ if st.session_state.current_page == "Dashboard":
         st.rerun()
 
 # ==========================================
-# PAGE 2: LINK NUMBERS ALLOCATION (FAIL-SAFE, NO FORM BUG)
+# PAGE 2: LINK NUMBERS ALLOCATION (SOLID IMPLEMENTATION)
 # ==========================================
 elif st.session_state.current_page == "LinkNumbers":
     st.markdown('<div class="main-title">⚡ SECURE LINK NUMBERS BRIDGE ⚡</div>', unsafe_allow_html=True)
     
-    # Load dynamic options safely from CSV file records
     team_df = load_team_data()
-    base_ranges = ["Afghanistan (K) Cellular 9374404xxxx"]
+    base_ranges = ["Angola LX 19May (avl = 430)", "Sri Lanka LX 09Apr (avl = 425)", "Algeria LX 03Apr (avl = 1)"]
     base_clients = ["UTS_Amjad"]
     
     if not team_df.empty:
@@ -250,7 +249,6 @@ elif st.session_state.current_page == "LinkNumbers":
             if csv_clients:
                 base_clients = csv_clients
 
-    # Rendered inside normal native divs to bypass any potential form submission crash
     st.markdown('<div class="allocation-box">', unsafe_allow_html=True)
     st.subheader("Allocation Parameters Config (Real-Time Layout Synced)")
     
@@ -259,7 +257,7 @@ elif st.session_state.current_page == "LinkNumbers":
     target_client = st.selectbox("Select Target Client (Destination Node Match):", options=base_clients)
     
     st.markdown("---")
-    submit_action = st.button("⚡ Allocate Numbers") # Regular dynamic button execution trigger
+    submit_action = st.button("⚡ Allocate Numbers")
     
     if submit_action:
         with st.spinner("Executing secure pipeline payload matching raw variables..."):
