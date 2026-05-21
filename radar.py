@@ -161,4 +161,113 @@ if st.session_state.current_page == "Dashboard":
     with col_in1:
         target_cli = st.text_input("⚙️ ENTER TARGET AGENT (CLI):", "MYOB").strip()
     with col_in2:
-        msg_limit = st.number_input("📡 STREAM BUFFER LIMIT:", min_
+        msg_limit = st.number_input("📡 STREAM BUFFER LIMIT:", min_value=1, max_value=2000, value=1000)
+
+    placeholder = st.empty()
+    team_df = load_team_data()
+
+    col_cfg = {
+        "Time": st.column_config.TextColumn("TIMESTAMP", width="medium"),
+        "App": st.column_config.TextColumn("IDENT/CLI", width="small"),
+        "Number": st.column_config.TextColumn("DATA_STREAM", width="medium"),
+        "Country": st.column_config.TextColumn("LOCATION", width="small"),
+        "Message": st.column_config.TextColumn("DECRYPTED_MSG", width="max"),
+        "Team Member": st.column_config.TextColumn("OPERATOR", width="medium"),
+        "Range": st.column_config.TextColumn("NETWORK_RANGE", width="large"),
+    }
+
+    try:
+        r = requests.get(URL, params={"token": TOKEN, "records": 5000})
+        if r.status_code == 200:
+            data = r.json().get("data", [])
+            df = pd.DataFrame(data)
+            
+            if not df.empty:
+                df['dt'] = pd.to_datetime(df['dt'])
+                df_5m = df[df['dt'] >= (datetime.now() - timedelta(minutes=5))]
+                
+                top1, top2, top3 = ("NO_DATA", 0), ("NO_DATA", 0), ("NO_DATA", 0)
+                if not df_5m.empty and 'cli' in df_5m.columns:
+                    top = df_5m['cli'].value_counts().head(3)
+                    if len(top) >= 1: top1 = (top.index[0], top.iloc[0])
+                    if len(top) >= 2: top2 = (top.index[1], top.iloc[1])
+                    if len(top) >= 3: top3 = (top.index[2], top.iloc[2])
+
+                df_target_all = df[df['cli'].str.contains(target_cli, case=False, na=False)].copy()
+
+                with placeholder.container():
+                    st.markdown(f"""
+                    <div class="leaderboard-grid">
+                        <div class="rank-card rank-1"><div class="rank-badge">🏆 TOP 1 (LAST 5M)</div><div class="rank-cli">{top1[0]}</div><div class="rank-count">🔥 {top1[1]} OTPs</div></div>
+                        <div class="rank-card rank-2"><div class="rank-badge">🥈 TOP 2 (LAST 5M)</div><div class="rank-cli">{top2[0]}</div><div class="rank-count">⚡ {top2[1]} OTPs</div></div>
+                        <div class="rank-card rank-3"><div class="rank-badge">🥉 TOP 3 (LAST 5M)</div><div class="rank-cli">{top3[0]}</div><div class="rank-count">📡 {top3[1]} OTPs</div></div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    st.markdown(f'<div class="section-label">LIVE TARGET TRACKER // ACCESSED: {target_cli.upper()}</div>', unsafe_allow_html=True)
+                    if not df_target_all.empty:
+                        mid_df = df_target_all.head(25).copy()
+                        mid_df[['Team Member', 'Range']] = mid_df['num'].apply(lambda x: pd.Series(get_team_info(x, team_df)))
+                        mid_df['Country'] = mid_df['num'].apply(get_country)
+                        disp_mid = mid_df[['dt', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
+                        disp_mid.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
+                        st.dataframe(disp_mid.style.apply(highlight_team, axis=1), use_container_width=True, height=300, hide_index=True, column_config=col_cfg)
+                    else:
+                        st.caption("NO PACKETS DETECTED FOR CURRENT AGENT.")
+
+                    st.markdown('<div class="section-label">GLOBAL NETWORK LOG STREAM</div>', unsafe_allow_html=True)
+                    global_df = df.head(msg_limit).copy()
+                    global_df[['Team Member', 'Range']] = global_df['num'].apply(lambda x: pd.Series(get_team_info(x, team_df)))
+                    global_df['Country'] = global_df['num'].apply(get_country)
+                    disp_global = global_df[['dt', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
+                    disp_global.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
+                    st.dataframe(disp_global.style.apply(highlight_team, axis=1), use_container_width=True, height=600, hide_index=True, column_config=col_cfg)
+
+        time.sleep(12)
+        st.rerun()
+    except Exception as e:
+        time.sleep(4)
+        st.rerun()
+
+# ==========================================
+# PAGE 2: LINK NUMBERS ALLOCATION (SOLID BULLETPROOF)
+# ==========================================
+elif st.session_state.current_page == "LinkNumbers":
+    st.markdown('<div class="main-title">⚡ SECURE LINK NUMBERS BRIDGE ⚡</div>', unsafe_allow_html=True)
+    
+    # Smart Fallback Data parsing layer from local storage context
+    team_df = load_team_data()
+    
+    # Built-in direct target maps mapping active network fields
+    base_ranges = ["Afghanistan (K) Cellular 9374404xxxx"]
+    base_clients = ["UTS_Amjad"]
+    
+    if not team_df.empty:
+        if 'Range' in team_df.columns:
+            csv_ranges = sorted(list(set(team_df['Range'].dropna().astype(str).tolist())))
+            if csv_ranges:
+                base_ranges = csv_ranges
+        if 'MemberName' in team_df.columns:
+            csv_clients = sorted(list(set(team_df['MemberName'].dropna().astype(str).tolist())))
+            csv_clients = [c for c in csv_clients if c.strip() and c not in ["UTS_Umer1", "UTS_Khadija"]]
+            if csv_clients:
+                base_clients = csv_clients
+
+    with st.form("secure_allocation_form"):
+        st.subheader("Allocation Parameters Config (Fail-Safe Pipeline Active)")
+        
+        selected_range = st.selectbox("Select Target Range (From Active Nodes):", options=base_ranges)
+        quantity = st.number_input("Quantity (Maximum batch limit: 50):", min_value=1, max_value=50, value=10, step=1)
+        target_client = st.selectbox("Select Target Client:", options=base_clients)
+        
+        st.markdown("---")
+        submit_action = st.form_submit_button("⚡ Execute Safe Allocation")
+        
+        if submit_action:
+            with st.spinner("Injecting values into encryption tunnel..."):
+                success, msg = run_matrix_allocation_api(ADMIN_USER, ADMIN_PASS, selected_range, quantity, target_client)
+                if success:
+                    st.success(msg)
+                    st.balloons()
+                else:
+                    st.error(msg)
