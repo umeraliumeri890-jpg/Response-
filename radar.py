@@ -1,18 +1,3 @@
-# --- AUTO-DEPENDENCY INJECTOR (CRASH BYPASS) ---
-import subprocess
-import sys
-
-def install_package(package_name):
-    try:
-        __import__(package_name)
-    except ImportError:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", package_name])
-
-# Auto installing dependencies on server startup
-for pkg in ["requests", "pandas", "phonenumbers", "selenium"]:
-    install_package(pkg)
-
-# --- STANDARD IMPORTS ---
 import streamlit as st
 import requests
 import pandas as pd
@@ -31,7 +16,7 @@ URL = "http://51.77.216.195/crapi/lamix/viewstats"
 TOKEN = "SVdVRTRSQkd-ZVZEYWVgfmiViFmCg3ZYX5FuZUJoUGZlgJWFhoyS"
 TEAM_FILE = "Numbers_Export.csv"
 
-# Page Config (Must be the very first Streamlit command)
+# Page Config
 st.set_page_config(page_title="HUNTING SYSTEM - UMER ALI", layout="wide")
 
 # --- UI DESIGN (CYBERPUNK & PURPLE HYBRID THEME) ---
@@ -164,7 +149,7 @@ def highlight_team(row):
     return [''] * len(row)
 
 
-# --- STREAMLIT CLOUD SELECT2 OPTIMIZED DRIVER ENGINE ---
+# --- STREAMLIT CLOUD DEBIAN RUNTIME ENGINE ---
 def run_matrix_allocation(admin_user, admin_pass, selected_range, quantity, target_client):
     options = webdriver.ChromeOptions()
     options.add_argument("--headless=new")
@@ -172,9 +157,11 @@ def run_matrix_allocation(admin_user, admin_pass, selected_range, quantity, targ
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
     
+    # Path settings for Debian Linux container
     options.binary_location = "/usr/bin/chromium"
     
     try:
+        # standard location link for chromium-driver
         service = Service("/usr/bin/chromedriver")
         driver = webdriver.Chrome(service=service, options=options)
     except Exception:
@@ -198,39 +185,39 @@ def run_matrix_allocation(admin_user, admin_pass, selected_range, quantity, targ
         login_btn.click()
         time.sleep(4)
         
-        # Step 2: Navigate to Allocation Page
+        # Step 2: Direct Allocation Page Redirect
         driver.get("https://matrix-panel.tech/agent/allocate")
         time.sleep(3)
         
-        # Step 3: Select2 Handling for 'Ranges' Dropdown
-        range_container = wait.until(EC.element_to_be_clickable((By.XPATH, "//span[contains(@aria-describedby, 'select2-range_name')]|//textarea[@aria-describedby='select2-range_name-ih-container']/..")))
+        # Step 3: Select2 Handling for 'Ranges' Dropdown Field
+        range_container = wait.until(EC.element_to_be_clickable((By.XPATH, "//span[contains(@aria-describedby, 'select2-range_name')]|//textarea[contains(@aria-describedby, 'select2-range_name')]/..")))
         range_container.click()
         time.sleep(1)
         
         range_search = driver.find_element(By.XPATH, "//textarea[contains(@aria-describedby, 'select2-range_name')]")
         range_search.send_keys(selected_range)
         time.sleep(1)
-        range_search.send_keys("\n")  # Enter hit
+        range_search.send_keys("\n")  # Hit Enter
         time.sleep(1)
         
-        # Step 4: Quantity Input Injection
+        # Step 4: Quantity Field Setup
         qty_field = driver.find_element(By.XPATH, "//input[@placeholder='e.g. 500' or @type='number']")
         qty_field.clear()
         qty_field.send_keys(str(quantity))
         time.sleep(1)
         
         # Step 5: Select2 Handling for 'Target Clients' Dropdown
-        client_container = driver.find_element(By.XPATH, "//span[contains(@aria-describedby, 'select2-allocate_target')]|//textarea[@aria-describedby='select2-allocate_target-container']/..")
+        client_container = driver.find_element(By.XPATH, "//span[contains(@aria-describedby, 'select2-allocate_target')]|//textarea[contains(@aria-describedby, 'select2-allocate_target')]/..")
         client_container.click()
         time.sleep(1)
         
         client_search = driver.find_element(By.XPATH, "//textarea[contains(@aria-describedby, 'select2-allocate_target')]")
         client_search.send_keys(target_client)
         time.sleep(1)
-        client_search.send_keys("\n")  # Enter hit
+        client_search.send_keys("\n")  # Hit Enter
         time.sleep(1)
         
-        # Step 6: Final Submission Trigger Click
+        # Step 6: Final Submission Trigger
         final_allocate_btn = driver.find_element(By.XPATH, "//button[contains(., 'Allocate Numbers')]")
         final_allocate_btn.click()
         time.sleep(5)
@@ -242,7 +229,7 @@ def run_matrix_allocation(admin_user, admin_pass, selected_range, quantity, targ
         return False, f"Select2 Automation Logic Issue: {str(e)}"
 
 
-# --- NAVIGATION SESSION SETUP ---
+# --- NAVIGATION SESSION ---
 if "current_page" not in st.session_state:
     st.session_state.current_page = "Dashboard"
 
@@ -260,7 +247,7 @@ team_dict = get_team_info_dict(raw_team_df)
 
 
 # ==========================================
-# PAGE 1: LIVE SNIFFER DASHBOARD
+# PAGE 1: SNIFFER DASHBOARD
 # ==========================================
 if st.session_state.current_page == "Dashboard":
     st.markdown('<div class="main-title">⚡ DOUBLE FACER HUNTER ⚡</div>', unsafe_allow_html=True)
@@ -362,11 +349,11 @@ if st.session_state.current_page == "Dashboard":
 
 
 # ==========================================
-# PAGE 2: SECURE LINK NUMBERS ALLOCATION
+# PAGE 2: LINK NUMBERS ALLOCATION
 # ==========================================
 elif st.session_state.current_page == "LinkNumbers":
     st.markdown('<div class="main-title">⚡ SECURE LINK NUMBERS BRIDGE ⚡</div>', unsafe_allow_html=True)
-    st.write("Fill parameters to execute bulk allocation action on Matrix panel.")
+    st.write("Fill parameters to execute bulk allocation action.")
     
     if not raw_team_df.empty:
         dynamic_ranges = ["-- Select Ranges --"] + sorted(raw_team_df['Range'].dropna().unique().tolist())
@@ -389,9 +376,9 @@ elif st.session_state.current_page == "LinkNumbers":
             if "Select" in selected_range or "Select" in target_client:
                 st.error("Meharbani karke valid Range aur Target Client select karein!")
             elif quantity > 50:
-                st.error("Operation Denied: Single batch limit locked at 50.")
+                st.error("Operation Denied: Max limit capped at 50.")
             else:
-                with st.spinner("Connecting Matrix Tunnel Core... Please Wait."):
+                with st.spinner("Connecting Matrix Tunnel Core via System Drivers..."):
                     ADMIN_USER = "UTS"
                     ADMIN_PASS = "@Umer123456"
                     
