@@ -47,7 +47,6 @@ st.markdown("""
 
 # --- BACKEND INTERFACE TRANSMISSION ENGINE ---
 def run_matrix_allocation_api(username, password, selected_range, quantity, target_client):
-    """Direct session authentication and mapping post data straight to Select2 arrays"""
     session = requests.Session()
     session.headers.update({
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
@@ -61,4 +60,105 @@ def run_matrix_allocation_api(username, password, selected_range, quantity, targ
         if csrf_input:
             csrf_token = csrf_input.get("value", "")
 
-        #
+        # Step 2: Authenticate User Node
+        payload = {
+            "username": username,
+            "email": username,
+            "password": password
+        }
+        if csrf_token:
+            payload["_token"] = csrf_token
+
+        session.post(f"{BASE_PANEL_URL}/auth/login", data=payload, timeout=10, allow_redirects=True)
+        
+        # Step 3: Fetch allocation page to get active form unique tokens
+        alloc_page = session.get(f"{BASE_PANEL_URL}/agent/allocate", timeout=10)
+        alloc_soup = BeautifulSoup(alloc_page.text, "html.parser")
+        
+        alloc_csrf = ""
+        alloc_csrf_input = alloc_soup.find("input", {"name": "_token"})
+        if alloc_csrf_input:
+            alloc_csrf = alloc_csrf_input.get("value", "")
+
+        # Step 4: Dispatch targeting structural Select2 Array Parameters
+        post_payload = {
+            "range_name[]": str(selected_range).strip(),
+            "qty": int(quantity),
+            "allocate_target": str(target_client).strip(),
+            "payout_pattern": "Daily",
+            "client_payout": "0.013"
+        }
+        if alloc_csrf:
+            post_payload["_token"] = alloc_csrf
+            
+        session.headers.update({"Referer": f"{BASE_PANEL_URL}/agent/allocate"})
+        action_res = session.post(f"{BASE_PANEL_URL}/agent/allocate", data=post_payload, timeout=12)
+        
+        if action_res.status_code in [200, 302]:
+            return True, f"Successfully Allocated {quantity} Items from '{selected_range}' to '{target_client}'!"
+        return False, f"Server denied request execution. Status Code: {action_res.status_code}"
+    except Exception as e:
+        return False, f"Tunnel bridge connectivity error: {str(e)}"
+
+# --- SNIFFER AUXILIARY LOGIC ---
+def get_country(num):
+    try:
+        full_num = "+" + str(num).strip()
+        parsed = phonenumbers.parse(full_num)
+        return geocoder.description_for_number(parsed, "en")
+    except:
+        return "Global"
+
+@st.cache_data
+def load_team_data():
+    try:
+        df = pd.read_csv(TEAM_FILE)
+        df['Phone Number'] = df['Phone Number'].astype(str).str.split('.').str[0].str.strip()
+        df['Status'] = df['Status'].fillna('') 
+        df['MemberName'] = df['Status'].str.replace('Allocated: ', '', case=False, regex=False).str.strip()
+        return df
+    except:
+        return pd.DataFrame()
+
+def get_team_info(num, team_df):
+    if team_df.empty:
+        return "", ""
+    n_str = str(num).split('.')[0].strip()
+    match = team_df[team_df['Phone Number'] == n_str]
+    if not match.empty:
+        name = match.iloc[0]['MemberName']
+        if name in ["UTS_Umer1", "UTS_Khadija"]:
+            return "", ""
+        return name, match.iloc[0]['Range']
+    return "", ""
+
+def highlight_team(row):
+    if row['Team Member'] != "":
+        return ['background-color: rgba(255, 0, 85, 0.12); color: #ff3366; font-weight: bold; border-right: 4px solid #ff0055;'] * len(row)
+    return [''] * len(row)
+
+# --- NAVIGATION SETUP ---
+if "current_page" not in st.session_state:
+    st.session_state.current_page = "Dashboard"
+
+st.sidebar.title("🔮 UTS MATRIX CONTROL")
+st.sidebar.markdown("---")
+if st.sidebar.button("📊 Main Dashboard (Sniffer)", use_container_width=True):
+    st.session_state.current_page = "Dashboard"
+if st.sidebar.button("🔗 Link Numbers Panel", use_container_width=True):
+    st.session_state.current_page = "LinkNumbers"
+st.sidebar.markdown("---")
+st.sidebar.caption("DEVELOPED BY: UTS TEAM")
+
+# ==========================================
+# PAGE 1: LIVE SNIFFER DASHBOARD
+# ==========================================
+if st.session_state.current_page == "Dashboard":
+    st.markdown('<div class="main-title">⚡ DOUBLE FACER HUNTER ⚡</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-subtitle">> SYSTEM CONTROL PANEL // NETWORK SNIFFER</div>', unsafe_allow_html=True)
+
+    col_in1, col_in2 = st.columns([2, 1])
+    with col_in1:
+        target_cli = st.text_input("⚙️ ENTER TARGET AGENT (CLI):", "MYOB").strip()
+    with col_in2:
+        msg_limit = st.number_input("📡 STREAM BUFFER LIMIT:", min_
