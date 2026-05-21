@@ -18,6 +18,11 @@ ADMIN_USER = "UTS"
 ADMIN_PASS = "@Umer123456"
 BASE_PANEL_URL = "https://matrix-panel.tech"
 
+# Initialize Session States to prevent Black Screen Freeze
+if "live_ranges" not in st.session_state: st.session_state.live_ranges = []
+if "live_clients" not in st.session_state: st.session_state.live_clients = []
+if "current_page" not in st.session_state: st.session_state.current_page = "Dashboard"
+
 # --- UI DESIGN (CYBERPUNK THEME) ---
 st.markdown("""
 <style>
@@ -37,46 +42,48 @@ st.markdown("""
     .rank-card { background: linear-gradient(135deg, #121214, #1a1a1e); border: 1px solid #222222; border-radius: 4px; padding: 20px; }
     .rank-1 { border-left: 5px solid #ffcc00; } .rank-2 { border-left: 5px solid #cccccc; } .rank-3 { border-left: 5px solid #cd7f32; }
     .rank-badge { font-size: 11px; font-weight: bold; }
-    .rank-1 .rank-badge { color: #ffcc00; } .rank-2 .rank-badge { color: #cccccc; } .rank-3 .rank-badge { color: #cd7f32; }
     .rank-cli { color: #ffffff; font-size: 28px; font-weight: 900; }
     .rank-count { color: #00ff66; font-size: 14px; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- LIVE FETCHING ENGINE FOR DROPDOWNS ---
-def fetch_live_panel_options(username, password):
+# --- SAFE SESSION-LOCKED OPTION FETCHING ---
+def load_panel_options_into_state():
+    if st.session_state.live_ranges and st.session_state.live_clients:
+        return # Already cached in state, skip to prevent multi-hit block
+        
     session = requests.Session()
     session.headers.update({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"})
-    live_ranges, live_clients = [], []
+    lr, lc = [], []
     try:
-        login_page = session.get(f"{BASE_PANEL_URL}/auth/login", timeout=10)
+        login_page = session.get(f"{BASE_PANEL_URL}/auth/login", timeout=8)
         soup = BeautifulSoup(login_page.text, "html.parser")
         csrf = soup.find("input", {"name": "_token"})
         csrf_token = csrf.get("value", "") if csrf else ""
 
-        payload = {"username": username, "email": username, "password": password}
+        payload = {"username": ADMIN_USER, "email": ADMIN_USER, "password": ADMIN_PASS}
         if csrf_token: payload["_token"] = csrf_token
-        session.post(f"{BASE_PANEL_URL}/auth/login", data=payload, timeout=10, allow_redirects=True)
+        session.post(f"{BASE_PANEL_URL}/auth/login", data=payload, timeout=8, allow_redirects=True)
         
-        alloc_page = session.get(f"{BASE_PANEL_URL}/agent/allocate", timeout=10)
+        alloc_page = session.get(f"{BASE_PANEL_URL}/agent/allocate", timeout=8)
         alloc_soup = BeautifulSoup(alloc_page.text, "html.parser")
         
         r_select = alloc_soup.find("select", {"name": "range_name[]"}) or alloc_soup.find("select", {"id": "range_name"})
         if r_select:
             for opt in r_select.find_all("option"):
                 v, t = opt.get("value", "").strip(), opt.text.strip()
-                if v and t and "-- Select" not in t: live_ranges.append(v)
+                if v and t and "-- Select" not in t: lr.append(v)
                     
         t_select = alloc_soup.find("select", {"name": "allocate_target[]"}) or alloc_soup.find("select", {"id": "allocate_target"})
         if t_select:
             for opt in t_select.find_all("option"):
                 v, t = opt.get("value", "").strip(), opt.text.strip()
-                if v and t and "-- Select" not in t and v not in ["UTS_Umer1", "UTS_Khadija"]:
-                    live_clients.append(v)
-                        
-        return sorted(list(set(live_ranges))), sorted(list(set(live_clients)))
+                if v and t and "-- Select" not in t and v not in ["UTS_Umer1", "UTS_Khadija"]: lc.append(v)
+        
+        st.session_state.live_ranges = sorted(list(set(lr)))
+        st.session_state.live_clients = sorted(list(set(lc)))
     except:
-        return [], []
+        pass # Handle silenty to avoid breaking UI layout
 
 # --- BACKEND INTERFACE TRANSMISSION ENGINE ---
 def run_matrix_allocation_api(username, password, selected_range, quantity, target_client):
@@ -120,8 +127,7 @@ def get_country(num):
     try:
         parsed = phonenumbers.parse("+" + str(num).strip())
         return geocoder.description_for_number(parsed, "en")
-    except:
-        return "Global"
+    except: return "Global"
 
 @st.cache_data
 def load_team_data():
@@ -131,8 +137,7 @@ def load_team_data():
         df['Status'] = df['Status'].fillna('') 
         df['MemberName'] = df['Status'].str.replace('Allocated: ', '', case=False, regex=False).str.strip()
         return df
-    except:
-        return pd.DataFrame()
+    except: return pd.DataFrame()
 
 def get_team_info(num, team_df):
     if team_df.empty: return "", ""
@@ -150,9 +155,6 @@ def highlight_team(row):
     return [''] * len(row)
 
 # --- NAVIGATION SETUP ---
-if "current_page" not in st.session_state:
-    st.session_state.current_page = "Dashboard"
-
 st.sidebar.title("🔮 UTS MATRIX CONTROL")
 st.sidebar.markdown("---")
 if st.sidebar.button("📊 Main Dashboard (Sniffer)", use_container_width=True):
@@ -240,5 +242,54 @@ if st.session_state.current_page == "Dashboard":
         st.rerun()
 
 # ==========================================
-# PAGE 2: LINK NUMBERS ALLOCATION (LIVE FETCHED OPTIONS)
+# PAGE 2: LINK NUMBERS ALLOCATION (STATE MANAGED)
 # ==========================================
+elif st.session_state.current_page == "LinkNumbers":
+    st.markdown('<div class="main-title">⚡ SECURE LINK NUMBERS BRIDGE ⚡</div>', unsafe_allow_html=True)
+    
+    # Run parsing only once safely or read from memory state
+    load_panel_options_into_state()
+    
+    # Retrieve data from state memory container
+    base_ranges = st.session_state.live_ranges
+    base_clients = st.session_state.live_clients
+        
+    # Fallback structure layer from file data if state container parsing returned empty
+    if not base_ranges or not base_clients:
+        team_df = load_team_data()
+        if not team_df.empty:
+            if not base_ranges and 'Range' in team_df.columns:
+                base_ranges = sorted(list(set(team_df['Range'].dropna().astype(str).tolist())))
+            if not base_clients and 'MemberName' in team_df.columns:
+                csv_clients = sorted(list(set(team_df['MemberName'].dropna().astype(str).tolist())))
+                base_clients = [c for c in csv_clients if c.strip() and c not in ["UTS_Umer1", "UTS_Khadija"]]
+
+    if not base_ranges: base_ranges = ["Angola LX 19May (avl = 430)"]
+    if not base_clients: base_clients = ["UTS_Amjad"]
+
+    st.markdown('<div class="allocation-box">', unsafe_allow_html=True)
+    st.subheader("Allocation Parameters Config")
+    
+    # Manual Sync Reset Switch Trigger
+    if st.button("🔄 Force Sync Dynamic Panel Options"):
+        st.session_state.live_ranges = []
+        st.session_state.live_clients = []
+        st.rerun()
+        
+    selected_range = st.selectbox("Select Target Range (Panel Synced):", options=base_ranges)
+    quantity = st.number_input("Quantity (e.g. 500, Max: 4333):", min_value=1, max_value=4333, value=10, step=1)
+    target_client = st.selectbox("Select Target Client (Panel Synced):", options=base_clients)
+    
+    st.markdown("---")
+    submit_action = st.button("⚡ Allocate Numbers")
+    
+    if submit_action:
+        with st.spinner("Executing secure pipeline payload matching raw variables..."):
+            success, msg = run_matrix_allocation_api(ADMIN_USER, ADMIN_PASS, selected_range, quantity, target_client)
+            if success:
+                st.success(msg)
+                st.balloons()
+            else:
+                st.error(msg)
+                
+    st.markdown('</div>', unsafe_allow_html=True)
