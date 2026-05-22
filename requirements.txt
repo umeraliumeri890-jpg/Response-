@@ -1,4 +1,4 @@
-beautifulsoup4
+streamlit
 requests
-phonenumbers
 pandas
+phonenumbers
