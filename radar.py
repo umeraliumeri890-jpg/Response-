@@ -11,9 +11,6 @@ URL = "http://51.77.216.195/crapi/lamix/viewstats"
 TOKEN = "SVdVRTRSQkd-ZVZEYWVgfmiViFmCg3ZYX5FuZUJoUGZlgJWFhoyS"
 TEAM_FILE = "Numbers_Export.csv"
 
-# AAPKA SECRET PASSWORD
-ADMIN_PASSWORD = "211011"
-
 # Page Config
 st.set_page_config(page_title="HUNTING SYSTEM - UMER ALI", layout="wide")
 
@@ -93,6 +90,7 @@ st.markdown("""
         position: relative;
         overflow: hidden;
     }
+    /* Distinct left glow colors for ranks */
     .rank-1 { border-left: 5px solid #ffcc00; box-shadow: 0 0 10px rgba(255,204,0,0.1); }
     .rank-2 { border-left: 5px solid #cccccc; }
     .rank-3 { border-left: 5px solid #cd7f32; }
@@ -147,6 +145,7 @@ def load_team_data():
         return {}
 
 def get_team_info(num, team_data):
+    """Returns MemberName and Range, but ignores specific users."""
     n_str = str(num).split('.')[0].strip()
     if n_str in team_data:
         name = team_data[n_str]['MemberName']
@@ -155,27 +154,22 @@ def get_team_info(num, team_data):
         return name, team_data[n_str]['Range']
     return "", ""
 
+def highlight_team(row):
+    """Highlights rows with a Toxic Cyber Red/Neon Pink theme for alerts."""
+    if row['Team Member'] != "":
+        return ['background-color: rgba(255, 0, 85, 0.12); color: #ff3366; font-weight: bold; border-right: 4px solid #ff0055;'] * len(row)
+    return [''] * len(row)
+
 # --- HEADER ---
 st.markdown('<div class="main-title">⚡ DOUBLE FACER HUNTER ⚡</div>', unsafe_allow_html=True)
 st.markdown('<div class="main-subtitle">> SYSTEM CONTROL PANEL // NETWORK SNIFFER</div>', unsafe_allow_html=True)
 
-# --- SECURE INPUTS PANEL ---
-col_in1, col_in2, col_in3 = st.columns([2, 1, 1])
+# Inputs Panel
+col_in1, col_in2 = st.columns([2, 1])
 with col_in1:
     target_cli = st.text_input("⚙️ ENTER TARGET AGENT (CLI):", "MYOB").strip()
 with col_in2:
     msg_limit = st.number_input("📡 STREAM BUFFER LIMIT:", min_value=1, max_value=2000, value=1000)
-with col_in3:
-    input_key = st.text_input("🔐 ADMIN ACCESS KEY:", type="password", help="Enter secret password to disable team over-hit warnings.")
-
-# Default warning switch status
-enable_warnings = True
-
-if input_key.strip() == ADMIN_PASSWORD:
-    enable_warnings = False
-    st.sidebar.success("🔓 OVER-HIT WARNING DISABLED BY ADMIN")
-elif input_key.strip() != "":
-    st.sidebar.error("❌ INVALID KEY! SECURE MODE ACTIVE.")
 
 team_data = load_team_data()
 placeholder = st.empty()
@@ -203,65 +197,31 @@ while True:
                 df['dt'] = pd.to_datetime(df['dt'])
                 now = datetime.now()
                 
-                # Pre-calculate data fields
-                df['Team Member'] = df['num'].apply(lambda x: get_team_info(x, team_data)[0])
-                df['Range'] = df['num'].apply(lambda x: get_team_info(x, team_data)[1])
-                df['Country'] = df['num'].apply(get_country)
-                
-                # Clean CLI structure for casing alignment
-                df['clean_cli'] = df['cli'].astype(str).str.strip().str.lower()
-                
-                # Full-read tracking engine for spam registry
-                spam_registry = set()
-                if enable_warnings:
-                    valid_team_hits = df[df['Team Member'] != ""].copy()
-                    if not valid_team_hits.empty:
-                        counts = valid_team_hits.groupby(['Team Member', 'clean_cli']).size().reset_index(name='hit_count')
-                        over_limit = counts[counts['hit_count'] >= 10]
-                        for _, row_data in over_limit.iterrows():
-                            spam_registry.add((row_data['Team Member'], row_data['clean_cli']))
-
-                # --- NEW FUNCTION: Inject Warning Symbols into Message Text dynamically ---
-                def inject_warning_prefix(row):
-                    current_clean_cli = str(row['cli']).strip().lower()
-                    if enable_warnings and row['Team Member'] != "" and (row['Team Member'], current_clean_cli) in spam_registry:
-                        return f"⚠️ WARNING: {row['message']}"
-                    return row['message']
-
-                # Inject text warnings inside raw df before generating views
-                df['message'] = df.apply(inject_warning_prefix, axis=1)
-
-                # Dynamic Highlighter Function
-                def highlight_team(row):
-                    current_clean_cli = str(row['App']).strip().lower()
-                    
-                    # Target flagged pairs
-                    if enable_warnings and row['Team Member'] != "" and (row['Team Member'], current_clean_cli) in spam_registry:
-                        return ['background-color: rgba(255, 230, 0, 0.2); color: #ffcc00; font-weight: 900; border-right: 5px dashed #ffcc00;'] * len(row)
-                    
-                    if row['Team Member'] != "":
-                        return ['background-color: rgba(255, 0, 85, 0.12); color: #ff3366; font-weight: bold; border-right: 4px solid #ff0055;'] * len(row)
-                    
-                    return [''] * len(row)
-
-                # Top 3 App Analysis
+                # --- TOP 3 APP/CLI CALCULATION (LAST 5 MINS) ---
                 five_mins_ago = now - timedelta(minutes=5)
                 df_5m = df[df['dt'] >= five_mins_ago]
                 
+                # Default empty placeholders
                 top1_name, top1_count = "NO_DATA", 0
                 top2_name, top2_count = "NO_DATA", 0
                 top3_name, top3_count = "NO_DATA", 0
                 
                 if not df_5m.empty and 'cli' in df_5m.columns:
+                    # Group by CLI and count occurrences, then get top 3
                     top_clis = df_5m['cli'].value_counts().head(3)
-                    if len(top_clis) >= 1: top1_name, top1_count = top_clis.index[0], top_clis.iloc[0]
-                    if len(top_clis) >= 2: top2_name, top2_count = top_clis.index[1], top_clis.iloc[1]
-                    if len(top_clis) >= 3: top3_name, top3_count = top_clis.index[2], top_clis.iloc[2]
+                    
+                    if len(top_clis) >= 1:
+                        top1_name, top1_count = top_clis.index[0], top_clis.iloc[0]
+                    if len(top_clis) >= 2:
+                        top2_name, top2_count = top_clis.index[1], top_clis.iloc[1]
+                    if len(top_clis) >= 3:
+                        top3_name, top3_count = top_clis.index[2], top_clis.iloc[2]
 
+                # Filter Target CLI for tables
                 df_target_all = df[df['cli'].str.contains(target_cli, case=False, na=False)].copy()
 
                 with placeholder.container():
-                    # Leaderboard
+                    # --- NEW TOP 3 LEADERBOARD GRID UI ---
                     st.markdown(f"""
                     <div class="leaderboard-grid">
                         <div class="rank-card rank-1">
@@ -286,20 +246,30 @@ while True:
                     st.markdown(f'<div class="section-label">LIVE TARGET TRACKER // ACCESSED: {target_cli.upper()}</div>', unsafe_allow_html=True)
                     if not df_target_all.empty:
                         mid_df = df_target_all.head(25).copy()
+                        mid_df[['Team Member', 'Range']] = mid_df['num'].apply(lambda x: pd.Series(get_team_info(x, team_data)))
+                        mid_df['Country'] = mid_df['num'].apply(get_country)
+                        
                         disp_mid = mid_df[['dt', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
                         disp_mid.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
-                        st.dataframe(disp_mid.style.apply(highlight_team, axis=1), use_container_width=True, height=350, hide_index=True, column_config=col_cfg)
+                        
+                        st.dataframe(disp_mid.style.apply(highlight_team, axis=1), 
+                                     use_container_width=True, height=350, hide_index=True, column_config=col_cfg)
                     else:
                         st.caption("NO PACKETS DETECTED FOR CURRENT AGENT.")
 
                     # 2. Global Feed Table
                     st.markdown('<div class="section-label">GLOBAL NETWORK LOG STREAM</div>', unsafe_allow_html=True)
                     global_df = df.head(msg_limit).copy()
+                    global_df[['Team Member', 'Range']] = global_df['num'].apply(lambda x: pd.Series(get_team_info(x, team_data)))
+                    global_df['Country'] = global_df['num'].apply(get_country)
+                    
                     disp_global = global_df[['dt', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
                     disp_global.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
-                    st.dataframe(disp_global.style.apply(highlight_team, axis=1), use_container_width=True, height=750, hide_index=True, column_config=col_cfg)
+                    
+                    st.dataframe(disp_global.style.apply(highlight_team, axis=1), 
+                                 use_container_width=True, height=750, hide_index=True, column_config=col_cfg)
 
         time.sleep(15)
         st.rerun()
-    except Exception:
+    except Exception as e:
         time.sleep(5)
