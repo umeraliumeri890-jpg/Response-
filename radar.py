@@ -11,7 +11,7 @@ URL = "http://51.77.216.195/crapi/lamix/viewstats"
 TOKEN = "SVdVRTRSQkd-ZVZEYWVgfmiViFmCg3ZYX5FuZUJoUGZlgJWFhoyS"
 TEAM_FILE = "Numbers_Export.csv"
 
-# AAPKA NAYA SECRET PASSWORD
+# AAPKA SECRET PASSWORD
 ADMIN_PASSWORD = "211011"
 
 # Page Config
@@ -147,7 +147,6 @@ def load_team_data():
         return {}
 
 def get_team_info(num, team_data):
-    """Returns MemberName and Range, but ignores specific users."""
     n_str = str(num).split('.')[0].strip()
     if n_str in team_data:
         name = team_data[n_str]['MemberName']
@@ -167,7 +166,6 @@ with col_in1:
 with col_in2:
     msg_limit = st.number_input("📡 STREAM BUFFER LIMIT:", min_value=1, max_value=2000, value=1000)
 with col_in3:
-    # Key input with hidden text mode
     input_key = st.text_input("🔐 ADMIN ACCESS KEY:", type="password", help="Enter secret password to disable team over-hit warnings.")
 
 # Default warning logic setup
@@ -205,30 +203,39 @@ while True:
                 df['dt'] = pd.to_datetime(df['dt'])
                 now = datetime.now()
                 
-                # Pre-calculate data fields
+                # Pre-calculate main data fields
                 df['Team Member'] = df['num'].apply(lambda x: get_team_info(x, team_data)[0])
                 df['Range'] = df['num'].apply(lambda x: get_team_info(x, team_data)[1])
                 df['Country'] = df['num'].apply(get_country)
                 
-                # Counter for spam detection - SIRF TEAM MEMBERS KE LIYE
+                # --- FIX: Clean CLI column for accurate grouping ---
+                df['clean_cli'] = df['cli'].astype(str).str.strip().str.lower()
+                
+                # Counter for spam detection - UPDATED & FIXED
                 spam_registry = set()
                 if enable_warnings:
-                    # Filter: check only logs that belong to an allocated operator (Not empty)
-                    valid_team_hits = df[df['Team Member'] != ""]
+                    # Sirf unka data nikalo jo active team members hain
+                    valid_team_hits = df[df['Team Member'] != ""].copy()
                     if not valid_team_hits.empty:
-                        counts = valid_team_hits.groupby(['Team Member', 'cli']).size().reset_index(name='hit_count')
+                        # clean_cli par group-by kiya taake casing (MYOB/myob) ka farq khatam ho sake
+                        counts = valid_team_hits.groupby(['Team Member', 'clean_cli']).size().reset_index(name='hit_count')
                         over_limit = counts[counts['hit_count'] >= 10]
+                        
                         for _, row_data in over_limit.iterrows():
-                            spam_registry.add((row_data['Team Member'], row_data['cli']))
+                            # Registry mein add karte hain (Operator, clean_cli)
+                            spam_registry.add((row_data['Team Member'], row_data['clean_cli']))
 
                 # Dynamic Highlighter Function
                 def highlight_team(row):
-                    # Condition 1: Check if warnings are ON, row belongs to a Team Member AND crossed 10 hits on this CLI
-                    if enable_warnings and row['Team Member'] != "" and (row['Team Member'], row['App']) in spam_registry:
+                    # Matching with the cleaned lowecase CLI string
+                    current_clean_cli = str(row['App']).strip().lower()
+                    
+                    if enable_warnings and row['Team Member'] != "" and (row['Team Member'], current_clean_cli) in spam_registry:
+                        # Cyber Yellow Warning row
                         return ['background-color: rgba(255, 230, 0, 0.2); color: #ffcc00; font-weight: 900; border-right: 5px dashed #ffcc00;'] * len(row)
                     
-                    # Condition 2: Regular Team Member rows (Normal tracking state)
                     if row['Team Member'] != "":
+                        # Normal Team Member row
                         return ['background-color: rgba(255, 0, 85, 0.12); color: #ff3366; font-weight: bold; border-right: 4px solid #ff0055;'] * len(row)
                     
                     return [''] * len(row)
@@ -290,5 +297,5 @@ while True:
 
         time.sleep(15)
         st.rerun()
-    except Exception:
+    except Exception as e:
         time.sleep(5)
