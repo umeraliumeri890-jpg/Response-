@@ -168,7 +168,7 @@ with col_in2:
 with col_in3:
     input_key = st.text_input("🔐 ADMIN ACCESS KEY:", type="password", help="Enter secret password to disable team over-hit warnings.")
 
-# Default warning logic setup
+# Default warning switch status
 enable_warnings = True
 
 if input_key.strip() == ADMIN_PASSWORD:
@@ -203,39 +203,43 @@ while True:
                 df['dt'] = pd.to_datetime(df['dt'])
                 now = datetime.now()
                 
-                # Pre-calculate main data fields
+                # Pre-calculate data fields
                 df['Team Member'] = df['num'].apply(lambda x: get_team_info(x, team_data)[0])
                 df['Range'] = df['num'].apply(lambda x: get_team_info(x, team_data)[1])
                 df['Country'] = df['num'].apply(get_country)
                 
-                # --- FIX: Clean CLI column for accurate grouping ---
+                # Clean CLI structure for casing alignment
                 df['clean_cli'] = df['cli'].astype(str).str.strip().str.lower()
                 
-                # Counter for spam detection - UPDATED & FIXED
+                # Full-read tracking engine for spam registry
                 spam_registry = set()
                 if enable_warnings:
-                    # Sirf unka data nikalo jo active team members hain
                     valid_team_hits = df[df['Team Member'] != ""].copy()
                     if not valid_team_hits.empty:
-                        # clean_cli par group-by kiya taake casing (MYOB/myob) ka farq khatam ho sake
                         counts = valid_team_hits.groupby(['Team Member', 'clean_cli']).size().reset_index(name='hit_count')
                         over_limit = counts[counts['hit_count'] >= 10]
-                        
                         for _, row_data in over_limit.iterrows():
-                            # Registry mein add karte hain (Operator, clean_cli)
                             spam_registry.add((row_data['Team Member'], row_data['clean_cli']))
+
+                # --- NEW FUNCTION: Inject Warning Symbols into Message Text dynamically ---
+                def inject_warning_prefix(row):
+                    current_clean_cli = str(row['cli']).strip().lower()
+                    if enable_warnings and row['Team Member'] != "" and (row['Team Member'], current_clean_cli) in spam_registry:
+                        return f"⚠️ WARNING: {row['message']}"
+                    return row['message']
+
+                # Inject text warnings inside raw df before generating views
+                df['message'] = df.apply(inject_warning_prefix, axis=1)
 
                 # Dynamic Highlighter Function
                 def highlight_team(row):
-                    # Matching with the cleaned lowecase CLI string
                     current_clean_cli = str(row['App']).strip().lower()
                     
+                    # Target flagged pairs
                     if enable_warnings and row['Team Member'] != "" and (row['Team Member'], current_clean_cli) in spam_registry:
-                        # Cyber Yellow Warning row
                         return ['background-color: rgba(255, 230, 0, 0.2); color: #ffcc00; font-weight: 900; border-right: 5px dashed #ffcc00;'] * len(row)
                     
                     if row['Team Member'] != "":
-                        # Normal Team Member row
                         return ['background-color: rgba(255, 0, 85, 0.12); color: #ff3366; font-weight: bold; border-right: 4px solid #ff0055;'] * len(row)
                     
                     return [''] * len(row)
@@ -297,5 +301,5 @@ while True:
 
         time.sleep(15)
         st.rerun()
-    except Exception as e:
+    except Exception:
         time.sleep(5)
