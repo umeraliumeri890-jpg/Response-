@@ -8,7 +8,7 @@ from phonenumbers import geocoder
 
 # --- CONFIG ---
 URL = "http://51.77.216.195/crapi/lamix/viewstats"
-TOKEN = "WX91VGmJb1ZmbmNEYHeCg3drU0aJkGWLXmNwYX1jeYU="
+TOKEN = "e1KDh36NdVxcaFNmc4uBYGSXiXmFiItnZI2QQ4d0YVY="
 TEAM_FILE = "Numbers_Export.csv"
 
 # Page Config
