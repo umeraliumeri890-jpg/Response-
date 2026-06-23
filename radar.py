@@ -8,7 +8,7 @@ from phonenumbers import geocoder
 import threading
 import json
 
-# --- CONFIG (NEW URL UPDATED HERE) ---
+# --- CONFIG ---
 URL = "http://51.77.216.195/crapi/lamix/viewstats"
 TOKEN = "e1KDh36NdVxcaFNmc4uBYGSXiXmFiItnZI2QQ4d0YVY="
 TEAM_FILE = "Numbers_Export.csv"
@@ -16,7 +16,7 @@ GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyTHahQPjxjbuZGcIWi
 
 st.set_page_config(page_title="HUNTING SYSTEM - UMER ALI", layout="wide")
 
-# --- UI DESIGN ---
+# --- UI DESIGN (CYBERPUNK TERMINAL THEME) ---
 st.markdown("""
 <style>
     .stApp { background-color: #0a0a0c; color: #00ff66; font-family: 'Courier New', Courier, monospace; }
@@ -26,6 +26,17 @@ st.markdown("""
     .section-label::before { content: "■ "; color: #00ff66; }
     .stTextInput>div>div>input, .stNumberInput>div>div>input { background-color: #121214 !important; color: #00ff66 !important; border: 1px solid #00ff66 !important; border-radius: 4px !important; }
     label { color: #ffffff !important; }
+    .leaderboard-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 30px; }
+    .rank-card { background: linear-gradient(135deg, #121214, #1a1a1e); border: 1px solid #222222; border-radius: 4px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.6); }
+    .rank-1 { border-left: 5px solid #ffcc00; }
+    .rank-2 { border-left: 5px solid #cccccc; }
+    .rank-3 { border-left: 5px solid #cd7f32; }
+    .rank-badge { font-size: 11px; font-weight: bold; margin-bottom: 8px; }
+    .rank-1 .rank-badge { color: #ffcc00; }
+    .rank-2 .rank-badge { color: #cccccc; }
+    .rank-3 .rank-badge { color: #cd7f32; }
+    .rank-cli { color: #ffffff; font-size: 28px; font-weight: 900; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rank-count { color: #00ff66; font-size: 14px; font-weight: bold; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -66,7 +77,6 @@ def stream_to_google_sheet(raw_data):
         if bg_df.empty: return
         bg_df['dt'] = pd.to_datetime(bg_df['dt']).dt.strftime('%Y-%m-%d %H:%M:%S')
         
-        # Live records ko row-by-row Google Sheet me post karega
         for _, row in bg_df.head(20).iterrows(): 
             payload = {
                 "Time": row['dt'],
@@ -122,10 +132,35 @@ while True:
                 threading.Thread(target=stream_to_google_sheet, args=(raw_json,), daemon=True).start()
                 
                 df['dt'] = pd.to_datetime(df['dt'])
+                
+                # --- TOP 3 APP CARDS LOGIC ---
+                now = datetime.now()
+                five_mins_ago = now - timedelta(minutes=5)
+                df_5m = df[df['dt'] >= five_mins_ago]
+                
+                top1_name, top1_count = "NO_DATA", 0
+                top2_name, top2_count = "NO_DATA", 0
+                top3_name, top3_count = "NO_DATA", 0
+                
+                if not df_5m.empty and 'cli' in df_5m.columns:
+                    top_clis = df_5m['cli'].value_counts().head(3)
+                    if len(top_clis) >= 1: top1_name, top1_count = top_clis.index[0], top_clis.iloc[0]
+                    if len(top_clis) >= 2: top2_name, top2_count = top_clis.index[1], top_clis.iloc[1]
+                    if len(top_clis) >= 3: top3_name, top3_count = top_clis.index[2], top_clis.iloc[2]
+                
                 df_target_all = df[df['cli'].str.contains(target_cli, case=False, na=False)].copy()
 
                 with placeholder.container():
-                    st.markdown('<div class="section-label">LIVE TARGET TRACKER</div>', unsafe_allow_html=True)
+                    # Top 3 App Cards Rendered Properly
+                    st.markdown(f"""
+                    <div class="leaderboard-grid">
+                        <div class="rank-card rank-1"><div class="rank-badge">🏆 TOP 1 (LAST 5M)</div><div class="rank-cli">{top1_name}</div><div class="rank-count">🔥 {top1_count} OTPs</div></div>
+                        <div class="rank-card rank-2"><div class="rank-badge">🥈 TOP 2 (LAST 5M)</div><div class="rank-cli">{top2_name}</div><div class="rank-count">⚡ {top2_count} OTPs</div></div>
+                        <div class="rank-card rank-3"><div class="rank-badge">🥉 TOP 3 (LAST 5M)</div><div class="rank-cli">{top3_name}</div><div class="rank-count">📡 {top3_count} OTPs</div></div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    st.markdown(f'<div class="section-label">LIVE TARGET TRACKER // ACCESSED: {target_cli.upper()}</div>', unsafe_allow_html=True)
                     if not df_target_all.empty:
                         mid_df = df_target_all.head(25).copy()
                         mid_df[['Team Member', 'Range']] = mid_df['num'].apply(lambda x: pd.Series(get_team_info(x, team_data)))
@@ -133,6 +168,8 @@ while True:
                         disp_mid = mid_df[['dt', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
                         disp_mid.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
                         st.dataframe(disp_mid.style.apply(highlight_team, axis=1), use_container_width=True, height=300, hide_index=True, column_config=col_cfg)
+                    else:
+                        st.caption("NO PACKETS DETECTED FOR CURRENT AGENT.")
 
                     st.markdown('<div class="section-label">GLOBAL LIVE NETWORK STREAM</div>', unsafe_allow_html=True)
                     global_df = df.head(msg_limit).copy()
