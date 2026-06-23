@@ -6,7 +6,6 @@ from datetime import datetime, timedelta
 import phonenumbers
 from phonenumbers import geocoder
 import os
-import json
 
 # --- CONFIG ---
 URL = "http://51.77.216.195/crapi/lamix/viewstats"
@@ -14,13 +13,13 @@ TOKEN = "e1KDh36NdVxcaFNmc4uBYGSXiXmFiItnZI2QQ4d0YVY="
 TEAM_FILE = "Numbers_Export.csv"
 SAVED_DATA_FILE = "all_captured_data.csv"
 
-# ✅ Aapka Google Apps Script Deployment Web App URL fix kar diya hai
+# Aapka Google Script URL
 GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwxNEVq19lF-qGzMwiuBlyKHJSLQg1JDbnu5IIwAdPZFsa-LAiNlVoDd5IOxNC2XLUa/exec"
 
 # Page Config
 st.set_page_config(page_title="HUNTING SYSTEM - UMER ALI", layout="wide")
 
-# --- UI DESIGN (CYBERPUNK TERMINAL THEME) ---
+# --- UI DESIGN ---
 st.markdown("""
 <style>
     .stApp { background-color: #0a0a0c; color: #00ff66; font-family: 'Courier New', Courier, monospace; }
@@ -100,20 +99,18 @@ col_cfg = {
 # --- MAIN LOOP ---
 while True:
     try:
-        r = requests.get(URL, params={"token": TOKEN, "records": 5000})
+        r = requests.get(URL, params={"token": TOKEN, "records": 5000}, timeout=10)
         if r.status_code == 200:
             data = r.json().get("data", [])
             df = pd.DataFrame(data)
             
             if not df.empty:
-                # --- GOOGLE SHEETS AUTO-SAVE LOGIC ---
+                # Local app database backup logic
                 if not os.path.isfile(SAVED_DATA_FILE):
                     df.to_csv(SAVED_DATA_FILE, index=False)
                     new_entries = df.copy()
                 else:
                     existing_df = pd.read_csv(SAVED_DATA_FILE)
-                    
-                    # Nayi entries check karne ke liye merge logic
                     merged = df.merge(existing_df, on=['dt', 'num', 'message'], how='left', indicator=True)
                     new_entries = df[merged['_merge'] == 'left_only'].copy()
                     
@@ -121,31 +118,18 @@ while True:
                     combined_df.drop_duplicates(subset=['dt', 'num', 'message'], keep='first', inplace=True)
                     combined_df.to_csv(SAVED_DATA_FILE, index=False)
                 
-                # Naye unique records ko Google Sheet par line-by-line bhejna
+                # CRITICAL FIX: Google Sheet request ko bilkul azad kar diya (Timeout 3 sec)
+                # Agar Google API bura maan jaye ya slow ho, to dashboard crash ya lag nahi hoga
                 if not new_entries.empty:
-                    new_entries['country'] = new_entries['num'].apply(get_country)
-                    payload = new_entries[['dt', 'cli', 'num', 'country', 'message']].to_dict(orient='records')
                     try:
-                        requests.post(GOOGLE_SCRIPT_URL, json=payload, timeout=10)
-                    except:
-                        pass
+                        new_entries['country'] = new_entries['num'].apply(get_country)
+                        payload = new_entries[['dt', 'cli', 'num', 'country', 'message']].to_dict(orient='records')
+                        requests.post(GOOGLE_SCRIPT_URL, json=payload, timeout=3)
+                    except Exception as sheet_err:
+                        pass # Google Sheet fail bhi ho to live data chalta rahega
                 
                 # --- LIVE RENDERING ---
                 df['dt'] = pd.to_datetime(df['dt'])
-                now = datetime.now()
-                five_mins_ago = now - timedelta(minutes=5)
-                df_5m = df[df['dt'] >= five_mins_ago]
-                
-                top1_name, top1_count = "NO_DATA", 0
-                top2_name, top2_count = "NO_DATA", 0
-                top3_name, top3_count = "NO_DATA", 0
-                
-                if not df_5m.empty and 'cli' in df_5m.columns:
-                    top_clis = df_5m['cli'].value_counts().head(3)
-                    if len(top_clis) >= 1: top1_name, top1_count = top_clis.index[0], top_clis.iloc[0]
-                    if len(top_clis) >= 2: top2_name, top2_count = top_clis.index[1], top_clis.iloc[1]
-                    if len(top_clis) >= 3: top3_name, top3_count = top_clis.index[2], top_clis.iloc[2]
-
                 df_target_all = df[df['cli'].str.contains(target_cli, case=False, na=False)].copy()
 
                 with placeholder.container():
