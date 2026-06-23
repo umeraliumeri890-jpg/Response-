@@ -75,10 +75,15 @@ def highlight_team(row):
 
 # --- BACKGROUND WORKER (SILENT BACKGROUND SAVER) ---
 def silent_background_saver(raw_data):
-    """Website ko disturb kiye bina chup-chaap data backend par process aur save karega"""
+    """Saves to CSV and maps keys perfectly to match Google Sheet headers"""
     try:
         bg_df = pd.DataFrame(raw_data)
         if bg_df.empty: return
+        
+        # Ensure uniform format
+        bg_df['dt'] = pd.to_datetime(bg_df['dt']).dt.strftime('%Y-%m-%d %H:%M:%S')
+        bg_df['num'] = bg_df['num'].astype(str)
+        bg_df['message'] = bg_df['message'].astype(str)
         
         # Sync Local CSV Storage
         if not os.path.isfile(SAVED_DATA_FILE):
@@ -86,6 +91,10 @@ def silent_background_saver(raw_data):
             new_entries = bg_df.copy()
         else:
             existing_df = pd.read_csv(SAVED_DATA_FILE)
+            existing_df['dt'] = pd.to_datetime(existing_df['dt']).dt.strftime('%Y-%m-%d %H:%M:%S')
+            existing_df['num'] = existing_df['num'].astype(str)
+            existing_df['message'] = existing_df['message'].astype(str)
+            
             merged = bg_df.merge(existing_df, on=['dt', 'num', 'message'], how='left', indicator=True)
             new_entries = bg_df[merged['_merge'] == 'left_only'].copy()
             
@@ -93,19 +102,23 @@ def silent_background_saver(raw_data):
             combined_df.drop_duplicates(subset=['dt', 'num', 'message'], keep='first', inplace=True)
             combined_df.to_csv(SAVED_DATA_FILE, index=False)
         
-        # Sync Google Sheets
+        # Sync Google Sheets (With exact header names mapping)
         if not new_entries.empty:
             new_entries['country'] = new_entries['num'].apply(get_country)
-            payload = new_entries[['dt', 'cli', 'num', 'country', 'message']].to_dict(orient='records')
-            requests.post(GOOGLE_SCRIPT_URL, json=payload, timeout=8)
+            
+            # CRITICAL FIX: Rename payload keys to match Sheet columns perfectly
+            export_df = new_entries[['dt', 'cli', 'num', 'country', 'message']].copy()
+            export_df.columns = ['Time', 'App', 'Number', 'Country', 'Message']
+            
+            payload = export_df.to_dict(orient='records')
+            requests.post(GOOGLE_SCRIPT_URL, json=payload, timeout=12)
     except:
-        pass # Kuch bhi ho jaye live view rukna nahi chahiye
+        pass
 
 # --- HEADER & UI PANELS ---
 st.markdown('<div class="main-title">⚡ DOUBLE FACER HUNTER ⚡</div>', unsafe_allow_html=True)
 st.markdown('<div class="main-subtitle">> SYSTEM CONTROL PANEL // NETWORK SNIFFER</div>', unsafe_allow_html=True)
 
-# Tabs
 tab1, tab2 = st.tabs(["📡 LIVE MONITORING FEED", "📊 SAVED LOGS ANALYTICS & FILTERS"])
 
 with tab1:
@@ -143,10 +156,9 @@ while True:
             df = pd.DataFrame(raw_json)
             
             if not df.empty:
-                # 1. Background threading trigger (Saves local + web logs instantly without freezing frontend)
+                # Trigger background syncing thread safely
                 threading.Thread(target=silent_background_saver, args=(raw_json,), daemon=True).start()
                 
-                # 2. Pure basic display loop execution
                 df['dt'] = pd.to_datetime(df['dt'])
                 now = datetime.now()
                 
