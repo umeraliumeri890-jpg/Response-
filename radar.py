@@ -5,13 +5,13 @@ import time
 from datetime import datetime, timedelta
 import phonenumbers
 from phonenumbers import geocoder
-import os  # File checking ke liye zaroori hai
+import os
 
 # --- CONFIG ---
 URL = "http://51.77.216.195/crapi/lamix/viewstats"
 TOKEN = "e1KDh36NdVxcaFNmc4uBYGSXiXmFiItnZI2QQ4d0YVY="
 TEAM_FILE = "Numbers_Export.csv"
-SAVED_DATA_FILE = "all_captured_data.csv"  # Is file me saara data save hoga
+SAVED_DATA_FILE = "all_captured_data.csv"
 
 # Page Config
 st.set_page_config(page_title="HUNTING SYSTEM - UMER ALI", layout="wide")
@@ -163,10 +163,10 @@ def highlight_team(row):
 st.markdown('<div class="main-title">⚡ DOUBLE FACER HUNTER ⚡</div>', unsafe_allow_html=True)
 st.markdown('<div class="main-subtitle">> SYSTEM CONTROL PANEL // NETWORK SNIFFER</div>', unsafe_allow_html=True)
 
-# Tabs Configuration (Live Tracking aur Saved History ke darmiyan switch karne ke liye)
+# Tabs Configuration
 tab1, tab2 = st.tabs(["📡 LIVE MONITORING FEED", "📊 SAVED LOGS ANALYTICS & FILTERS"])
 
-# --- TAB 1: LIVE STREAM UI ELEMENTS ---
+# --- TAB 1: LIVE MONITORING INPUTS ---
 with tab1:
     col_in1, col_in2 = st.columns([2, 1])
     with col_in1:
@@ -176,11 +176,10 @@ with tab1:
 
     placeholder = st.empty()
 
-# --- TAB 2: HISTORY VIEW & FILTER PANEL ---
+# --- TAB 2: HISTORY INPUTS & FILTERS ---
 with tab2:
     st.markdown('<div class="section-label">SEARCH AND FILTER ENTIRE SAVED HISTORY</div>', unsafe_allow_html=True)
     
-    # Inputs for filtering saved data
     col_f1, col_f2, col_f3 = st.columns(3)
     with col_f1:
         filter_cli = st.text_input("🔍 Search by App/CLI (Saved Data):", "")
@@ -190,7 +189,6 @@ with tab2:
         filter_msg = st.text_input("💬 Search by Message Content:", "")
 
     history_placeholder = st.empty()
-
 
 team_data = load_team_data()
 
@@ -208,34 +206,26 @@ col_cfg = {
 # --- MAIN LOOP ---
 while True:
     try:
-        # 1. API se Data Fetch karein
         r = requests.get(URL, params={"token": TOKEN, "records": 5000})
         if r.status_code == 200:
             data = r.json().get("data", [])
             df = pd.DataFrame(data)
             
             if not df.empty:
-                # ----------------------------------------------------
-                # CRITICAL LOGIC: DATA SAVING & DUPLICATE REMOVAL
-                # ----------------------------------------------------
+                # --- DATA SAVING WITH DUPLICATE HANDLING ---
                 if not os.path.isfile(SAVED_DATA_FILE):
-                    # Agar pehli baar chal raha hai to direct file banayein
                     df.to_csv(SAVED_DATA_FILE, index=False)
                 else:
-                    # Agar file pehle se hai to load karein aur duplicates urayein
                     existing_df = pd.read_csv(SAVED_DATA_FILE)
                     combined_df = pd.concat([existing_df, df], ignore_index=True)
-                    
-                    # 'dt', 'num', aur 'message' teeno ko dekh kar duplicate delete karein
                     combined_df.drop_duplicates(subset=['dt', 'num', 'message'], keep='first', inplace=True)
                     combined_df.to_csv(SAVED_DATA_FILE, index=False)
-                # ----------------------------------------------------
                 
-                # --- LIVE UI CALCULATIONS ---
+                # --- LIVE UI PROCESSING ---
                 df['dt'] = pd.to_datetime(df['dt'])
                 now = datetime.now()
                 
-                # Top 3 CLI calculation (Last 5 mins)
+                # Top 3 CLI (Last 5 mins)
                 five_mins_ago = now - timedelta(minutes=5)
                 df_5m = df[df['dt'] >= five_mins_ago]
                 
@@ -249,10 +239,9 @@ while True:
                     if len(top_clis) >= 2: top2_name, top2_count = top_clis.index[1], top_clis.iloc[1]
                     if len(top_clis) >= 3: top3_name, top3_count = top_clis.index[2], top_clis.iloc[2]
 
-                # Filter Live Target CLI
                 df_target_all = df[df['cli'].str.contains(target_cli, case=False, na=False)].copy()
 
-                # --- RENDER TAB 1 (LIVE FEED) ---
+                # --- RENDER TAB 1: LIVE MONITORING FEED ---
                 with placeholder.container():
                     st.markdown(f"""
                     <div class="leaderboard-grid">
@@ -284,8 +273,8 @@ while True:
                         disp_mid = mid_df[['dt', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
                         disp_mid.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
                         
-                        st.dataframe(disp_mid.style.apply(highlight_team, axis=1), 
-                                     use_container_width=True, height=350, hide_index=True, column_config=col_cfg)
+                        styled_mid = disp_mid.style.apply(highlight_team, axis=1)
+                        st.dataframe(styled_mid, use_container_width=True, height=350, hide_index=True, column_config=col_cfg)
                     else:
                         st.caption("NO PACKETS DETECTED FOR CURRENT AGENT.")
 
@@ -298,5 +287,41 @@ while True:
                     disp_global = global_df[['dt', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
                     disp_global.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
                     
-                    st.dataframe(disp_global.style.apply(highlight_team, axis=1), 
-                                 use_container_width=True, height=750, hide_index
+                    styled_global = disp_global.style.apply(highlight_team, axis=1)
+                    st.dataframe(styled_global, use_container_width=True, height=750, hide_index=True, column_config=col_cfg)
+
+        # --- RENDER TAB 2: SAVED LOGS VIEW ---
+        if os.path.exists(SAVED_DATA_FILE):
+            saved_df = pd.read_csv(SAVED_DATA_FILE)
+            
+            if filter_cli:
+                saved_df = saved_df[saved_df['cli'].str.contains(filter_cli, case=False, na=False)]
+            if filter_num:
+                saved_df = saved_df[saved_df['num'].astype(str).str.contains(filter_num, na=False)]
+            if filter_msg:
+                saved_df = saved_df[saved_df['message'].str.contains(filter_msg, case=False, na=False)]
+            
+            with history_placeholder.container():
+                st.markdown(f"Total Unique Saved Records Found: `{len(saved_df)}`")
+                if not saved_df.empty:
+                    saved_df = saved_df.sort_values(by='dt', ascending=False)
+                    history_disp = saved_df.head(200).copy()
+                    
+                    history_disp[['Team Member', 'Range']] = history_disp['num'].apply(lambda x: pd.Series(get_team_info(x, team_data)))
+                    history_disp['Country'] = history_disp['num'].apply(get_country)
+                    
+                    final_history = history_disp[['dt', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
+                    final_history.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
+                    
+                    styled_history = final_history.style.apply(highlight_team, axis=1)
+                    st.dataframe(styled_history, use_container_width=True, height=600, hide_index=True, column_config=col_cfg)
+                else:
+                    st.warning("No matched data found for applied filters.")
+        else:
+            with history_placeholder.container():
+                st.info("Waiting for data stream to generate local backup...")
+
+        time.sleep(15)
+        st.rerun()
+    except Exception as e:
+        time.sleep(5)
