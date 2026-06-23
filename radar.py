@@ -5,11 +5,13 @@ import time
 from datetime import datetime, timedelta
 import phonenumbers
 from phonenumbers import geocoder
+import os  # File checking ke liye zaroori hai
 
 # --- CONFIG ---
 URL = "http://51.77.216.195/crapi/lamix/viewstats"
 TOKEN = "e1KDh36NdVxcaFNmc4uBYGSXiXmFiItnZI2QQ4d0YVY="
 TEAM_FILE = "Numbers_Export.csv"
+SAVED_DATA_FILE = "all_captured_data.csv"  # Is file me saara data save hoga
 
 # Page Config
 st.set_page_config(page_title="HUNTING SYSTEM - UMER ALI", layout="wide")
@@ -90,7 +92,6 @@ st.markdown("""
         position: relative;
         overflow: hidden;
     }
-    /* Distinct left glow colors for ranks */
     .rank-1 { border-left: 5px solid #ffcc00; box-shadow: 0 0 10px rgba(255,204,0,0.1); }
     .rank-2 { border-left: 5px solid #cccccc; }
     .rank-3 { border-left: 5px solid #cd7f32; }
@@ -145,7 +146,6 @@ def load_team_data():
         return {}
 
 def get_team_info(num, team_data):
-    """Returns MemberName and Range, but ignores specific users."""
     n_str = str(num).split('.')[0].strip()
     if n_str in team_data:
         name = team_data[n_str]['MemberName']
@@ -155,7 +155,6 @@ def get_team_info(num, team_data):
     return "", ""
 
 def highlight_team(row):
-    """Highlights rows with a Toxic Cyber Red/Neon Pink theme for alerts."""
     if row['Team Member'] != "":
         return ['background-color: rgba(255, 0, 85, 0.12); color: #ff3366; font-weight: bold; border-right: 4px solid #ff0055;'] * len(row)
     return [''] * len(row)
@@ -164,15 +163,36 @@ def highlight_team(row):
 st.markdown('<div class="main-title">⚡ DOUBLE FACER HUNTER ⚡</div>', unsafe_allow_html=True)
 st.markdown('<div class="main-subtitle">> SYSTEM CONTROL PANEL // NETWORK SNIFFER</div>', unsafe_allow_html=True)
 
-# Inputs Panel
-col_in1, col_in2 = st.columns([2, 1])
-with col_in1:
-    target_cli = st.text_input("⚙️ ENTER TARGET AGENT (CLI):", "MYOB").strip()
-with col_in2:
-    msg_limit = st.number_input("📡 STREAM BUFFER LIMIT:", min_value=1, max_value=2000, value=1000)
+# Tabs Configuration (Live Tracking aur Saved History ke darmiyan switch karne ke liye)
+tab1, tab2 = st.tabs(["📡 LIVE MONITORING FEED", "📊 SAVED LOGS ANALYTICS & FILTERS"])
+
+# --- TAB 1: LIVE STREAM UI ELEMENTS ---
+with tab1:
+    col_in1, col_in2 = st.columns([2, 1])
+    with col_in1:
+        target_cli = st.text_input("⚙️ ENTER TARGET AGENT (CLI):", "MYOB").strip()
+    with col_in2:
+        msg_limit = st.number_input("📡 STREAM BUFFER LIMIT:", min_value=1, max_value=2000, value=1000)
+
+    placeholder = st.empty()
+
+# --- TAB 2: HISTORY VIEW & FILTER PANEL ---
+with tab2:
+    st.markdown('<div class="section-label">SEARCH AND FILTER ENTIRE SAVED HISTORY</div>', unsafe_allow_html=True)
+    
+    # Inputs for filtering saved data
+    col_f1, col_f2, col_f3 = st.columns(3)
+    with col_f1:
+        filter_cli = st.text_input("🔍 Search by App/CLI (Saved Data):", "")
+    with col_f2:
+        filter_num = st.text_input("📞 Search by Phone Number (Saved Data):", "")
+    with col_f3:
+        filter_msg = st.text_input("💬 Search by Message Content:", "")
+
+    history_placeholder = st.empty()
+
 
 team_data = load_team_data()
-placeholder = st.empty()
 
 # Cyber Columns Settings
 col_cfg = {
@@ -188,40 +208,52 @@ col_cfg = {
 # --- MAIN LOOP ---
 while True:
     try:
+        # 1. API se Data Fetch karein
         r = requests.get(URL, params={"token": TOKEN, "records": 5000})
         if r.status_code == 200:
             data = r.json().get("data", [])
             df = pd.DataFrame(data)
             
             if not df.empty:
+                # ----------------------------------------------------
+                # CRITICAL LOGIC: DATA SAVING & DUPLICATE REMOVAL
+                # ----------------------------------------------------
+                if not os.path.isfile(SAVED_DATA_FILE):
+                    # Agar pehli baar chal raha hai to direct file banayein
+                    df.to_csv(SAVED_DATA_FILE, index=False)
+                else:
+                    # Agar file pehle se hai to load karein aur duplicates urayein
+                    existing_df = pd.read_csv(SAVED_DATA_FILE)
+                    combined_df = pd.concat([existing_df, df], ignore_index=True)
+                    
+                    # 'dt', 'num', aur 'message' teeno ko dekh kar duplicate delete karein
+                    combined_df.drop_duplicates(subset=['dt', 'num', 'message'], keep='first', inplace=True)
+                    combined_df.to_csv(SAVED_DATA_FILE, index=False)
+                # ----------------------------------------------------
+                
+                # --- LIVE UI CALCULATIONS ---
                 df['dt'] = pd.to_datetime(df['dt'])
                 now = datetime.now()
                 
-                # --- TOP 3 APP/CLI CALCULATION (LAST 5 MINS) ---
+                # Top 3 CLI calculation (Last 5 mins)
                 five_mins_ago = now - timedelta(minutes=5)
                 df_5m = df[df['dt'] >= five_mins_ago]
                 
-                # Default empty placeholders
                 top1_name, top1_count = "NO_DATA", 0
                 top2_name, top2_count = "NO_DATA", 0
                 top3_name, top3_count = "NO_DATA", 0
                 
                 if not df_5m.empty and 'cli' in df_5m.columns:
-                    # Group by CLI and count occurrences, then get top 3
                     top_clis = df_5m['cli'].value_counts().head(3)
-                    
-                    if len(top_clis) >= 1:
-                        top1_name, top1_count = top_clis.index[0], top_clis.iloc[0]
-                    if len(top_clis) >= 2:
-                        top2_name, top2_count = top_clis.index[1], top_clis.iloc[1]
-                    if len(top_clis) >= 3:
-                        top3_name, top3_count = top_clis.index[2], top_clis.iloc[2]
+                    if len(top_clis) >= 1: top1_name, top1_count = top_clis.index[0], top_clis.iloc[0]
+                    if len(top_clis) >= 2: top2_name, top2_count = top_clis.index[1], top_clis.iloc[1]
+                    if len(top_clis) >= 3: top3_name, top3_count = top_clis.index[2], top_clis.iloc[2]
 
-                # Filter Target CLI for tables
+                # Filter Live Target CLI
                 df_target_all = df[df['cli'].str.contains(target_cli, case=False, na=False)].copy()
 
+                # --- RENDER TAB 1 (LIVE FEED) ---
                 with placeholder.container():
-                    # --- NEW TOP 3 LEADERBOARD GRID UI ---
                     st.markdown(f"""
                     <div class="leaderboard-grid">
                         <div class="rank-card rank-1">
@@ -267,9 +299,4 @@ while True:
                     disp_global.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
                     
                     st.dataframe(disp_global.style.apply(highlight_team, axis=1), 
-                                 use_container_width=True, height=750, hide_index=True, column_config=col_cfg)
-
-        time.sleep(15)
-        st.rerun()
-    except Exception as e:
-        time.sleep(5)
+                                 use_container_width=True, height=750, hide_index
