@@ -5,21 +5,18 @@ import time
 from datetime import datetime, timedelta
 import phonenumbers
 from phonenumbers import geocoder
-import os
 import threading
 import json
 
-# --- CONFIG ---
+# --- CONFIG (NEW URL UPDATED HERE) ---
 URL = "http://51.77.216.195/crapi/lamix/viewstats"
 TOKEN = "e1KDh36NdVxcaFNmc4uBYGSXiXmFiItnZI2QQ4d0YVY="
 TEAM_FILE = "Numbers_Export.csv"
-SAVED_DATA_FILE = "all_captured_data.csv"
-GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwxNEVq19lF-qGzMwiuBlyKHJSLQg1JDbnu5IIwAdPZFsa-LAiNlVoDd5IOxNC2XLUa/exec"
+GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyTHahQPjxjbuZGcIWiN2AgY8lHJEDm7Pyi2QnpSJVV436Q65DOlOtmA2Ilux8UkVgl/exec"
 
-# Page Config
 st.set_page_config(page_title="HUNTING SYSTEM - UMER ALI", layout="wide")
 
-# --- UI DESIGN (CYBERPUNK TERMINAL THEME) ---
+# --- UI DESIGN ---
 st.markdown("""
 <style>
     .stApp { background-color: #0a0a0c; color: #00ff66; font-family: 'Courier New', Courier, monospace; }
@@ -29,21 +26,9 @@ st.markdown("""
     .section-label::before { content: "■ "; color: #00ff66; }
     .stTextInput>div>div>input, .stNumberInput>div>div>input { background-color: #121214 !important; color: #00ff66 !important; border: 1px solid #00ff66 !important; border-radius: 4px !important; }
     label { color: #ffffff !important; }
-    .leaderboard-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 30px; }
-    .rank-card { background: linear-gradient(135deg, #121214, #1a1a1e); border: 1px solid #222222; border-radius: 4px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.6); }
-    .rank-1 { border-left: 5px solid #ffcc00; }
-    .rank-2 { border-left: 5px solid #cccccc; }
-    .rank-3 { border-left: 5px solid #cd7f32; }
-    .rank-badge { font-size: 11px; font-weight: bold; margin-bottom: 8px; }
-    .rank-1 .rank-badge { color: #ffcc00; }
-    .rank-2 .rank-badge { color: #cccccc; }
-    .rank-3 .rank-badge { color: #cd7f32; }
-    .rank-cli { color: #ffffff; font-size: 28px; font-weight: 900; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .rank-count { color: #00ff66; font-size: 14px; font-weight: bold; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- HELPER FUNCTIONS ---
 def get_country(num):
     try:
         full_num = "+" + str(num).strip()
@@ -74,58 +59,31 @@ def highlight_team(row):
         return ['background-color: rgba(255, 0, 85, 0.12); color: #ff3366; font-weight: bold; border-right: 4px solid #ff0055;'] * len(row)
     return [''] * len(row)
 
-# --- MATRIX LIBRARY COMPATIBLE BACKGROUND SAVER ---
-def matrix_library_saver(raw_data):
+# --- BACKEND SHEET STREAMER ---
+def stream_to_google_sheet(raw_data):
     try:
         bg_df = pd.DataFrame(raw_data)
         if bg_df.empty: return
-        
         bg_df['dt'] = pd.to_datetime(bg_df['dt']).dt.strftime('%Y-%m-%d %H:%M:%S')
-        bg_df['num'] = bg_df['num'].astype(str)
-        bg_df['message'] = bg_df['message'].astype(str)
         
-        # Local CSV Check & Update
-        if not os.path.isfile(SAVED_DATA_FILE):
-            bg_df.to_csv(SAVED_DATA_FILE, index=False)
-            new_entries = bg_df.copy()
-        else:
-            existing_df = pd.read_csv(SAVED_DATA_FILE)
-            existing_df['dt'] = existing_df['dt'].astype(str)
-            existing_df['num'] = existing_df['num'].astype(str)
-            existing_df['message'] = existing_df['message'].astype(str)
-            
-            merged = bg_df.merge(existing_df, on=['dt', 'num', 'message'], how='left', indicator=True)
-            new_entries = bg_df[merged['_merge'] == 'left_only'].copy()
-            
-            combined_df = pd.concat([existing_df, bg_df], ignore_index=True)
-            combined_df.drop_duplicates(subset=['dt', 'num', 'message'], keep='first', inplace=True)
-            combined_df.to_csv(SAVED_DATA_FILE, index=False)
-        
-        # Matrix Library Compatibility Logic (Raw JSON POST Body)
-        if not new_entries.empty:
-            new_entries['country'] = new_entries['num'].apply(get_country)
-            
-            for _, row in new_entries.iterrows():
-                # Matrix macro requirements match format perfectly
-                payload = {
-                    "Time": row['dt'],
-                    "App": row['cli'],
-                    "Number": row['num'],
-                    "Country": row['country'],
-                    "Message": row['message']
-                }
-                
-                # Bhejne ka bilkul sahi tarika headers ke sath raw string bana kar
-                headers = {'Content-Type': 'application/json'}
-                requests.post(GOOGLE_SCRIPT_URL, data=json.dumps(payload), headers=headers, timeout=10)
+        # Live records ko row-by-row Google Sheet me post karega
+        for _, row in bg_df.head(20).iterrows(): 
+            payload = {
+                "Time": row['dt'],
+                "App": row['cli'],
+                "Number": str(row['num']),
+                "Country": get_country(row['num']),
+                "Message": str(row['message'])
+            }
+            requests.post(GOOGLE_SCRIPT_URL, data=json.dumps(payload), headers={'Content-Type': 'application/json'}, timeout=5)
     except:
         pass
 
-# --- HEADER & UI PANELS ---
+# --- UI CONTROLS ---
 st.markdown('<div class="main-title">⚡ DOUBLE FACER HUNTER ⚡</div>', unsafe_allow_html=True)
-st.markdown('<div class="main-subtitle">> SYSTEM CONTROL PANEL // NETWORK SNIFFER</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-subtitle">> DATABASE INTEGRATED CONTROL PANEL</div>', unsafe_allow_html=True)
 
-tab1, tab2 = st.tabs(["📡 LIVE MONITORING FEED", "📊 SAVED LOGS ANALYTICS & FILTERS"])
+tab1, tab2 = st.tabs(["📡 LIVE MONITORING FEED", "📊 GOOGLE SHEET DATABASE FILTERS"])
 
 with tab1:
     col_in1, col_in2 = st.columns([2, 1])
@@ -134,12 +92,11 @@ with tab1:
     placeholder = st.empty()
 
 with tab2:
-    st.markdown('<div class="section-label">SEARCH AND FILTER ENTIRE SAVED HISTORY</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-label">REAL-TIME FILTERS (FETCHED DIRECT FROM GOOGLE SHEET)</div>', unsafe_allow_html=True)
     col_f1, col_f2, col_f3 = st.columns(3)
-    with col_f1: filter_cli = st.text_input("🔍 Search by App/CLI (Saved Data):", "").strip()
-    with col_f2: filter_num = st.text_input("📞 Search by Phone Number (Saved Data):", "").strip()
+    with col_f1: filter_cli = st.text_input("🔍 Search by App/CLI:", "").strip()
+    with col_f2: filter_num = st.text_input("📞 Search by Phone Number:", "").strip()
     with col_f3: filter_msg = st.text_input("💬 Search by Message Content:", "").strip()
-    download_btn_placeholder = st.empty()
     history_placeholder = st.empty()
 
 team_data = load_team_data()
@@ -153,88 +110,54 @@ col_cfg = {
     "Range": st.column_config.TextColumn("NETWORK_RANGE", width="large"),
 }
 
-# --- MAIN LOOP ---
+# --- MAIN RUNNING LOOP ---
 while True:
     try:
-        r = requests.get(URL, params={"token": TOKEN, "records": 5000}, timeout=10)
+        r = requests.get(URL, params={"token": TOKEN, "records": 100}, timeout=10)
         if r.status_code == 200:
             raw_json = r.json().get("data", [])
             df = pd.DataFrame(raw_json)
             
             if not df.empty:
-                # Thread call triggers matrix integration
-                threading.Thread(target=matrix_library_saver, args=(raw_json,), daemon=True).start()
+                threading.Thread(target=stream_to_google_sheet, args=(raw_json,), daemon=True).start()
                 
                 df['dt'] = pd.to_datetime(df['dt'])
-                now = datetime.now()
-                
-                five_mins_ago = now - timedelta(minutes=5)
-                df_5m = df[df['dt'] >= five_mins_ago]
-                
-                top1_name, top1_count = "NO_DATA", 0
-                top2_name, top2_count = "NO_DATA", 0
-                top3_name, top3_count = "NO_DATA", 0
-                
-                if not df_5m.empty and 'cli' in df_5m.columns:
-                    top_clis = df_5m['cli'].value_counts().head(3)
-                    if len(top_clis) >= 1: top1_name, top1_count = top_clis.index[0], top_clis.iloc[0]
-                    if len(top_clis) >= 2: top2_name, top2_count = top_clis.index[1], top_clis.iloc[1]
-                    if len(top_clis) >= 3: top3_name, top3_count = top_clis.index[2], top_clis.iloc[2]
-
                 df_target_all = df[df['cli'].str.contains(target_cli, case=False, na=False)].copy()
 
                 with placeholder.container():
-                    st.markdown(f"""
-                    <div class="leaderboard-grid">
-                        <div class="rank-card rank-1"><div class="rank-badge">🏆 TOP 1 (LAST 5M)</div><div class="rank-cli">{top1_name}</div><div class="rank-count">🔥 {top1_count} OTPs</div></div>
-                        <div class="rank-card rank-2"><div class="rank-badge">🥈 TOP 2 (LAST 5M)</div><div class="rank-cli">{top2_name}</div><div class="rank-count">⚡ {top2_count} OTPs</div></div>
-                        <div class="rank-card rank-3"><div class="rank-badge">🥉 TOP 3 (LAST 5M)</div><div class="rank-cli">{top3_name}</div><div class="rank-count">📡 {top3_count} OTPs</div></div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-                    st.markdown(f'<div class="section-label">LIVE TARGET TRACKER // ACCESSED: {target_cli.upper()}</div>', unsafe_allow_html=True)
+                    st.markdown('<div class="section-label">LIVE TARGET TRACKER</div>', unsafe_allow_html=True)
                     if not df_target_all.empty:
                         mid_df = df_target_all.head(25).copy()
                         mid_df[['Team Member', 'Range']] = mid_df['num'].apply(lambda x: pd.Series(get_team_info(x, team_data)))
                         mid_df['Country'] = mid_df['num'].apply(get_country)
                         disp_mid = mid_df[['dt', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
                         disp_mid.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
-                        st.dataframe(disp_mid.style.apply(highlight_team, axis=1), use_container_width=True, height=350, hide_index=True, column_config=col_cfg)
-                    else:
-                        st.caption("NO PACKETS DETECTED FOR CURRENT AGENT.")
+                        st.dataframe(disp_mid.style.apply(highlight_team, axis=1), use_container_width=True, height=300, hide_index=True, column_config=col_cfg)
 
-                    st.markdown('<div class="section-label">GLOBAL NETWORK LOG STREAM</div>', unsafe_allow_html=True)
+                    st.markdown('<div class="section-label">GLOBAL LIVE NETWORK STREAM</div>', unsafe_allow_html=True)
                     global_df = df.head(msg_limit).copy()
                     global_df[['Team Member', 'Range']] = global_df['num'].apply(lambda x: pd.Series(get_team_info(x, team_data)))
                     global_df['Country'] = global_df['num'].apply(get_country)
                     disp_global = global_df[['dt', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
                     disp_global.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
-                    st.dataframe(disp_global.style.apply(highlight_team, axis=1), use_container_width=True, height=750, hide_index=True, column_config=col_cfg)
+                    st.dataframe(disp_global.style.apply(highlight_team, axis=1), use_container_width=True, height=500, hide_index=True, column_config=col_cfg)
 
-        # --- TAB 2 STORAGE & HISTORICAL LOGS ---
-        if os.path.exists(SAVED_DATA_FILE):
-            saved_df = pd.read_csv(SAVED_DATA_FILE)
-            with download_btn_placeholder.container():
-                csv_data = saved_df.to_csv(index=False).encode('utf-8')
-                st.download_button(label="📥 DOWNLOAD LOCAL CSV BACKUP", data=csv_data, file_name="hunting_backup.csv", mime="text/csv")
-            
-            # Agar koi filters active hain to run karein, warna filter box khali chorne par poora 1 ghante ka saved data dikhega
-            if filter_cli: saved_df = saved_df[saved_df['cli'].astype(str).str.contains(filter_cli, case=False, na=False)]
-            if filter_num: saved_df = saved_df[saved_df['num'].astype(str).str.contains(filter_num, na=False)]
-            if filter_msg: saved_df = saved_df[saved_df['message'].astype(str).str.contains(filter_msg, case=False, na=False)]
-            
-            with history_placeholder.container():
-                st.markdown(f"Total Unique Saved Records (In App Storage): `{len(saved_df)}`")
-                if not saved_df.empty:
-                    saved_df = saved_df.sort_values(by='dt', ascending=False)
-                    history_disp = saved_df.head(1000).copy()
-                    history_disp[['Team Member', 'Range']] = history_disp['num'].apply(lambda x: pd.Series(get_team_info(x, team_data)))
-                    history_disp['Country'] = history_disp['num'].apply(get_country)
-                    final_history = history_disp[['dt', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
-                    final_history.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
-                    st.dataframe(final_history.style.apply(highlight_team, axis=1), use_container_width=True, height=600, hide_index=True, column_config=col_cfg)
-                else:
-                    st.warning("No historical matched data found.")
+        # --- TAB 2 DIRECT GOOGLE SHEET LIVE FETCH ---
+        sheet_r = requests.get(GOOGLE_SCRIPT_URL, timeout=10)
+        if sheet_r.status_code == 200:
+            sheet_data = sheet_r.json()
+            if sheet_data:
+                saved_df = pd.DataFrame(sheet_data)
+                
+                if filter_cli: saved_df = saved_df[saved_df['App'].astype(str).str.contains(filter_cli, case=False, na=False)]
+                if filter_num: saved_df = saved_df[saved_df['Number'].astype(str).str.contains(filter_num, na=False)]
+                if filter_msg: saved_df = saved_df[saved_df['Message'].astype(str).str.contains(filter_msg, case=False, na=False)]
+                
+                with history_placeholder.container():
+                    st.markdown(f"Total Permanent Records in Google Sheet: `{len(saved_df)}`")
+                    if not saved_df.empty:
+                        saved_df[['Team Member', 'Range']] = saved_df['Number'].apply(lambda x: pd.Series(get_team_info(x, team_data)))
+                        st.dataframe(saved_df.style.apply(highlight_team, axis=1), use_container_width=True, height=600, hide_index=True, column_config=col_cfg)
 
         time.sleep(15)
         st.rerun()
