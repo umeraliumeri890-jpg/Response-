@@ -38,7 +38,6 @@ st.markdown("""
     .rank-cli { color: #ffffff; font-size: 28px; font-weight: 900; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .rank-count { color: #00ff66; font-size: 14px; font-weight: bold; }
     
-    /* Unique terminal-style notification box */
     .terminal-status {
         background-color: #121214;
         border: 1px dashed #333333;
@@ -82,22 +81,26 @@ def highlight_team(row):
         return ['background-color: rgba(255, 0, 85, 0.12); color: #ff3366; font-weight: bold; border-right: 4px solid #ff0055;'] * len(row)
     return [''] * len(row)
 
-# --- BACKEND SHEET STREAMER ---
+# --- BACKEND SHEET STREAMER (ASYNC THREAD SAFE) ---
 def stream_to_google_sheet(raw_data):
     try:
         bg_df = pd.DataFrame(raw_data)
         if bg_df.empty: return
         bg_df['dt'] = pd.to_datetime(bg_df['dt']).dt.strftime('%Y-%m-%d %H:%M:%S')
         
+        # Senders top 20 logs in reverse order so latest gets processed smoothly
         for _, row in bg_df.head(20).iterrows(): 
             payload = {
                 "Time": row['dt'],
-                "App": row['cli'],
+                "App": str(row['cli']),
                 "Number": str(row['num']),
                 "Country": get_country(row['num']),
                 "Message": str(row['message'])
             }
-            requests.post(GOOGLE_SCRIPT_URL, data=json.dumps(payload), headers={'Content-Type': 'application/json'}, timeout=5)
+            try:
+                requests.post(GOOGLE_SCRIPT_URL, data=json.dumps(payload), headers={'Content-Type': 'application/json'}, timeout=4)
+            except:
+                continue
     except:
         pass
 
@@ -135,12 +138,14 @@ col_cfg = {
 # --- MAIN RUNNING LOOP ---
 while True:
     try:
-        r = requests.get(URL, params={"token": TOKEN, "records": 100}, timeout=10)
+        # 1. LIVE DATA FETCH
+        r = requests.get(URL, params={"token": TOKEN, "records": 100}, timeout=8)
         if r.status_code == 200:
             raw_json = r.json().get("data", [])
             df = pd.DataFrame(raw_json)
             
             if not df.empty:
+                # Background thread for saving logs to sheet so UI never freezes
                 threading.Thread(target=stream_to_google_sheet, args=(raw_json,), daemon=True).start()
                 
                 df['dt'] = pd.to_datetime(df['dt'])
@@ -200,36 +205,34 @@ while True:
                     
                     st.dataframe(disp_global.style.apply(highlight_team, axis=1), use_container_width=True, height=500, hide_index=True, column_config=col_cfg)
 
-        # --- TAB 2 SMART CONDITIONAL LIVE FETCH (SUPER CLEAN & FAST) ---
-        # Data sirf tab fetch hoga jab kisi ek box mein input hoga
+        # --- TAB 2 INDEPENDENT SHEET ENGINE ---
         if filter_cli or filter_num or filter_msg:
-            sheet_r = requests.get(GOOGLE_SCRIPT_URL, timeout=10)
-            if sheet_r.status_code == 200:
-                sheet_data = sheet_r.json()
-                if sheet_data:
-                    saved_df = pd.DataFrame(sheet_data)
-                    
-                    # Applying filters
-                    if filter_cli: saved_df = saved_df[saved_df['App'].astype(str).str.contains(filter_cli, case=False, na=False)]
-                    if filter_num: saved_df = saved_df[saved_df['Number'].astype(str).str.contains(filter_num, na=False)]
-                    if filter_msg: saved_df = saved_df[saved_df['Message'].astype(str).str.contains(filter_msg, case=False, na=False)]
-                    
-                    with history_placeholder.container():
-                        st.markdown(f"🔍 Found Matches in Google Sheet: `{len(saved_df)}`")
-                        if not saved_df.empty:
-                            try:
+            try:
+                sheet_r = requests.get(GOOGLE_SCRIPT_URL, timeout=6)
+                if sheet_r.status_code == 200:
+                    sheet_data = sheet_r.json()
+                    if sheet_data:
+                        saved_df = pd.DataFrame(sheet_data)
+                        
+                        if filter_cli: saved_df = saved_df[saved_df['App'].astype(str).str.contains(filter_cli, case=False, na=False)]
+                        if filter_num: saved_df = saved_df[saved_df['Number'].astype(str).str.contains(filter_num, na=False)]
+                        if filter_msg: saved_df = saved_df[saved_df['Message'].astype(str).str.contains(filter_msg, case=False, na=False)]
+                        
+                        with history_placeholder.container():
+                            st.markdown(f"🔍 Found Matches in Google Sheet: `{len(saved_df)}`")
+                            if not saved_df.empty:
                                 saved_df['Time'] = pd.to_datetime(saved_df['Time'])
                                 saved_df = saved_df.sort_values(by='Time', ascending=False)
                                 saved_df['Time'] = saved_df['Time'].dt.strftime('%Y-%m-%d %H:%M:%S')
-                            except:
-                                pass
-                            
-                            saved_df[['Team Member', 'Range']] = saved_df['Number'].apply(lambda x: pd.Series(get_team_info(x, team_data)))
-                            st.dataframe(saved_df.style.apply(highlight_team, axis=1), use_container_width=True, height=600, hide_index=True, column_config=col_cfg)
-                        else:
-                            st.markdown('<div class="terminal-status">❌ NO RECORDS FOUND MATCHING YOUR CRITERIA.</div>', unsafe_allow_html=True)
+                                
+                                saved_df[['Team Member', 'Range']] = saved_df['Number'].apply(lambda x: pd.Series(get_team_info(x, team_data)))
+                                st.dataframe(saved_df.style.apply(highlight_team, axis=1), use_container_width=True, height=600, hide_index=True, column_config=col_cfg)
+                            else:
+                                st.markdown('<div class="terminal-status">❌ NO RECORDS FOUND MATCHING YOUR CRITERIA.</div>', unsafe_allow_html=True)
+            except:
+                with history_placeholder.container():
+                    st.caption("⚠️ Google Sheet Connection Timeout... Retrying in next cycle.")
         else:
-            # Default clean UI state when no query is typed
             with history_placeholder.container():
                 st.markdown("""
                 <div class="terminal-status">
@@ -241,7 +244,8 @@ while True:
                 </div>
                 """, unsafe_allow_html=True)
 
-        time.sleep(15)
+        time.sleep(12)
         st.rerun()
     except Exception as e:
-        time.sleep(5)
+        time.sleep(4)
+        st.rerun()
