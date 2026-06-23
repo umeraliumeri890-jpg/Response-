@@ -151,7 +151,6 @@ while True:
                 df_target_all = df[df['cli'].str.contains(target_cli, case=False, na=False)].copy()
 
                 with placeholder.container():
-                    # Top 3 App Cards Rendered Properly
                     st.markdown(f"""
                     <div class="leaderboard-grid">
                         <div class="rank-card rank-1"><div class="rank-badge">🏆 TOP 1 (LAST 5M)</div><div class="rank-cli">{top1_name}</div><div class="rank-count">🔥 {top1_count} OTPs</div></div>
@@ -167,6 +166,9 @@ while True:
                         mid_df['Country'] = mid_df['num'].apply(get_country)
                         disp_mid = mid_df[['dt', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
                         disp_mid.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
+                        
+                        # Formatting live feed time display cleanly
+                        disp_mid['Time'] = pd.to_datetime(disp_mid['Time']).dt.strftime('%Y-%m-%d %H:%M:%S')
                         st.dataframe(disp_mid.style.apply(highlight_team, axis=1), use_container_width=True, height=300, hide_index=True, column_config=col_cfg)
                     else:
                         st.caption("NO PACKETS DETECTED FOR CURRENT AGENT.")
@@ -177,6 +179,9 @@ while True:
                     global_df['Country'] = global_df['num'].apply(get_country)
                     disp_global = global_df[['dt', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
                     disp_global.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
+                    
+                    # Formatting global stream time display cleanly
+                    disp_global['Time'] = pd.to_datetime(disp_global['Time']).dt.strftime('%Y-%m-%d %H:%M:%S')
                     st.dataframe(disp_global.style.apply(highlight_team, axis=1), use_container_width=True, height=500, hide_index=True, column_config=col_cfg)
 
         # --- TAB 2 DIRECT GOOGLE SHEET LIVE FETCH ---
@@ -193,6 +198,12 @@ while True:
                 with history_placeholder.container():
                     st.markdown(f"Total Permanent Records in Google Sheet: `{len(saved_df)}`")
                     if not saved_df.empty:
+                        # CRITICAL FIX: Google Sheet database raw ISO dates ko standard display me format karna
+                        try:
+                            saved_df['Time'] = pd.to_datetime(saved_df['Time']).dt.strftime('%Y-%m-%d %H:%M:%S')
+                        except:
+                            pass
+                        
                         saved_df[['Team Member', 'Range']] = saved_df['Number'].apply(lambda x: pd.Series(get_team_info(x, team_data)))
                         st.dataframe(saved_df.style.apply(highlight_team, axis=1), use_container_width=True, height=600, hide_index=True, column_config=col_cfg)
 
