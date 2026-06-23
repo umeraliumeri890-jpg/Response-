@@ -6,14 +6,13 @@ from datetime import datetime, timedelta
 import phonenumbers
 from phonenumbers import geocoder
 import os
+import threading
 
 # --- CONFIG ---
 URL = "http://51.77.216.195/crapi/lamix/viewstats"
 TOKEN = "e1KDh36NdVxcaFNmc4uBYGSXiXmFiItnZI2QQ4d0YVY="
 TEAM_FILE = "Numbers_Export.csv"
 SAVED_DATA_FILE = "all_captured_data.csv"
-
-# Aapka Google Apps Script Web App URL
 GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwxNEVq19lF-qGzMwiuBlyKHJSLQg1JDbnu5IIwAdPZFsa-LAiNlVoDd5IOxNC2XLUa/exec"
 
 # Page Config
@@ -22,49 +21,12 @@ st.set_page_config(page_title="HUNTING SYSTEM - UMER ALI", layout="wide")
 # --- UI DESIGN (CYBERPUNK TERMINAL THEME) ---
 st.markdown("""
 <style>
-    .stApp { 
-        background-color: #0a0a0c;
-        color: #00ff66; 
-        font-family: 'Courier New', Courier, monospace;
-    }
-    .main-title { 
-        text-align: center; 
-        color: #00ff66; 
-        font-size: 42px; 
-        font-weight: 900;
-        padding-top: 15px;
-        margin-bottom: 5px;
-        letter-spacing: 3px;
-        text-shadow: 0 0 15px #00ff66;
-    }
-    .main-subtitle {
-        text-align: center;
-        color: #888888;
-        font-size: 12px;
-        margin-bottom: 35px;
-        letter-spacing: 4px;
-        text-transform: uppercase;
-    }
-    .section-label { 
-        color: #ffffff; 
-        font-size: 18px; 
-        font-weight: bold; 
-        margin-top: 40px;
-        margin-bottom: 15px; 
-        border-bottom: 2px solid #333333;
-        padding-bottom: 8px;
-        letter-spacing: 2px;
-    }
-    .section-label::before {
-        content: "■ ";
-        color: #00ff66;
-    }
-    .stTextInput>div>div>input, .stNumberInput>div>div>input {
-        background-color: #121214 !important;
-        color: #00ff66 !important;
-        border: 1px solid #00ff66 !important;
-        border-radius: 4px !important;
-    }
+    .stApp { background-color: #0a0a0c; color: #00ff66; font-family: 'Courier New', Courier, monospace; }
+    .main-title { text-align: center; color: #00ff66; font-size: 42px; font-weight: 900; padding-top: 15px; margin-bottom: 5px; text-shadow: 0 0 15px #00ff66; }
+    .main-subtitle { text-align: center; color: #888888; font-size: 12px; margin-bottom: 35px; letter-spacing: 4px; text-transform: uppercase; }
+    .section-label { color: #ffffff; font-size: 18px; font-weight: bold; margin-top: 40px; margin-bottom: 15px; border-bottom: 2px solid #333333; padding-bottom: 8px; }
+    .section-label::before { content: "■ "; color: #00ff66; }
+    .stTextInput>div>div>input, .stNumberInput>div>div>input { background-color: #121214 !important; color: #00ff66 !important; border: 1px solid #00ff66 !important; border-radius: 4px !important; }
     label { color: #ffffff !important; }
     .leaderboard-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 30px; }
     .rank-card { background: linear-gradient(135deg, #121214, #1a1a1e); border: 1px solid #222222; border-radius: 4px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.6); }
@@ -111,10 +73,39 @@ def highlight_team(row):
         return ['background-color: rgba(255, 0, 85, 0.12); color: #ff3366; font-weight: bold; border-right: 4px solid #ff0055;'] * len(row)
     return [''] * len(row)
 
-# --- HEADER ---
+# --- BACKGROUND WORKER (SILENT BACKGROUND SAVER) ---
+def silent_background_saver(raw_data):
+    """Website ko disturb kiye bina chup-chaap data backend par process aur save karega"""
+    try:
+        bg_df = pd.DataFrame(raw_data)
+        if bg_df.empty: return
+        
+        # Sync Local CSV Storage
+        if not os.path.isfile(SAVED_DATA_FILE):
+            bg_df.to_csv(SAVED_DATA_FILE, index=False)
+            new_entries = bg_df.copy()
+        else:
+            existing_df = pd.read_csv(SAVED_DATA_FILE)
+            merged = bg_df.merge(existing_df, on=['dt', 'num', 'message'], how='left', indicator=True)
+            new_entries = bg_df[merged['_merge'] == 'left_only'].copy()
+            
+            combined_df = pd.concat([existing_df, bg_df], ignore_index=True)
+            combined_df.drop_duplicates(subset=['dt', 'num', 'message'], keep='first', inplace=True)
+            combined_df.to_csv(SAVED_DATA_FILE, index=False)
+        
+        # Sync Google Sheets
+        if not new_entries.empty:
+            new_entries['country'] = new_entries['num'].apply(get_country)
+            payload = new_entries[['dt', 'cli', 'num', 'country', 'message']].to_dict(orient='records')
+            requests.post(GOOGLE_SCRIPT_URL, json=payload, timeout=8)
+    except:
+        pass # Kuch bhi ho jaye live view rukna nahi chahiye
+
+# --- HEADER & UI PANELS ---
 st.markdown('<div class="main-title">⚡ DOUBLE FACER HUNTER ⚡</div>', unsafe_allow_html=True)
 st.markdown('<div class="main-subtitle">> SYSTEM CONTROL PANEL // NETWORK SNIFFER</div>', unsafe_allow_html=True)
 
+# Tabs
 tab1, tab2 = st.tabs(["📡 LIVE MONITORING FEED", "📊 SAVED LOGS ANALYTICS & FILTERS"])
 
 with tab1:
@@ -148,41 +139,17 @@ while True:
     try:
         r = requests.get(URL, params={"token": TOKEN, "records": 5000}, timeout=10)
         if r.status_code == 200:
-            data = r.json().get("data", [])
-            df = pd.DataFrame(data)
+            raw_json = r.json().get("data", [])
+            df = pd.DataFrame(raw_json)
             
             if not df.empty:
-                # CRITICAL FIX: Convert datetime instantly before saving or merging!
+                # 1. Background threading trigger (Saves local + web logs instantly without freezing frontend)
+                threading.Thread(target=silent_background_saver, args=(raw_json,), daemon=True).start()
+                
+                # 2. Pure basic display loop execution
                 df['dt'] = pd.to_datetime(df['dt'])
                 now = datetime.now()
                 
-                # --- AUTO-SAVE AND DUPLICATE CHECK LOGIC ---
-                if not os.path.isfile(SAVED_DATA_FILE):
-                    df.to_csv(SAVED_DATA_FILE, index=False)
-                    new_entries = df.copy()
-                else:
-                    existing_df = pd.read_csv(SAVED_DATA_FILE)
-                    existing_df['dt'] = pd.to_datetime(existing_df['dt'])
-                    
-                    merged = df.merge(existing_df, on=['dt', 'num', 'message'], how='left', indicator=True)
-                    new_entries = df[merged['_merge'] == 'left_only'].copy()
-                    
-                    combined_df = pd.concat([existing_df, df], ignore_index=True)
-                    combined_df.drop_duplicates(subset=['dt', 'num', 'message'], keep='first', inplace=True)
-                    combined_df.to_csv(SAVED_DATA_FILE, index=False)
-
-                # --- GOOGLE SHEET EXPORT ---
-                if not new_entries.empty:
-                    try:
-                        new_entries['country'] = new_entries['num'].apply(get_country)
-                        export_df = new_entries.copy()
-                        export_df['dt'] = export_df['dt'].dt.strftime('%Y-%m-%d %H:%M:%S')
-                        payload = export_df[['dt', 'cli', 'num', 'country', 'message']].to_dict(orient='records')
-                        requests.post(GOOGLE_SCRIPT_URL, json=payload, timeout=3)
-                    except:
-                        pass
-                
-                # --- TOP 3 APP/CLI CALCULATION ---
                 five_mins_ago = now - timedelta(minutes=5)
                 df_5m = df[df['dt'] >= five_mins_ago]
                 
@@ -198,7 +165,6 @@ while True:
 
                 df_target_all = df[df['cli'].str.contains(target_cli, case=False, na=False)].copy()
 
-                # --- TAB 1 RENDERING ---
                 with placeholder.container():
                     st.markdown(f"""
                     <div class="leaderboard-grid">
@@ -227,7 +193,7 @@ while True:
                     disp_global.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
                     st.dataframe(disp_global.style.apply(highlight_team, axis=1), use_container_width=True, height=750, hide_index=True, column_config=col_cfg)
 
-        # --- TAB 2 RENDERING ---
+        # --- TAB 2 ANALYSIS ---
         if os.path.exists(SAVED_DATA_FILE):
             saved_df = pd.read_csv(SAVED_DATA_FILE)
             with download_btn_placeholder.container():
