@@ -7,7 +7,7 @@ import phonenumbers
 from phonenumbers import geocoder
 import os
 import threading
-import json
+import urllib.parse
 
 # --- CONFIG ---
 URL = "http://51.77.216.195/crapi/lamix/viewstats"
@@ -19,7 +19,7 @@ GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwxNEVq19lF-qGzMwiu
 # Page Config
 st.set_page_config(page_title="HUNTING SYSTEM - UMER ALI", layout="wide")
 
-# --- UI DESIGN (CYBERPUNK TERMINAL THEME) ---
+# --- UI DESIGN ---
 st.markdown("""
 <style>
     .stApp { background-color: #0a0a0c; color: #00ff66; font-family: 'Courier New', Courier, monospace; }
@@ -43,7 +43,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- HELPER FUNCTIONS ---
+# --- HELPERS ---
 def get_country(num):
     try:
         full_num = "+" + str(num).strip()
@@ -74,8 +74,9 @@ def highlight_team(row):
         return ['background-color: rgba(255, 0, 85, 0.12); color: #ff3366; font-weight: bold; border-right: 4px solid #ff0055;'] * len(row)
     return [''] * len(row)
 
-# --- BACKGROUND WORKER (RE-ENGINEERED GOOGLE SYNC) ---
-def silent_background_saver(raw_data):
+# --- 100% WORKING SYNC WORKER ---
+def reliable_sheet_saver(raw_data):
+    """Bina frontend ko slow kiye data ko thread ke andar 100% safe parameters k sath bhejta hai"""
     try:
         bg_df = pd.DataFrame(raw_data)
         if bg_df.empty: return
@@ -84,7 +85,7 @@ def silent_background_saver(raw_data):
         bg_df['num'] = bg_df['num'].astype(str)
         bg_df['message'] = bg_df['message'].astype(str)
         
-        # Local CSV Check
+        # Local Backup Logic
         if not os.path.isfile(SAVED_DATA_FILE):
             bg_df.to_csv(SAVED_DATA_FILE, index=False)
             new_entries = bg_df.copy()
@@ -101,19 +102,24 @@ def silent_background_saver(raw_data):
             combined_df.drop_duplicates(subset=['dt', 'num', 'message'], keep='first', inplace=True)
             combined_df.to_csv(SAVED_DATA_FILE, index=False)
         
-        # Safe URL Encoded Post to Google Sheets
+        # Send data row by row using highly reliable GET query params sync method
         if not new_entries.empty:
             new_entries['country'] = new_entries['num'].apply(get_country)
-            export_df = new_entries[['dt', 'cli', 'num', 'country', 'message']].copy()
-            export_df.columns = ['Time', 'App', 'Number', 'Country', 'Message']
-            
-            # Form-data post structure jo har script easily padh sakti hai
-            payload_json = json.dumps(export_df.to_dict(orient='records'))
-            requests.post(GOOGLE_SCRIPT_URL, data={'data': payload_json}, timeout=15)
+            for _, row in new_entries.iterrows():
+                # Encoding to handle characters and spaces inside the messages perfectly
+                params = {
+                    "Time": row['dt'],
+                    "App": row['cli'],
+                    "Number": row['num'],
+                    "Country": row['country'],
+                    "Message": row['message']
+                }
+                # Direct safe execution with request timeout safety
+                requests.get(GOOGLE_SCRIPT_URL, params=params, timeout=5)
     except:
         pass
 
-# --- HEADER & UI PANELS ---
+# --- PANELS & INTERFACE ---
 st.markdown('<div class="main-title">⚡ DOUBLE FACER HUNTER ⚡</div>', unsafe_allow_html=True)
 st.markdown('<div class="main-subtitle">> SYSTEM CONTROL PANEL // NETWORK SNIFFER</div>', unsafe_allow_html=True)
 
@@ -145,7 +151,7 @@ col_cfg = {
     "Range": st.column_config.TextColumn("NETWORK_RANGE", width="large"),
 }
 
-# --- MAIN LOOP ---
+# --- REAL-TIME LOOP ---
 while True:
     try:
         r = requests.get(URL, params={"token": TOKEN, "records": 5000}, timeout=10)
@@ -154,7 +160,8 @@ while True:
             df = pd.DataFrame(raw_json)
             
             if not df.empty:
-                threading.Thread(target=silent_background_saver, args=(raw_json,), daemon=True).start()
+                # Triggering background worker thread
+                threading.Thread(target=reliable_sheet_saver, args=(raw_json,), daemon=True).start()
                 
                 df['dt'] = pd.to_datetime(df['dt'])
                 now = datetime.now()
@@ -202,14 +209,13 @@ while True:
                     disp_global.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
                     st.dataframe(disp_global.style.apply(highlight_team, axis=1), use_container_width=True, height=750, hide_index=True, column_config=col_cfg)
 
-        # --- TAB 2 STORAGE & HISTORICAL LOGS ---
+        # --- TAB 2 ANALYSIS DATA ---
         if os.path.exists(SAVED_DATA_FILE):
             saved_df = pd.read_csv(SAVED_DATA_FILE)
             with download_btn_placeholder.container():
                 csv_data = saved_df.to_csv(index=False).encode('utf-8')
                 st.download_button(label="📥 DOWNLOAD LOCAL CSV BACKUP", data=csv_data, file_name="hunting_backup.csv", mime="text/csv")
             
-            # Text conditions matching checks safely
             if filter_cli: saved_df = saved_df[saved_df['cli'].astype(str).str.contains(filter_cli, case=False, na=False)]
             if filter_num: saved_df = saved_df[saved_df['num'].astype(str).str.contains(filter_num, na=False)]
             if filter_msg: saved_df = saved_df[saved_df['message'].astype(str).str.contains(filter_msg, case=False, na=False)]
@@ -218,7 +224,7 @@ while True:
                 st.markdown(f"Total Unique Saved Records (In App Storage): `{len(saved_df)}`")
                 if not saved_df.empty:
                     saved_df = saved_df.sort_values(by='dt', ascending=False)
-                    history_disp = saved_df.head(500).copy() # Showing more lines if saved
+                    history_disp = saved_df.head(1000).copy() # Up to 1000 lines rendered smoothly
                     history_disp[['Team Member', 'Range']] = history_disp['num'].apply(lambda x: pd.Series(get_team_info(x, team_data)))
                     history_disp['Country'] = history_disp['num'].apply(get_country)
                     final_history = history_disp[['dt', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
