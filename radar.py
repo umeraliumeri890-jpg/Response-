@@ -37,6 +37,18 @@ st.markdown("""
     .rank-3 .rank-badge { color: #cd7f32; }
     .rank-cli { color: #ffffff; font-size: 28px; font-weight: 900; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .rank-count { color: #00ff66; font-size: 14px; font-weight: bold; }
+    
+    /* Unique terminal-style notification box */
+    .terminal-status {
+        background-color: #121214;
+        border: 1px dashed #333333;
+        border-radius: 4px;
+        padding: 40px;
+        text-align: center;
+        color: #888888;
+        font-size: 15px;
+        margin-top: 20px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -102,11 +114,11 @@ with tab1:
     placeholder = st.empty()
 
 with tab2:
-    st.markdown('<div class="section-label">REAL-TIME FILTERS (FETCHED DIRECT FROM GOOGLE SHEET)</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-label">INTELLIGENT DATABASE SEARCH (OPTIMIZED FOR SPEED)</div>', unsafe_allow_html=True)
     col_f1, col_f2, col_f3 = st.columns(3)
-    with col_f1: filter_cli = st.text_input("🔍 Search by App/CLI:", "").strip()
-    with col_f2: filter_num = st.text_input("📞 Search by Phone Number:", "").strip()
-    with col_f3: filter_msg = st.text_input("💬 Search by Message Content:", "").strip()
+    with col_f1: filter_cli = st.text_input("🔍 Search by App/CLI:", "", key="f_cli").strip()
+    with col_f2: filter_num = st.text_input("📞 Search by Phone Number:", "", key="f_num").strip()
+    with col_f3: filter_msg = st.text_input("💬 Search by Message Content:", "", key="f_msg").strip()
     history_placeholder = st.empty()
 
 team_data = load_team_data()
@@ -167,7 +179,6 @@ while True:
                         disp_mid = mid_df[['dt', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
                         disp_mid.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
                         
-                        # Sorting live feed descending (Latest top pr)
                         disp_mid['Time'] = pd.to_datetime(disp_mid['Time'])
                         disp_mid = disp_mid.sort_values(by='Time', ascending=False)
                         disp_mid['Time'] = disp_mid['Time'].dt.strftime('%Y-%m-%d %H:%M:%S')
@@ -183,37 +194,52 @@ while True:
                     disp_global = global_df[['dt', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
                     disp_global.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
                     
-                    # Sorting global stream descending (Latest top pr)
                     disp_global['Time'] = pd.to_datetime(disp_global['Time'])
                     disp_global = disp_global.sort_values(by='Time', ascending=False)
                     disp_global['Time'] = disp_global['Time'].dt.strftime('%Y-%m-%d %H:%M:%S')
                     
                     st.dataframe(disp_global.style.apply(highlight_team, axis=1), use_container_width=True, height=500, hide_index=True, column_config=col_cfg)
 
-        # --- TAB 2 DIRECT GOOGLE SHEET LIVE FETCH ---
-        sheet_r = requests.get(GOOGLE_SCRIPT_URL, timeout=10)
-        if sheet_r.status_code == 200:
-            sheet_data = sheet_r.json()
-            if sheet_data:
-                saved_df = pd.DataFrame(sheet_data)
-                
-                if filter_cli: saved_df = saved_df[saved_df['App'].astype(str).str.contains(filter_cli, case=False, na=False)]
-                if filter_num: saved_df = saved_df[saved_df['Number'].astype(str).str.contains(filter_num, na=False)]
-                if filter_msg: saved_df = saved_df[saved_df['Message'].astype(str).str.contains(filter_msg, case=False, na=False)]
-                
-                with history_placeholder.container():
-                    st.markdown(f"Total Permanent Records in Google Sheet: `{len(saved_df)}`")
-                    if not saved_df.empty:
-                        # CRITICAL FIX: Google Sheet Database Sorting (Latest naya data top pr)
-                        try:
-                            saved_df['Time'] = pd.to_datetime(saved_df['Time'])
-                            saved_df = saved_df.sort_values(by='Time', ascending=False)
-                            saved_df['Time'] = saved_df['Time'].dt.strftime('%Y-%m-%d %H:%M:%S')
-                        except:
-                            pass
-                        
-                        saved_df[['Team Member', 'Range']] = saved_df['Number'].apply(lambda x: pd.Series(get_team_info(x, team_data)))
-                        st.dataframe(saved_df.style.apply(highlight_team, axis=1), use_container_width=True, height=600, hide_index=True, column_config=col_cfg)
+        # --- TAB 2 SMART CONDITIONAL LIVE FETCH (SUPER CLEAN & FAST) ---
+        # Data sirf tab fetch hoga jab kisi ek box mein input hoga
+        if filter_cli or filter_num or filter_msg:
+            sheet_r = requests.get(GOOGLE_SCRIPT_URL, timeout=10)
+            if sheet_r.status_code == 200:
+                sheet_data = sheet_r.json()
+                if sheet_data:
+                    saved_df = pd.DataFrame(sheet_data)
+                    
+                    # Applying filters
+                    if filter_cli: saved_df = saved_df[saved_df['App'].astype(str).str.contains(filter_cli, case=False, na=False)]
+                    if filter_num: saved_df = saved_df[saved_df['Number'].astype(str).str.contains(filter_num, na=False)]
+                    if filter_msg: saved_df = saved_df[saved_df['Message'].astype(str).str.contains(filter_msg, case=False, na=False)]
+                    
+                    with history_placeholder.container():
+                        st.markdown(f"🔍 Found Matches in Google Sheet: `{len(saved_df)}`")
+                        if not saved_df.empty:
+                            try:
+                                saved_df['Time'] = pd.to_datetime(saved_df['Time'])
+                                saved_df = saved_df.sort_values(by='Time', ascending=False)
+                                saved_df['Time'] = saved_df['Time'].dt.strftime('%Y-%m-%d %H:%M:%S')
+                            except:
+                                pass
+                            
+                            saved_df[['Team Member', 'Range']] = saved_df['Number'].apply(lambda x: pd.Series(get_team_info(x, team_data)))
+                            st.dataframe(saved_df.style.apply(highlight_team, axis=1), use_container_width=True, height=600, hide_index=True, column_config=col_cfg)
+                        else:
+                            st.markdown('<div class="terminal-status">❌ NO RECORDS FOUND MATCHING YOUR CRITERIA.</div>', unsafe_allow_html=True)
+        else:
+            # Default clean UI state when no query is typed
+            with history_placeholder.container():
+                st.markdown("""
+                <div class="terminal-status">
+                    🛰️ <b>SYSTEM READY // COLD STORAGE MONITOR</b><br><br>
+                    <span style="color: #666666; font-size: 13px;">
+                    Database loading is disabled to maximize system performance.<br>
+                    Please type an App, Number, or Keyword in the filters above to query the records instantly.
+                    </span>
+                </div>
+                """, unsafe_allow_html=True)
 
         time.sleep(15)
         st.rerun()
