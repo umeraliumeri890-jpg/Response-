@@ -7,6 +7,7 @@ import phonenumbers
 from phonenumbers import geocoder
 import os
 import threading
+import json
 
 # --- CONFIG ---
 URL = "http://51.77.216.195/crapi/lamix/viewstats"
@@ -73,25 +74,23 @@ def highlight_team(row):
         return ['background-color: rgba(255, 0, 85, 0.12); color: #ff3366; font-weight: bold; border-right: 4px solid #ff0055;'] * len(row)
     return [''] * len(row)
 
-# --- BACKGROUND WORKER (SILENT BACKGROUND SAVER) ---
+# --- BACKGROUND WORKER (RE-ENGINEERED GOOGLE SYNC) ---
 def silent_background_saver(raw_data):
-    """Saves to CSV and maps keys perfectly to match Google Sheet headers"""
     try:
         bg_df = pd.DataFrame(raw_data)
         if bg_df.empty: return
         
-        # Ensure uniform format
         bg_df['dt'] = pd.to_datetime(bg_df['dt']).dt.strftime('%Y-%m-%d %H:%M:%S')
         bg_df['num'] = bg_df['num'].astype(str)
         bg_df['message'] = bg_df['message'].astype(str)
         
-        # Sync Local CSV Storage
+        # Local CSV Check
         if not os.path.isfile(SAVED_DATA_FILE):
             bg_df.to_csv(SAVED_DATA_FILE, index=False)
             new_entries = bg_df.copy()
         else:
             existing_df = pd.read_csv(SAVED_DATA_FILE)
-            existing_df['dt'] = pd.to_datetime(existing_df['dt']).dt.strftime('%Y-%m-%d %H:%M:%S')
+            existing_df['dt'] = existing_df['dt'].astype(str)
             existing_df['num'] = existing_df['num'].astype(str)
             existing_df['message'] = existing_df['message'].astype(str)
             
@@ -102,16 +101,15 @@ def silent_background_saver(raw_data):
             combined_df.drop_duplicates(subset=['dt', 'num', 'message'], keep='first', inplace=True)
             combined_df.to_csv(SAVED_DATA_FILE, index=False)
         
-        # Sync Google Sheets (With exact header names mapping)
+        # Safe URL Encoded Post to Google Sheets
         if not new_entries.empty:
             new_entries['country'] = new_entries['num'].apply(get_country)
-            
-            # CRITICAL FIX: Rename payload keys to match Sheet columns perfectly
             export_df = new_entries[['dt', 'cli', 'num', 'country', 'message']].copy()
             export_df.columns = ['Time', 'App', 'Number', 'Country', 'Message']
             
-            payload = export_df.to_dict(orient='records')
-            requests.post(GOOGLE_SCRIPT_URL, json=payload, timeout=12)
+            # Form-data post structure jo har script easily padh sakti hai
+            payload_json = json.dumps(export_df.to_dict(orient='records'))
+            requests.post(GOOGLE_SCRIPT_URL, data={'data': payload_json}, timeout=15)
     except:
         pass
 
@@ -130,9 +128,9 @@ with tab1:
 with tab2:
     st.markdown('<div class="section-label">SEARCH AND FILTER ENTIRE SAVED HISTORY</div>', unsafe_allow_html=True)
     col_f1, col_f2, col_f3 = st.columns(3)
-    with col_f1: filter_cli = st.text_input("🔍 Search by App/CLI (Saved Data):", "")
-    with col_f2: filter_num = st.text_input("📞 Search by Phone Number (Saved Data):", "")
-    with col_f3: filter_msg = st.text_input("💬 Search by Message Content:", "")
+    with col_f1: filter_cli = st.text_input("🔍 Search by App/CLI (Saved Data):", "").strip()
+    with col_f2: filter_num = st.text_input("📞 Search by Phone Number (Saved Data):", "").strip()
+    with col_f3: filter_msg = st.text_input("💬 Search by Message Content:", "").strip()
     download_btn_placeholder = st.empty()
     history_placeholder = st.empty()
 
@@ -156,7 +154,6 @@ while True:
             df = pd.DataFrame(raw_json)
             
             if not df.empty:
-                # Trigger background syncing thread safely
                 threading.Thread(target=silent_background_saver, args=(raw_json,), daemon=True).start()
                 
                 df['dt'] = pd.to_datetime(df['dt'])
@@ -205,22 +202,23 @@ while True:
                     disp_global.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
                     st.dataframe(disp_global.style.apply(highlight_team, axis=1), use_container_width=True, height=750, hide_index=True, column_config=col_cfg)
 
-        # --- TAB 2 ANALYSIS ---
+        # --- TAB 2 STORAGE & HISTORICAL LOGS ---
         if os.path.exists(SAVED_DATA_FILE):
             saved_df = pd.read_csv(SAVED_DATA_FILE)
             with download_btn_placeholder.container():
                 csv_data = saved_df.to_csv(index=False).encode('utf-8')
                 st.download_button(label="📥 DOWNLOAD LOCAL CSV BACKUP", data=csv_data, file_name="hunting_backup.csv", mime="text/csv")
             
-            if filter_cli: saved_df = saved_df[saved_df['cli'].str.contains(filter_cli, case=False, na=False)]
+            # Text conditions matching checks safely
+            if filter_cli: saved_df = saved_df[saved_df['cli'].astype(str).str.contains(filter_cli, case=False, na=False)]
             if filter_num: saved_df = saved_df[saved_df['num'].astype(str).str.contains(filter_num, na=False)]
-            if filter_msg: saved_df = saved_df[saved_df['message'].str.contains(filter_msg, case=False, na=False)]
+            if filter_msg: saved_df = saved_df[saved_df['message'].astype(str).str.contains(filter_msg, case=False, na=False)]
             
             with history_placeholder.container():
                 st.markdown(f"Total Unique Saved Records (In App Storage): `{len(saved_df)}`")
                 if not saved_df.empty:
                     saved_df = saved_df.sort_values(by='dt', ascending=False)
-                    history_disp = saved_df.head(200).copy()
+                    history_disp = saved_df.head(500).copy() # Showing more lines if saved
                     history_disp[['Team Member', 'Range']] = history_disp['num'].apply(lambda x: pd.Series(get_team_info(x, team_data)))
                     history_disp['Country'] = history_disp['num'].apply(get_country)
                     final_history = history_disp[['dt', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
