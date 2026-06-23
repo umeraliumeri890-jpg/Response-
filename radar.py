@@ -188,6 +188,8 @@ with tab2:
     with col_f3:
         filter_msg = st.text_input("💬 Search by Message Content:", "")
 
+    # Download Button Placement Column
+    download_btn_placeholder = st.empty()
     history_placeholder = st.empty()
 
 team_data = load_team_data()
@@ -294,6 +296,17 @@ while True:
         if os.path.exists(SAVED_DATA_FILE):
             saved_df = pd.read_csv(SAVED_DATA_FILE)
             
+            # Download Button creation for full data backup
+            with download_btn_placeholder.container():
+                csv_data = saved_df.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="📥 DOWNLOAD FULL CAPTURED DATA (CSV)",
+                    data=csv_data,
+                    file_name=f"hunting_system_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv"
+                )
+            
+            # Apply Filter Inputs
             if filter_cli:
                 saved_df = saved_df[saved_df['cli'].str.contains(filter_cli, case=False, na=False)]
             if filter_num:
