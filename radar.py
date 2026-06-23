@@ -167,8 +167,11 @@ while True:
                         disp_mid = mid_df[['dt', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
                         disp_mid.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
                         
-                        # Formatting live feed time display cleanly
-                        disp_mid['Time'] = pd.to_datetime(disp_mid['Time']).dt.strftime('%Y-%m-%d %H:%M:%S')
+                        # Sorting live feed descending (Latest top pr)
+                        disp_mid['Time'] = pd.to_datetime(disp_mid['Time'])
+                        disp_mid = disp_mid.sort_values(by='Time', ascending=False)
+                        disp_mid['Time'] = disp_mid['Time'].dt.strftime('%Y-%m-%d %H:%M:%S')
+                        
                         st.dataframe(disp_mid.style.apply(highlight_team, axis=1), use_container_width=True, height=300, hide_index=True, column_config=col_cfg)
                     else:
                         st.caption("NO PACKETS DETECTED FOR CURRENT AGENT.")
@@ -180,8 +183,11 @@ while True:
                     disp_global = global_df[['dt', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
                     disp_global.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
                     
-                    # Formatting global stream time display cleanly
-                    disp_global['Time'] = pd.to_datetime(disp_global['Time']).dt.strftime('%Y-%m-%d %H:%M:%S')
+                    # Sorting global stream descending (Latest top pr)
+                    disp_global['Time'] = pd.to_datetime(disp_global['Time'])
+                    disp_global = disp_global.sort_values(by='Time', ascending=False)
+                    disp_global['Time'] = disp_global['Time'].dt.strftime('%Y-%m-%d %H:%M:%S')
+                    
                     st.dataframe(disp_global.style.apply(highlight_team, axis=1), use_container_width=True, height=500, hide_index=True, column_config=col_cfg)
 
         # --- TAB 2 DIRECT GOOGLE SHEET LIVE FETCH ---
@@ -198,9 +204,11 @@ while True:
                 with history_placeholder.container():
                     st.markdown(f"Total Permanent Records in Google Sheet: `{len(saved_df)}`")
                     if not saved_df.empty:
-                        # CRITICAL FIX: Google Sheet database raw ISO dates ko standard display me format karna
+                        # CRITICAL FIX: Google Sheet Database Sorting (Latest naya data top pr)
                         try:
-                            saved_df['Time'] = pd.to_datetime(saved_df['Time']).dt.strftime('%Y-%m-%d %H:%M:%S')
+                            saved_df['Time'] = pd.to_datetime(saved_df['Time'])
+                            saved_df = saved_df.sort_values(by='Time', ascending=False)
+                            saved_df['Time'] = saved_df['Time'].dt.strftime('%Y-%m-%d %H:%M:%S')
                         except:
                             pass
                         
