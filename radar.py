@@ -14,82 +14,389 @@ TOKEN = "e1KDh36NdVxcaFNmc4uBYGSXiXmFiItnZI2QQ4d0YVY="
 TEAM_FILE = "Numbers_Export.csv"
 GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyTHahQPjxjbuZGcIWiN2AgY8lHJEDm7Pyi2QnpSJVV436Q65DOlOtmA2Ilux8UkVgl/exec"
 
-st.set_page_config(page_title="HUNTING SYSTEM - UMER ALI", layout="wide")
+st.set_page_config(
+    page_title="DOUBLE FACER HUNTER — UMER ALI",
+    page_icon="⚡",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
 
-# --- UI DESIGN (CYBERPUNK TERMINAL THEME) ---
+# ============================================================
+#  🎨 ULTRA PREMIUM DARK UI — NEON GLASS DESIGN
+# ============================================================
 st.markdown("""
 <style>
-    .stApp { background-color: #0a0a0c; color: #00ff66; font-family: 'Courier New', Courier, monospace; }
-    .main-title { text-align: center; color: #00ff66; font-size: 42px; font-weight: 900; padding-top: 15px; margin-bottom: 5px; text-shadow: 0 0 15px #00ff66; }
-    .main-subtitle { text-align: center; color: #888888; font-size: 12px; margin-bottom: 35px; letter-spacing: 4px; text-transform: uppercase; }
-    .section-label { color: #ffffff; font-size: 18px; font-weight: bold; margin-top: 40px; margin-bottom: 15px; border-bottom: 2px solid #333333; padding-bottom: 8px; }
-    .section-label::before { content: "■ "; color: #00ff66; }
-    .stTextInput>div>div>input, .stNumberInput>div>div>input { background-color: #121214 !important; color: #00ff66 !important; border: 1px solid #00ff66 !important; border-radius: 4px !important; }
-    label { color: #ffffff !important; }
-    .leaderboard-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 30px; }
-    .rank-card { background: linear-gradient(135deg, #121214, #1a1a1e); border: 1px solid #222222; border-radius: 4px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.6); }
-    .rank-1 { border-left: 5px solid #ffcc00; }
-    .rank-2 { border-left: 5px solid #cccccc; }
-    .rank-3 { border-left: 5px solid #cd7f32; }
-    .rank-badge { font-size: 11px; font-weight: bold; margin-bottom: 8px; }
-    .rank-1 .rank-badge { color: #ffcc00; }
-    .rank-2 .rank-badge { color: #cccccc; }
-    .rank-3 .rank-badge { color: #cd7f32; }
-    .rank-cli { color: #ffffff; font-size: 28px; font-weight: 900; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .rank-count { color: #00ff66; font-size: 14px; font-weight: bold; }
-    
-    /* Unique terminal-style notification box */
-    .terminal-status {
-        background-color: #121214;
-        border: 1px dashed #333333;
-        border-radius: 4px;
-        padding: 40px;
-        text-align: center;
-        color: #888888;
-        font-size: 15px;
-        margin-top: 20px;
-    }
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&family=Inter:wght@300;400;500;600;700&display=swap');
+
+  /* ── GLOBAL ──────────────────────────────────────────── */
+  html, body, [class*="css"] {
+    font-family: 'Inter', sans-serif !important;
+  }
+  .stApp {
+    background: #020408;
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(0,212,255,0.08) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 40% at 80% 80%, rgba(139,0,255,0.06) 0%, transparent 60%),
+      linear-gradient(180deg, #020408 0%, #030810 100%);
+    min-height: 100vh;
+    color: #e2e8f0;
+  }
+
+  /* Scanline overlay */
+  .stApp::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,212,255,0.015) 2px,
+      rgba(0,212,255,0.015) 4px
+    );
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── HEADER ──────────────────────────────────────────── */
+  .main-header {
+    text-align: center;
+    padding: 40px 20px 30px;
+    position: relative;
+  }
+  .main-title {
+    font-family: 'Orbitron', monospace;
+    font-size: clamp(28px, 5vw, 52px);
+    font-weight: 900;
+    letter-spacing: 6px;
+    background: linear-gradient(135deg, #00d4ff 0%, #7b2fff 50%, #ff006e 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    filter: drop-shadow(0 0 30px rgba(0,212,255,0.4));
+  }
+  .main-subtitle {
+    font-family: 'Share Tech Mono', monospace;
+    color: #4a9eff;
+    font-size: 13px;
+    letter-spacing: 6px;
+    text-transform: uppercase;
+    opacity: 0.8;
+  }
+  .header-line {
+    width: 100%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, #00d4ff, #7b2fff, #ff006e, transparent);
+    margin: 20px 0 0;
+    box-shadow: 0 0 15px rgba(0,212,255,0.4);
+  }
+
+  /* ── TABS ────────────────────────────────────────────── */
+  .stTabs [data-baseweb="tab-list"] {
+    background: rgba(255,255,255,0.03) !important;
+    border-radius: 12px !important;
+    padding: 6px !important;
+    border: 1px solid rgba(255,255,255,0.06) !important;
+    gap: 4px !important;
+    backdrop-filter: blur(20px);
+  }
+  .stTabs [data-baseweb="tab"] {
+    font-family: 'Orbitron', monospace !important;
+    font-size: 12px !important;
+    font-weight: 700 !important;
+    letter-spacing: 2px !important;
+    color: #4a5568 !important;
+    border-radius: 8px !important;
+    padding: 10px 24px !important;
+    transition: all 0.3s ease !important;
+    border: none !important;
+    background: transparent !important;
+  }
+  .stTabs [aria-selected="true"] {
+    background: linear-gradient(135deg, rgba(0,212,255,0.2), rgba(123,47,255,0.2)) !important;
+    color: #00d4ff !important;
+    border: 1px solid rgba(0,212,255,0.3) !important;
+    box-shadow: 0 0 20px rgba(0,212,255,0.15), inset 0 0 20px rgba(0,212,255,0.05) !important;
+  }
+  .stTabs [data-baseweb="tab-highlight"] { display: none !important; }
+  .stTabs [data-baseweb="tab-border"] { display: none !important; }
+
+  /* ── LEADERBOARD CARDS ───────────────────────────────── */
+  .lb-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin: 24px 0;
+  }
+  .lb-card {
+    position: relative;
+    background: rgba(255,255,255,0.03);
+    backdrop-filter: blur(20px);
+    border-radius: 16px;
+    padding: 24px 20px;
+    border: 1px solid rgba(255,255,255,0.06);
+    overflow: hidden;
+    transition: transform 0.3s ease;
+  }
+  .lb-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+  }
+  .lb-card-1::before { background: linear-gradient(90deg, #ffd700, #ffaa00); box-shadow: 0 0 20px rgba(255,215,0,0.5); }
+  .lb-card-2::before { background: linear-gradient(90deg, #c0c0c0, #a0a0a0); box-shadow: 0 0 20px rgba(192,192,192,0.3); }
+  .lb-card-3::before { background: linear-gradient(90deg, #cd7f32, #a0522d); box-shadow: 0 0 20px rgba(205,127,50,0.3); }
+  .lb-card::after {
+    content: '';
+    position: absolute;
+    top: -50%; right: -20%;
+    width: 150px; height: 150px;
+    border-radius: 50%;
+    opacity: 0.04;
+  }
+  .lb-card-1::after { background: #ffd700; }
+  .lb-card-2::after { background: #c0c0c0; }
+  .lb-card-3::after { background: #cd7f32; }
+
+  .lb-badge {
+    font-family: 'Orbitron', monospace;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .lb-card-1 .lb-badge { color: #ffd700; }
+  .lb-card-2 .lb-badge { color: #c0c0c0; }
+  .lb-card-3 .lb-badge { color: #cd7f32; }
+
+  .lb-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    animation: pulse-dot 1.5s ease-in-out infinite;
+  }
+  .lb-card-1 .lb-dot { background: #ffd700; box-shadow: 0 0 8px #ffd700; }
+  .lb-card-2 .lb-dot { background: #c0c0c0; }
+  .lb-card-3 .lb-dot { background: #cd7f32; }
+  @keyframes pulse-dot { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.5);opacity:0.7} }
+
+  .lb-name {
+    font-family: 'Orbitron', monospace;
+    font-size: clamp(16px, 2.5vw, 26px);
+    font-weight: 900;
+    color: #f8fafc;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-bottom: 8px;
+  }
+  .lb-count {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .lb-card-1 .lb-count { color: #ffd700; }
+  .lb-card-2 .lb-count { color: #c0c0c0; }
+  .lb-card-3 .lb-count { color: #cd7f32; }
+
+  /* ── SECTION LABELS ──────────────────────────────────── */
+  .section-label {
+    font-family: 'Orbitron', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    color: #00d4ff;
+    margin: 32px 0 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .section-label::before {
+    content: '';
+    display: block;
+    width: 4px; height: 18px;
+    background: linear-gradient(180deg, #00d4ff, #7b2fff);
+    border-radius: 2px;
+    box-shadow: 0 0 10px rgba(0,212,255,0.6);
+  }
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, rgba(0,212,255,0.3), transparent);
+  }
+
+  /* ── INPUTS ──────────────────────────────────────────── */
+  .stTextInput > div > div > input,
+  .stNumberInput > div > div > input {
+    background: rgba(0,212,255,0.04) !important;
+    border: 1px solid rgba(0,212,255,0.2) !important;
+    border-radius: 10px !important;
+    color: #e2e8f0 !important;
+    font-family: 'Share Tech Mono', monospace !important;
+    font-size: 14px !important;
+    padding: 10px 16px !important;
+    transition: all 0.3s ease !important;
+  }
+  .stTextInput > div > div > input:focus,
+  .stNumberInput > div > div > input:focus {
+    border-color: rgba(0,212,255,0.6) !important;
+    box-shadow: 0 0 0 3px rgba(0,212,255,0.1), 0 0 20px rgba(0,212,255,0.1) !important;
+    background: rgba(0,212,255,0.06) !important;
+  }
+  .stTextInput > div > div > input::placeholder { color: #2d3748 !important; }
+
+  label, .stTextInput label, .stNumberInput label {
+    font-family: 'Orbitron', monospace !important;
+    font-size: 10px !important;
+    letter-spacing: 2px !important;
+    color: #4a9eff !important;
+    text-transform: uppercase !important;
+    font-weight: 700 !important;
+  }
+
+  /* ── DATAFRAME ───────────────────────────────────────── */
+  .stDataFrame {
+    border-radius: 12px !important;
+    overflow: hidden !important;
+    border: 1px solid rgba(0,212,255,0.1) !important;
+    box-shadow: 0 4px 30px rgba(0,0,0,0.5) !important;
+  }
+  .stDataFrame thead tr th {
+    background: rgba(0,212,255,0.08) !important;
+    color: #00d4ff !important;
+    font-family: 'Orbitron', monospace !important;
+    font-size: 10px !important;
+    letter-spacing: 2px !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    border-bottom: 1px solid rgba(0,212,255,0.2) !important;
+  }
+  .stDataFrame tbody tr { background: rgba(255,255,255,0.01) !important; transition: background 0.2s ease !important; }
+  .stDataFrame tbody tr:hover { background: rgba(0,212,255,0.05) !important; }
+  .stDataFrame tbody tr td {
+    color: #a0aec0 !important;
+    font-family: 'Share Tech Mono', monospace !important;
+    font-size: 12px !important;
+    border-bottom: 1px solid rgba(255,255,255,0.03) !important;
+  }
+
+  /* ── STATUS BOX ──────────────────────────────────────── */
+  .status-box {
+    background: rgba(255,255,255,0.02);
+    border: 1px dashed rgba(0,212,255,0.15);
+    border-radius: 16px;
+    padding: 50px 30px;
+    text-align: center;
+    margin-top: 20px;
+  }
+  .status-box .icon { font-size: 40px; margin-bottom: 15px; opacity: 0.6; }
+  .status-box .title {
+    font-family: 'Orbitron', monospace;
+    font-size: 13px;
+    color: #4a9eff;
+    letter-spacing: 4px;
+    margin-bottom: 10px;
+  }
+  .status-box .desc { color: #2d3748; font-size: 13px; line-height: 1.8; font-family: 'Share Tech Mono', monospace; }
+
+  /* ── LIVE BADGE ──────────────────────────────────────── */
+  .live-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255, 0, 110, 0.12);
+    border: 1px solid rgba(255, 0, 110, 0.3);
+    border-radius: 20px;
+    padding: 4px 14px;
+    font-family: 'Orbitron', monospace;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    color: #ff006e;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+  .live-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: #ff006e;
+    box-shadow: 0 0 8px #ff006e;
+    animation: pulse-dot 1s ease-in-out infinite;
+  }
+
+  /* ── SCROLLBAR ───────────────────────────────────────── */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(0,212,255,0.3); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(0,212,255,0.6); }
+
+  /* ── MISC ────────────────────────────────────────────── */
+  .stCaption { color: #2d3748 !important; font-family: 'Share Tech Mono', monospace !important; font-size: 11px !important; }
+  div[data-testid="stMarkdownContainer"] p { color: #718096; }
+  .block-container { padding: 0 2rem 2rem !important; max-width: 1400px !important; }
+
+  @media (max-width: 768px) {
+    .lb-grid { grid-template-columns: 1fr; }
+    .main-title { font-size: 24px; letter-spacing: 3px; }
+  }
 </style>
 """, unsafe_allow_html=True)
 
+# ============================================================
+#  FUNCTIONS (unchanged)
+# ============================================================
 def get_country(num):
     try:
         full_num = "+" + str(num).strip()
         parsed = phonenumbers.parse(full_num)
         return geocoder.description_for_number(parsed, "en")
-    except: return "Global"
+    except:
+        return "Global"
 
 @st.cache_data
 def load_team_data():
     try:
         df = pd.read_csv(TEAM_FILE)
         df['Phone Number'] = df['Phone Number'].astype(str).str.split('.').str[0].str.strip()
-        df['Status'] = df['Status'].fillna('') 
+        df['Status'] = df['Status'].fillna('')
         df['MemberName'] = df['Status'].str.replace('Allocated: ', '', case=False, regex=False).str.strip()
         return df.set_index('Phone Number')[['Range', 'MemberName']].to_dict('index')
-    except: return {}
+    except:
+        return {}
 
 def get_team_info(num, team_data):
     n_str = str(num).split('.')[0].strip()
     if n_str in team_data:
         name = team_data[n_str]['MemberName']
-        if name in ["UTS_Umer1", "UTS_Khadija"]: return "", ""
+        if name in ["UTS_Umer1", "UTS_Khadija"]:
+            return "", ""
         return name, team_data[n_str]['Range']
     return "", ""
 
 def highlight_team(row):
     if row['Team Member'] != "":
-        return ['background-color: rgba(255, 0, 85, 0.12); color: #ff3366; font-weight: bold; border-right: 4px solid #ff0055;'] * len(row)
+        return ['background-color: rgba(255,0,110,0.1); color: #ff006e; font-weight: bold; border-right: 3px solid #ff006e;'] * len(row)
     return [''] * len(row)
 
-# --- BACKEND SHEET STREAMER ---
 def stream_to_google_sheet(raw_data):
     try:
         bg_df = pd.DataFrame(raw_data)
-        if bg_df.empty: return
+        if bg_df.empty:
+            return
         bg_df['dt'] = pd.to_datetime(bg_df['dt']).dt.strftime('%Y-%m-%d %H:%M:%S')
-        
-        for _, row in bg_df.head(20).iterrows(): 
+        for _, row in bg_df.head(20).iterrows():
             payload = {
                 "Time": row['dt'],
                 "App": row['cli'],
@@ -97,125 +404,156 @@ def stream_to_google_sheet(raw_data):
                 "Country": get_country(row['num']),
                 "Message": str(row['message'])
             }
-            requests.post(GOOGLE_SCRIPT_URL, data=json.dumps(payload), headers={'Content-Type': 'application/json'}, timeout=5)
+            requests.post(GOOGLE_SCRIPT_URL, data=json.dumps(payload),
+                          headers={'Content-Type': 'application/json'}, timeout=5)
     except:
         pass
 
-# --- UI CONTROLS ---
-st.markdown('<div class="main-title">⚡ DOUBLE FACER HUNTER ⚡</div>', unsafe_allow_html=True)
-st.markdown('<div class="main-subtitle">> DATABASE INTEGRATED CONTROL PANEL</div>', unsafe_allow_html=True)
+# ============================================================
+#  HEADER
+# ============================================================
+st.markdown("""
+<div class="main-header">
+  <div class="live-pill"><div class="live-dot"></div> LIVE SYSTEM</div>
+  <div class="main-title">⚡ DOUBLE FACER HUNTER ⚡</div>
+  <div class="main-subtitle">> DATABASE INTEGRATED CONTROL PANEL // UMER ALI</div>
+  <div class="header-line"></div>
+</div>
+""", unsafe_allow_html=True)
 
-tab1, tab2 = st.tabs(["📡 LIVE MONITORING FEED", "📊 GOOGLE SHEET DATABASE FILTERS"])
+# ============================================================
+#  TABS
+# ============================================================
+tab1, tab2 = st.tabs(["📡  LIVE MONITORING FEED", "📊  GOOGLE SHEET DATABASE FILTERS"])
 
 with tab1:
     col_in1, col_in2 = st.columns([2, 1])
-    with col_in1: target_cli = st.text_input("⚙️ ENTER TARGET AGENT (CLI):", "MYOB").strip()
-    with col_in2: msg_limit = st.number_input("📡 STREAM BUFFER LIMIT:", min_value=1, max_value=2000, value=1000)
+    with col_in1:
+        target_cli = st.text_input("⚙️ ENTER TARGET AGENT (CLI):", "MYOB").strip()
+    with col_in2:
+        msg_limit = st.number_input("📡 STREAM BUFFER LIMIT:", min_value=1, max_value=2000, value=1000)
     placeholder = st.empty()
 
 with tab2:
-    st.markdown('<div class="section-label">INTELLIGENT DATABASE SEARCH (OPTIMIZED FOR SPEED)</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-label">INTELLIGENT DATABASE SEARCH</div>', unsafe_allow_html=True)
     col_f1, col_f2, col_f3 = st.columns(3)
-    with col_f1: filter_cli = st.text_input("🔍 Search by App/CLI:", "", key="f_cli").strip()
-    with col_f2: filter_num = st.text_input("📞 Search by Phone Number:", "", key="f_num").strip()
-    with col_f3: filter_msg = st.text_input("💬 Search by Message Content:", "", key="f_msg").strip()
+    with col_f1:
+        filter_cli = st.text_input("🔍 Search by App/CLI:", "", key="f_cli").strip()
+    with col_f2:
+        filter_num = st.text_input("📞 Search by Phone Number:", "", key="f_num").strip()
+    with col_f3:
+        filter_msg = st.text_input("💬 Search by Message Content:", "", key="f_msg").strip()
     history_placeholder = st.empty()
 
 team_data = load_team_data()
+
 col_cfg = {
-    "Time": st.column_config.TextColumn("TIMESTAMP", width="medium"),
-    "App": st.column_config.TextColumn("IDENT/CLI", width="small"),
-    "Number": st.column_config.TextColumn("DATA_STREAM", width="medium"),
-    "Country": st.column_config.TextColumn("LOCATION", width="small"),
-    "Message": st.column_config.TextColumn("DECRYPTED_MSG", width="max"),
-    "Team Member": st.column_config.TextColumn("OPERATOR", width="medium"),
-    "Range": st.column_config.TextColumn("NETWORK_RANGE", width="large"),
+    "Time":        st.column_config.TextColumn("TIMESTAMP",     width="medium"),
+    "App":         st.column_config.TextColumn("IDENT/CLI",     width="small"),
+    "Number":      st.column_config.TextColumn("DATA_STREAM",   width="medium"),
+    "Country":     st.column_config.TextColumn("LOCATION",      width="small"),
+    "Message":     st.column_config.TextColumn("DECRYPTED_MSG", width="max"),
+    "Team Member": st.column_config.TextColumn("OPERATOR",      width="medium"),
+    "Range":       st.column_config.TextColumn("NETWORK_RANGE", width="large"),
 }
 
-# --- MAIN RUNNING LOOP ---
+# ============================================================
+#  MAIN LOOP
+# ============================================================
 while True:
     try:
         r = requests.get(URL, params={"token": TOKEN, "records": 100}, timeout=10)
         if r.status_code == 200:
             raw_json = r.json().get("data", [])
             df = pd.DataFrame(raw_json)
-            
+
             if not df.empty:
                 threading.Thread(target=stream_to_google_sheet, args=(raw_json,), daemon=True).start()
-                
                 df['dt'] = pd.to_datetime(df['dt'])
-                
-                # --- TOP 3 APP CARDS LOGIC ---
+
+                # Top 3 cards
                 now = datetime.now()
                 five_mins_ago = now - timedelta(minutes=5)
                 df_5m = df[df['dt'] >= five_mins_ago]
-                
+
                 top1_name, top1_count = "NO_DATA", 0
                 top2_name, top2_count = "NO_DATA", 0
                 top3_name, top3_count = "NO_DATA", 0
-                
+
                 if not df_5m.empty and 'cli' in df_5m.columns:
                     top_clis = df_5m['cli'].value_counts().head(3)
                     if len(top_clis) >= 1: top1_name, top1_count = top_clis.index[0], top_clis.iloc[0]
                     if len(top_clis) >= 2: top2_name, top2_count = top_clis.index[1], top_clis.iloc[1]
                     if len(top_clis) >= 3: top3_name, top3_count = top_clis.index[2], top_clis.iloc[2]
-                
+
                 df_target_all = df[df['cli'].str.contains(target_cli, case=False, na=False)].copy()
 
                 with placeholder.container():
+                    # Leaderboard
                     st.markdown(f"""
-                    <div class="leaderboard-grid">
-                        <div class="rank-card rank-1"><div class="rank-badge">🏆 TOP 1 (LAST 5M)</div><div class="rank-cli">{top1_name}</div><div class="rank-count">🔥 {top1_count} OTPs</div></div>
-                        <div class="rank-card rank-2"><div class="rank-badge">🥈 TOP 2 (LAST 5M)</div><div class="rank-cli">{top2_name}</div><div class="rank-count">⚡ {top2_count} OTPs</div></div>
-                        <div class="rank-card rank-3"><div class="rank-badge">🥉 TOP 3 (LAST 5M)</div><div class="rank-cli">{top3_name}</div><div class="rank-count">📡 {top3_count} OTPs</div></div>
+                    <div class="lb-grid">
+                      <div class="lb-card lb-card-1">
+                        <div class="lb-badge"><div class="lb-dot"></div> 🏆 TOP 1 · LAST 5MIN</div>
+                        <div class="lb-name">{top1_name}</div>
+                        <div class="lb-count">🔥 {top1_count:,} OTPs</div>
+                      </div>
+                      <div class="lb-card lb-card-2">
+                        <div class="lb-badge"><div class="lb-dot"></div> 🥈 TOP 2 · LAST 5MIN</div>
+                        <div class="lb-name">{top2_name}</div>
+                        <div class="lb-count">⚡ {top2_count:,} OTPs</div>
+                      </div>
+                      <div class="lb-card lb-card-3">
+                        <div class="lb-badge"><div class="lb-dot"></div> 🥉 TOP 3 · LAST 5MIN</div>
+                        <div class="lb-name">{top3_name}</div>
+                        <div class="lb-count">📡 {top3_count:,} OTPs</div>
+                      </div>
                     </div>
                     """, unsafe_allow_html=True)
 
-                    st.markdown(f'<div class="section-label">LIVE TARGET TRACKER // ACCESSED: {target_cli.upper()}</div>', unsafe_allow_html=True)
+                    # Target Tracker
+                    st.markdown(f'<div class="section-label">LIVE TARGET TRACKER // {target_cli.upper()}</div>', unsafe_allow_html=True)
                     if not df_target_all.empty:
                         mid_df = df_target_all.head(25).copy()
-                        mid_df[['Team Member', 'Range']] = mid_df['num'].apply(lambda x: pd.Series(get_team_info(x, team_data)))
+                        mid_df[['Team Member', 'Range']] = mid_df['num'].apply(
+                            lambda x: pd.Series(get_team_info(x, team_data)))
                         mid_df['Country'] = mid_df['num'].apply(get_country)
-                        disp_mid = mid_df[['dt', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
+                        disp_mid = mid_df[['dt', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']].copy()
                         disp_mid.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
-                        
                         disp_mid['Time'] = pd.to_datetime(disp_mid['Time'])
                         disp_mid = disp_mid.sort_values(by='Time', ascending=False)
                         disp_mid['Time'] = disp_mid['Time'].dt.strftime('%Y-%m-%d %H:%M:%S')
-                        
-                        st.dataframe(disp_mid.style.apply(highlight_team, axis=1), use_container_width=True, height=300, hide_index=True, column_config=col_cfg)
+                        st.dataframe(disp_mid.style.apply(highlight_team, axis=1),
+                                     use_container_width=True, height=300, hide_index=True, column_config=col_cfg)
                     else:
-                        st.caption("NO PACKETS DETECTED FOR CURRENT AGENT.")
+                        st.markdown('<div class="status-box"><div class="icon">📡</div><div class="title">NO PACKETS DETECTED</div><div class="desc">No data stream found for current agent identifier.</div></div>', unsafe_allow_html=True)
 
+                    # Global Stream
                     st.markdown('<div class="section-label">GLOBAL LIVE NETWORK STREAM</div>', unsafe_allow_html=True)
                     global_df = df.head(msg_limit).copy()
-                    global_df[['Team Member', 'Range']] = global_df['num'].apply(lambda x: pd.Series(get_team_info(x, team_data)))
+                    global_df[['Team Member', 'Range']] = global_df['num'].apply(
+                        lambda x: pd.Series(get_team_info(x, team_data)))
                     global_df['Country'] = global_df['num'].apply(get_country)
-                    disp_global = global_df[['dt', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
+                    disp_global = global_df[['dt', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']].copy()
                     disp_global.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
-                    
                     disp_global['Time'] = pd.to_datetime(disp_global['Time'])
                     disp_global = disp_global.sort_values(by='Time', ascending=False)
                     disp_global['Time'] = disp_global['Time'].dt.strftime('%Y-%m-%d %H:%M:%S')
-                    
-                    st.dataframe(disp_global.style.apply(highlight_team, axis=1), use_container_width=True, height=500, hide_index=True, column_config=col_cfg)
+                    st.dataframe(disp_global.style.apply(highlight_team, axis=1),
+                                 use_container_width=True, height=500, hide_index=True, column_config=col_cfg)
 
-        # --- TAB 2 SMART CONDITIONAL LIVE FETCH (SUPER CLEAN & FAST) ---
-        # Data sirf tab fetch hoga jab kisi ek box mein input hoga
+        # Tab 2
         if filter_cli or filter_num or filter_msg:
             sheet_r = requests.get(GOOGLE_SCRIPT_URL, timeout=10)
             if sheet_r.status_code == 200:
                 sheet_data = sheet_r.json()
                 if sheet_data:
                     saved_df = pd.DataFrame(sheet_data)
-                    
-                    # Applying filters
                     if filter_cli: saved_df = saved_df[saved_df['App'].astype(str).str.contains(filter_cli, case=False, na=False)]
                     if filter_num: saved_df = saved_df[saved_df['Number'].astype(str).str.contains(filter_num, na=False)]
                     if filter_msg: saved_df = saved_df[saved_df['Message'].astype(str).str.contains(filter_msg, case=False, na=False)]
-                    
+
                     with history_placeholder.container():
-                        st.markdown(f"🔍 Found Matches in Google Sheet: `{len(saved_df)}`")
+                        st.markdown(f'<div class="section-label">QUERY RESULTS — {len(saved_df):,} RECORDS FOUND</div>', unsafe_allow_html=True)
                         if not saved_df.empty:
                             try:
                                 saved_df['Time'] = pd.to_datetime(saved_df['Time'])
@@ -223,25 +561,27 @@ while True:
                                 saved_df['Time'] = saved_df['Time'].dt.strftime('%Y-%m-%d %H:%M:%S')
                             except:
                                 pass
-                            
-                            saved_df[['Team Member', 'Range']] = saved_df['Number'].apply(lambda x: pd.Series(get_team_info(x, team_data)))
-                            st.dataframe(saved_df.style.apply(highlight_team, axis=1), use_container_width=True, height=600, hide_index=True, column_config=col_cfg)
+                            saved_df[['Team Member', 'Range']] = saved_df['Number'].apply(
+                                lambda x: pd.Series(get_team_info(x, team_data)))
+                            st.dataframe(saved_df.style.apply(highlight_team, axis=1),
+                                         use_container_width=True, height=600, hide_index=True, column_config=col_cfg)
                         else:
-                            st.markdown('<div class="terminal-status">❌ NO RECORDS FOUND MATCHING YOUR CRITERIA.</div>', unsafe_allow_html=True)
+                            st.markdown('<div class="status-box"><div class="icon">❌</div><div class="title">NO RECORDS FOUND</div><div class="desc">No entries matched your search criteria.<br>Try adjusting the filters above.</div></div>', unsafe_allow_html=True)
         else:
-            # Default clean UI state when no query is typed
             with history_placeholder.container():
                 st.markdown("""
-                <div class="terminal-status">
-                    🛰️ <b>SYSTEM READY // COLD STORAGE MONITOR</b><br><br>
-                    <span style="color: #666666; font-size: 13px;">
-                    Database loading is disabled to maximize system performance.<br>
-                    Please type an App, Number, or Keyword in the filters above to query the records instantly.
-                    </span>
+                <div class="status-box">
+                  <div class="icon">🛰️</div>
+                  <div class="title">COLD STORAGE MONITOR — SYSTEM READY</div>
+                  <div class="desc">
+                    Database preload disabled to maximize performance.<br>
+                    Enter a search term above to query records instantly.
+                  </div>
                 </div>
                 """, unsafe_allow_html=True)
 
         time.sleep(15)
         st.rerun()
+
     except Exception as e:
         time.sleep(5)
