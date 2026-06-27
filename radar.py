@@ -10,7 +10,7 @@ import json
 
 # --- CONFIG ---
 URL = "http://51.77.216.195/crapi/lamix/viewstats"
-TOKEN = "e1KDh36NdVxcaFNmc4uBYGSXiXmFiItnZI2QQ4d0YVY="
+TOKEN = "X46ZeF6ViotShZl5WYRse1t3lYiKZ3CAdo6ZdINSh0o="
 TEAM_FILE = "Numbers_Export.csv"
 GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyTHahQPjxjbuZGcIWiN2AgY8lHJEDm7Pyi2QnpSJVV436Q65DOlOtmA2Ilux8UkVgl/exec"
 
