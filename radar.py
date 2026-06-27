@@ -1,4 +1,12 @@
 import streamlit as st
+
+# ============================================================
+#  🔐 AUTH — SABSE PEHLE — KUCH AUR NAHI CHALEGA PEHLE
+# ============================================================
+from auth import check_access
+logged_in_user = check_access()
+# ============================================================
+
 import requests
 import pandas as pd
 import time
@@ -21,17 +29,11 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# ============================================================
-#  🎨 ULTRA PREMIUM DARK UI — NEON GLASS DESIGN
-# ============================================================
 st.markdown("""
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&family=Inter:wght@300;400;500;600;700&display=swap');
 
-  /* ── GLOBAL ──────────────────────────────────────────── */
-  html, body, [class*="css"] {
-    font-family: 'Inter', sans-serif !important;
-  }
+  html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
   .stApp {
     background: #020408;
     background-image:
@@ -41,29 +43,18 @@ st.markdown("""
     min-height: 100vh;
     color: #e2e8f0;
   }
-
-  /* Scanline overlay */
   .stApp::before {
     content: '';
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
     background: repeating-linear-gradient(
-      0deg,
-      transparent,
-      transparent 2px,
-      rgba(0,212,255,0.015) 2px,
-      rgba(0,212,255,0.015) 4px
+      0deg, transparent, transparent 2px,
+      rgba(0,212,255,0.015) 2px, rgba(0,212,255,0.015) 4px
     );
     pointer-events: none;
     z-index: 0;
   }
-
-  /* ── HEADER ──────────────────────────────────────────── */
-  .main-header {
-    text-align: center;
-    padding: 40px 20px 30px;
-    position: relative;
-  }
+  .main-header { text-align: center; padding: 40px 20px 30px; position: relative; }
   .main-title {
     font-family: 'Orbitron', monospace;
     font-size: clamp(28px, 5vw, 52px);
@@ -81,9 +72,32 @@ st.markdown("""
     font-family: 'Share Tech Mono', monospace;
     color: #4a9eff;
     font-size: 13px;
-    letter-spacing: 6px;
+    letter-spacing: 4px;
     text-transform: uppercase;
     opacity: 0.8;
+  }
+  .operator-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(0,212,255,0.08);
+    border: 1px solid rgba(0,212,255,0.25);
+    border-radius: 20px;
+    padding: 5px 18px;
+    font-family: 'Orbitron', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    color: #00d4ff;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .operator-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: #00d4ff;
+    box-shadow: 0 0 8px #00d4ff;
+    animation: pulse-dot 2s ease-in-out infinite;
   }
   .header-line {
     width: 100%;
@@ -92,8 +106,6 @@ st.markdown("""
     margin: 20px 0 0;
     box-shadow: 0 0 15px rgba(0,212,255,0.4);
   }
-
-  /* ── TABS ────────────────────────────────────────────── */
   .stTabs [data-baseweb="tab-list"] {
     background: rgba(255,255,255,0.03) !important;
     border-radius: 12px !important;
@@ -122,8 +134,6 @@ st.markdown("""
   }
   .stTabs [data-baseweb="tab-highlight"] { display: none !important; }
   .stTabs [data-baseweb="tab-border"] { display: none !important; }
-
-  /* ── LEADERBOARD CARDS ───────────────────────────────── */
   .lb-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -138,29 +148,11 @@ st.markdown("""
     padding: 24px 20px;
     border: 1px solid rgba(255,255,255,0.06);
     overflow: hidden;
-    transition: transform 0.3s ease;
   }
-  .lb-card::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 3px;
-  }
+  .lb-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
   .lb-card-1::before { background: linear-gradient(90deg, #ffd700, #ffaa00); box-shadow: 0 0 20px rgba(255,215,0,0.5); }
-  .lb-card-2::before { background: linear-gradient(90deg, #c0c0c0, #a0a0a0); box-shadow: 0 0 20px rgba(192,192,192,0.3); }
-  .lb-card-3::before { background: linear-gradient(90deg, #cd7f32, #a0522d); box-shadow: 0 0 20px rgba(205,127,50,0.3); }
-  .lb-card::after {
-    content: '';
-    position: absolute;
-    top: -50%; right: -20%;
-    width: 150px; height: 150px;
-    border-radius: 50%;
-    opacity: 0.04;
-  }
-  .lb-card-1::after { background: #ffd700; }
-  .lb-card-2::after { background: #c0c0c0; }
-  .lb-card-3::after { background: #cd7f32; }
-
+  .lb-card-2::before { background: linear-gradient(90deg, #c0c0c0, #a0a0a0); }
+  .lb-card-3::before { background: linear-gradient(90deg, #cd7f32, #a0522d); }
   .lb-badge {
     font-family: 'Orbitron', monospace;
     font-size: 9px;
@@ -175,7 +167,6 @@ st.markdown("""
   .lb-card-1 .lb-badge { color: #ffd700; }
   .lb-card-2 .lb-badge { color: #c0c0c0; }
   .lb-card-3 .lb-badge { color: #cd7f32; }
-
   .lb-dot {
     width: 6px; height: 6px;
     border-radius: 50%;
@@ -185,7 +176,6 @@ st.markdown("""
   .lb-card-2 .lb-dot { background: #c0c0c0; }
   .lb-card-3 .lb-dot { background: #cd7f32; }
   @keyframes pulse-dot { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.5);opacity:0.7} }
-
   .lb-name {
     font-family: 'Orbitron', monospace;
     font-size: clamp(16px, 2.5vw, 26px);
@@ -198,18 +188,10 @@ st.markdown("""
     white-space: nowrap;
     margin-bottom: 8px;
   }
-  .lb-count {
-    font-family: 'Share Tech Mono', monospace;
-    font-size: 14px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
+  .lb-count { font-family: 'Share Tech Mono', monospace; font-size: 14px; display: flex; align-items: center; gap: 8px; }
   .lb-card-1 .lb-count { color: #ffd700; }
   .lb-card-2 .lb-count { color: #c0c0c0; }
   .lb-card-3 .lb-count { color: #cd7f32; }
-
-  /* ── SECTION LABELS ──────────────────────────────────── */
   .section-label {
     font-family: 'Orbitron', monospace;
     font-size: 11px;
@@ -230,14 +212,7 @@ st.markdown("""
     border-radius: 2px;
     box-shadow: 0 0 10px rgba(0,212,255,0.6);
   }
-  .section-label::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: linear-gradient(90deg, rgba(0,212,255,0.3), transparent);
-  }
-
-  /* ── INPUTS ──────────────────────────────────────────── */
+  .section-label::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, rgba(0,212,255,0.3), transparent); }
   .stTextInput > div > div > input,
   .stNumberInput > div > div > input {
     background: rgba(0,212,255,0.04) !important;
@@ -255,8 +230,6 @@ st.markdown("""
     box-shadow: 0 0 0 3px rgba(0,212,255,0.1), 0 0 20px rgba(0,212,255,0.1) !important;
     background: rgba(0,212,255,0.06) !important;
   }
-  .stTextInput > div > div > input::placeholder { color: #2d3748 !important; }
-
   label, .stTextInput label, .stNumberInput label {
     font-family: 'Orbitron', monospace !important;
     font-size: 10px !important;
@@ -265,34 +238,7 @@ st.markdown("""
     text-transform: uppercase !important;
     font-weight: 700 !important;
   }
-
-  /* ── DATAFRAME ───────────────────────────────────────── */
-  .stDataFrame {
-    border-radius: 12px !important;
-    overflow: hidden !important;
-    border: 1px solid rgba(0,212,255,0.1) !important;
-    box-shadow: 0 4px 30px rgba(0,0,0,0.5) !important;
-  }
-  .stDataFrame thead tr th {
-    background: rgba(0,212,255,0.08) !important;
-    color: #00d4ff !important;
-    font-family: 'Orbitron', monospace !important;
-    font-size: 10px !important;
-    letter-spacing: 2px !important;
-    font-weight: 700 !important;
-    text-transform: uppercase !important;
-    border-bottom: 1px solid rgba(0,212,255,0.2) !important;
-  }
-  .stDataFrame tbody tr { background: rgba(255,255,255,0.01) !important; transition: background 0.2s ease !important; }
-  .stDataFrame tbody tr:hover { background: rgba(0,212,255,0.05) !important; }
-  .stDataFrame tbody tr td {
-    color: #a0aec0 !important;
-    font-family: 'Share Tech Mono', monospace !important;
-    font-size: 12px !important;
-    border-bottom: 1px solid rgba(255,255,255,0.03) !important;
-  }
-
-  /* ── STATUS BOX ──────────────────────────────────────── */
+  .stDataFrame { border-radius: 12px !important; overflow: hidden !important; border: 1px solid rgba(0,212,255,0.1) !important; }
   .status-box {
     background: rgba(255,255,255,0.02);
     border: 1px dashed rgba(0,212,255,0.15);
@@ -302,22 +248,14 @@ st.markdown("""
     margin-top: 20px;
   }
   .status-box .icon { font-size: 40px; margin-bottom: 15px; opacity: 0.6; }
-  .status-box .title {
-    font-family: 'Orbitron', monospace;
-    font-size: 13px;
-    color: #4a9eff;
-    letter-spacing: 4px;
-    margin-bottom: 10px;
-  }
+  .status-box .title { font-family: 'Orbitron', monospace; font-size: 13px; color: #4a9eff; letter-spacing: 4px; margin-bottom: 10px; }
   .status-box .desc { color: #2d3748; font-size: 13px; line-height: 1.8; font-family: 'Share Tech Mono', monospace; }
-
-  /* ── LIVE BADGE ──────────────────────────────────────── */
   .live-pill {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    background: rgba(255, 0, 110, 0.12);
-    border: 1px solid rgba(255, 0, 110, 0.3);
+    background: rgba(255,0,110,0.12);
+    border: 1px solid rgba(255,0,110,0.3);
     border-radius: 20px;
     padding: 4px 14px;
     font-family: 'Orbitron', monospace;
@@ -335,18 +273,10 @@ st.markdown("""
     box-shadow: 0 0 8px #ff006e;
     animation: pulse-dot 1s ease-in-out infinite;
   }
-
-  /* ── SCROLLBAR ───────────────────────────────────────── */
   ::-webkit-scrollbar { width: 4px; height: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: rgba(0,212,255,0.3); border-radius: 4px; }
-  ::-webkit-scrollbar-thumb:hover { background: rgba(0,212,255,0.6); }
-
-  /* ── MISC ────────────────────────────────────────────── */
-  .stCaption { color: #2d3748 !important; font-family: 'Share Tech Mono', monospace !important; font-size: 11px !important; }
-  div[data-testid="stMarkdownContainer"] p { color: #718096; }
   .block-container { padding: 0 2rem 2rem !important; max-width: 1400px !important; }
-
   @media (max-width: 768px) {
     .lb-grid { grid-template-columns: 1fr; }
     .main-title { font-size: 24px; letter-spacing: 3px; }
@@ -355,7 +285,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================================
-#  FUNCTIONS (unchanged)
+#  FUNCTIONS
 # ============================================================
 def get_country(num):
     try:
@@ -410,13 +340,19 @@ def stream_to_google_sheet(raw_data):
         pass
 
 # ============================================================
-#  HEADER
+#  HEADER — operator ka naam bhi dikhta hai
 # ============================================================
-st.markdown("""
+st.markdown(f"""
 <div class="main-header">
   <div class="live-pill"><div class="live-dot"></div> LIVE SYSTEM</div>
   <div class="main-title">⚡ DOUBLE FACER HUNTER ⚡</div>
   <div class="main-subtitle">> DATABASE INTEGRATED CONTROL PANEL // UMER ALI</div>
+  <div style="margin-top:12px;">
+    <span class="operator-badge">
+      <div class="operator-dot"></div>
+      OPERATOR: {logged_in_user.upper()}
+    </span>
+  </div>
   <div class="header-line"></div>
 </div>
 """, unsafe_allow_html=True)
@@ -471,7 +407,6 @@ while True:
                 threading.Thread(target=stream_to_google_sheet, args=(raw_json,), daemon=True).start()
                 df['dt'] = pd.to_datetime(df['dt'])
 
-                # Top 3 cards
                 now = datetime.now()
                 five_mins_ago = now - timedelta(minutes=5)
                 df_5m = df[df['dt'] >= five_mins_ago]
@@ -489,7 +424,6 @@ while True:
                 df_target_all = df[df['cli'].str.contains(target_cli, case=False, na=False)].copy()
 
                 with placeholder.container():
-                    # Leaderboard
                     st.markdown(f"""
                     <div class="lb-grid">
                       <div class="lb-card lb-card-1">
@@ -510,7 +444,6 @@ while True:
                     </div>
                     """, unsafe_allow_html=True)
 
-                    # Target Tracker
                     st.markdown(f'<div class="section-label">LIVE TARGET TRACKER // {target_cli.upper()}</div>', unsafe_allow_html=True)
                     if not df_target_all.empty:
                         mid_df = df_target_all.head(25).copy()
@@ -527,7 +460,6 @@ while True:
                     else:
                         st.markdown('<div class="status-box"><div class="icon">📡</div><div class="title">NO PACKETS DETECTED</div><div class="desc">No data stream found for current agent identifier.</div></div>', unsafe_allow_html=True)
 
-                    # Global Stream
                     st.markdown('<div class="section-label">GLOBAL LIVE NETWORK STREAM</div>', unsafe_allow_html=True)
                     global_df = df.head(msg_limit).copy()
                     global_df[['Team Member', 'Range']] = global_df['num'].apply(
@@ -541,7 +473,6 @@ while True:
                     st.dataframe(disp_global.style.apply(highlight_team, axis=1),
                                  use_container_width=True, height=500, hide_index=True, column_config=col_cfg)
 
-        # Tab 2
         if filter_cli or filter_num or filter_msg:
             sheet_r = requests.get(GOOGLE_SCRIPT_URL, timeout=10)
             if sheet_r.status_code == 200:
@@ -566,17 +497,14 @@ while True:
                             st.dataframe(saved_df.style.apply(highlight_team, axis=1),
                                          use_container_width=True, height=600, hide_index=True, column_config=col_cfg)
                         else:
-                            st.markdown('<div class="status-box"><div class="icon">❌</div><div class="title">NO RECORDS FOUND</div><div class="desc">No entries matched your search criteria.<br>Try adjusting the filters above.</div></div>', unsafe_allow_html=True)
+                            st.markdown('<div class="status-box"><div class="icon">❌</div><div class="title">NO RECORDS FOUND</div><div class="desc">No entries matched your search criteria.</div></div>', unsafe_allow_html=True)
         else:
             with history_placeholder.container():
                 st.markdown("""
                 <div class="status-box">
                   <div class="icon">🛰️</div>
                   <div class="title">COLD STORAGE MONITOR — SYSTEM READY</div>
-                  <div class="desc">
-                    Database preload disabled to maximize performance.<br>
-                    Enter a search term above to query records instantly.
-                  </div>
+                  <div class="desc">Database preload disabled to maximize performance.<br>Enter a search term above to query records instantly.</div>
                 </div>
                 """, unsafe_allow_html=True)
 
