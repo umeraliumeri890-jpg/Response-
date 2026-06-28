@@ -490,21 +490,58 @@ def show_login_gate(raw_fp, raw_ip):
     </div>
     """, unsafe_allow_html=True)
 
-    # FP not ready yet — show waiting screen
+    # FP not ready yet — auto reload after JS sets the param
     if not raw_fp or raw_fp == "unknown-device" or not raw_fp.startswith("FP"):
-        col1, col2, col3 = st.columns([1, 1.4, 1])
-        with col2:
-            st.markdown("""
-            <div class="login-card" style="text-align:center;">
-                <div style="font-size:36px; margin-bottom:16px;">🔄</div>
-                <div class="login-title">Initializing...</div>
-                <div class="login-sub">Device verification in progress</div>
-                <div style="font-family:'JetBrains Mono',monospace; font-size:11px;
-                     color:#5a7aa0; margin-top:20px;">
-                    Please wait 3 seconds then refresh the page.
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+        st.components.v1.html("""
+        <script>
+        (function() {
+            // Build fingerprint immediately
+            var components = [
+                navigator.userAgent || '',
+                navigator.platform || '',
+                screen.width + 'x' + screen.height + 'x' + screen.colorDepth,
+                Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+                navigator.language || '',
+                String(navigator.hardwareConcurrency || 0),
+                String(navigator.maxTouchPoints || 0),
+                String(new Date().getTimezoneOffset()),
+                navigator.vendor || '',
+                String(window.devicePixelRatio || 1),
+                navigator.oscpu || navigator.platform || ''
+            ];
+            var raw = components.join('||');
+            var hash = 5381;
+            for (var i = 0; i < raw.length; i++) {
+                hash = ((hash << 5) + hash) + raw.charCodeAt(i);
+                hash = hash & hash;
+            }
+            var fp = 'FP'
+                   + Math.abs(hash).toString(16).toUpperCase().padStart(8,'0')
+                   + '_W' + screen.width
+                   + '_C' + (navigator.hardwareConcurrency || 0)
+                   + '_D' + screen.colorDepth
+                   + '_P' + String(window.devicePixelRatio || 1).replace('.','');
+
+            function doReload(ip) {
+                var params = new URLSearchParams(window.location.search);
+                params.set('_fp', fp);
+                if (ip) params.set('_ip', ip);
+                // Hard reload with new params — Streamlit will re-run
+                window.location.href = window.location.pathname + '?' + params.toString();
+            }
+
+            // Try to get IP first, then reload
+            fetch('https://api.ipify.org?format=json')
+                .then(function(r){ return r.json(); })
+                .then(function(d){ doReload(d.ip || 'noip'); })
+                .catch(function(){ doReload('noip'); });
+        })();
+        </script>
+        <div style="font-family:'JetBrains Mono',monospace; color:#5a7aa0;
+                    text-align:center; padding:40px; font-size:12px;">
+            ⚙ Verifying device... please wait.
+        </div>
+        """, height=80)
         st.stop()
 
     col1, col2, col3 = st.columns([1, 1.4, 1])
