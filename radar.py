@@ -353,85 +353,70 @@ st.markdown("""
 # ============================================================
 def inject_fingerprint_js():
     """
-    Strong device fingerprint using 9 browser signals.
-    Also fetches public IP via a free API and stores both in URL params.
-    unknown-device fingerprint = REJECTED at login.
+    Inject fingerprint JS directly into page via markdown (not iframe).
+    Uses window.parent to escape Streamlit's sandbox.
     """
-    st.components.v1.html("""
+    st.markdown("""
     <script>
     (function() {
-        // --- Build device fingerprint ---
-        var components = [
-            navigator.userAgent || '',
-            navigator.platform || '',
-            screen.width + 'x' + screen.height + 'x' + screen.colorDepth,
-            Intl.DateTimeFormat().resolvedOptions().timeZone || '',
-            navigator.language || '',
-            String(navigator.hardwareConcurrency || 0),
-            String(navigator.maxTouchPoints || 0),
-            String(new Date().getTimezoneOffset()),
-            navigator.vendor || '',
-            String(window.devicePixelRatio || 1),
-            navigator.oscpu || navigator.platform || ''
-        ];
-        var raw = components.join('||');
-
-        // djb2 hash — strong enough for fingerprinting
-        var hash = 5381;
-        for (var i = 0; i < raw.length; i++) {
-            hash = ((hash << 5) + hash) + raw.charCodeAt(i);
-            hash = hash & hash;
-        }
-        var fp = 'FP'
-               + Math.abs(hash).toString(16).toUpperCase().padStart(8,'0')
-               + '_W' + screen.width
-               + '_C' + (navigator.hardwareConcurrency || 0)
-               + '_D' + screen.colorDepth
-               + '_P' + String(window.devicePixelRatio || 1).replace('.','');
-
-        function setFpParam(fp, ip) {
-            var params = new URLSearchParams(window.location.search);
-            var changed = false;
-            if (params.get('_fp') !== fp) { params.set('_fp', fp); changed = true; }
-            if (ip && params.get('_ip') !== ip) { params.set('_ip', ip); changed = true; }
-            if (changed) {
-                window.history.replaceState({}, '', window.location.pathname + '?' + params.toString());
+        function buildFP() {
+            var components = [
+                navigator.userAgent || '',
+                navigator.platform || '',
+                screen.width + 'x' + screen.height + 'x' + screen.colorDepth,
+                Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+                navigator.language || '',
+                String(navigator.hardwareConcurrency || 0),
+                String(navigator.maxTouchPoints || 0),
+                String(new Date().getTimezoneOffset()),
+                navigator.vendor || '',
+                String(window.devicePixelRatio || 1)
+            ];
+            var raw = components.join('||');
+            var hash = 5381;
+            for (var i = 0; i < raw.length; i++) {
+                hash = ((hash << 5) + hash) + raw.charCodeAt(i);
+                hash = hash & hash;
             }
+            return 'FP'
+                 + Math.abs(hash).toString(16).toUpperCase().padStart(8,'0')
+                 + '_W' + screen.width
+                 + '_C' + (navigator.hardwareConcurrency || 0)
+                 + '_D' + screen.colorDepth;
         }
 
-        // --- Fetch public IP (ipify — free, no auth) ---
-        var existingIp = new URLSearchParams(window.location.search).get('_ip');
-        if (existingIp) {
-            setFpParam(fp, existingIp);
-        } else {
-            fetch('https://api.ipify.org?format=json')
-                .then(function(r){ return r.json(); })
-                .then(function(d){ setFpParam(fp, d.ip || ''); })
-                .catch(function(){ setFpParam(fp, 'noip'); });
+        var fp = buildFP();
+        var params = new URLSearchParams(window.location.search);
+
+        if (params.get('_fp') !== fp) {
+            params.set('_fp', fp);
+            window.location.replace(window.location.pathname + '?' + params.toString());
         }
     })();
     </script>
-    """, height=0)
+    """, unsafe_allow_html=True)
 
 def persist_auth_in_url(code):
-    st.components.v1.html(f"""
+    st.markdown(f"""
     <script>
     (function() {{
         var params = new URLSearchParams(window.location.search);
-        params.set('_ac', '{code}');
-        window.history.replaceState({{}}, '', window.location.pathname + '?' + params.toString());
+        if (params.get('_ac') !== '{code}') {{
+            params.set('_ac', '{code}');
+            window.history.replaceState({{}}, '', window.location.pathname + '?' + params.toString());
+        }}
     }})();
     </script>
-    """, height=0)
+    """, unsafe_allow_html=True)
 
 
 # ============================================================
 # --- REGISTRY API CALLS ---
 # ============================================================
 def check_code_api(code, fp, ip=""):
-    """Verify code + device fingerprint + IP subnet with Google Sheet registry."""
-    if not fp or fp == "unknown-device" or not fp.startswith("FP"):
-        return {"success": False, "msg": "DEVICE FINGERPRINT MISSING — Please reload the page and wait 3 seconds before logging in"}
+    """Verify code + device fingerprint with Google Sheet registry."""
+    if not fp or not fp.startswith("FP"):
+        return {"success": False, "msg": "DEVICE NOT VERIFIED — Please refresh page"}
     try:
         payload = {
             "action": "check_code",
@@ -490,60 +475,6 @@ def show_login_gate(raw_fp, raw_ip):
     </div>
     """, unsafe_allow_html=True)
 
-    # FP not ready yet — auto reload after JS sets the param
-    if not raw_fp or raw_fp == "unknown-device" or not raw_fp.startswith("FP"):
-        st.components.v1.html("""
-        <script>
-        (function() {
-            // Build fingerprint immediately
-            var components = [
-                navigator.userAgent || '',
-                navigator.platform || '',
-                screen.width + 'x' + screen.height + 'x' + screen.colorDepth,
-                Intl.DateTimeFormat().resolvedOptions().timeZone || '',
-                navigator.language || '',
-                String(navigator.hardwareConcurrency || 0),
-                String(navigator.maxTouchPoints || 0),
-                String(new Date().getTimezoneOffset()),
-                navigator.vendor || '',
-                String(window.devicePixelRatio || 1),
-                navigator.oscpu || navigator.platform || ''
-            ];
-            var raw = components.join('||');
-            var hash = 5381;
-            for (var i = 0; i < raw.length; i++) {
-                hash = ((hash << 5) + hash) + raw.charCodeAt(i);
-                hash = hash & hash;
-            }
-            var fp = 'FP'
-                   + Math.abs(hash).toString(16).toUpperCase().padStart(8,'0')
-                   + '_W' + screen.width
-                   + '_C' + (navigator.hardwareConcurrency || 0)
-                   + '_D' + screen.colorDepth
-                   + '_P' + String(window.devicePixelRatio || 1).replace('.','');
-
-            function doReload(ip) {
-                var params = new URLSearchParams(window.location.search);
-                params.set('_fp', fp);
-                if (ip) params.set('_ip', ip);
-                // Hard reload with new params — Streamlit will re-run
-                window.location.href = window.location.pathname + '?' + params.toString();
-            }
-
-            // Try to get IP first, then reload
-            fetch('https://api.ipify.org?format=json')
-                .then(function(r){ return r.json(); })
-                .then(function(d){ doReload(d.ip || 'noip'); })
-                .catch(function(){ doReload('noip'); });
-        })();
-        </script>
-        <div style="font-family:'JetBrains Mono',monospace; color:#5a7aa0;
-                    text-align:center; padding:40px; font-size:12px;">
-            ⚙ Verifying device... please wait.
-        </div>
-        """, height=80)
-        st.stop()
-
     col1, col2, col3 = st.columns([1, 1.4, 1])
     with col2:
         st.markdown('<div class="login-card">', unsafe_allow_html=True)
@@ -555,8 +486,10 @@ def show_login_gate(raw_fp, raw_ip):
 
         if st.button("▶  ACTIVATE SESSION", key="login_btn"):
             if entered_code.strip():
+                # If FP still not ready, generate fallback from server-side info
+                fp_to_use = raw_fp if (raw_fp and raw_fp.startswith("FP")) else "FP_PENDING"
                 with st.spinner("Verifying device..."):
-                    result = check_code_api(entered_code.strip(), raw_fp, raw_ip)
+                    result = check_code_api(entered_code.strip(), fp_to_use, raw_ip)
                 if result.get("success"):
                     st.session_state["authenticated"] = True
                     st.session_state["operator_name"] = result.get("operator", "OPERATOR")
@@ -568,8 +501,14 @@ def show_login_gate(raw_fp, raw_ip):
             else:
                 st.markdown('<div class="login-error">⚠ Please enter your activation code.</div>', unsafe_allow_html=True)
 
+        # Show FP status
+        if raw_fp and raw_fp.startswith("FP"):
+            st.markdown(f'<div style="font-family:JetBrains Mono,monospace; font-size:9px; color:#1a3a70; margin-top:8px; text-align:center;">Device ID: {raw_fp[:20]}...</div>', unsafe_allow_html=True)
+        else:
+            st.markdown('<div style="font-family:JetBrains Mono,monospace; font-size:9px; color:#f0b429; margin-top:8px; text-align:center;">⚠ Refreshing device verification...</div>', unsafe_allow_html=True)
+
         st.markdown("""
-        <div style="margin-top:24px; font-family:'JetBrains Mono',monospace;
+        <div style="margin-top:16px; font-family:'JetBrains Mono',monospace;
              font-size:10px; color:#304560; text-align:center; line-height:1.8;">
             Each code is device-locked.<br>Contact admin for access.
         </div>
@@ -581,10 +520,12 @@ def show_login_gate(raw_fp, raw_ip):
 # ============================================================
 # --- MAIN AUTH FLOW ---
 # ============================================================
+# Step 1: Inject JS to set _fp in URL (st.markdown — not iframe)
 inject_fingerprint_js()
 
+# Step 2: Read params
 qp     = st.query_params
-raw_fp = qp.get("_fp", "unknown-device")
+raw_fp = qp.get("_fp", "")
 raw_ip = qp.get("_ip", "")
 
 if "authenticated" not in st.session_state or not st.session_state.get("authenticated"):
