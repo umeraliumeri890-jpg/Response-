@@ -14,7 +14,7 @@ import secrets
 # --- CONFIG ---
 # ============================================================
 URL = "http://51.77.216.195/crapi/lamix/viewstats"
-TOKEN = "e1KDh36NdVxcaFNmc4uBYGSXiXmFiItnZI2QQ4d0YVY="
+TOKEN = "X46ZeF6ViotShZl5WYRse1t3lYiKZ3CAdo6ZdINSh0o="
 TEAM_FILE = "Numbers_Export.csv"
 
 # Your existing Google Sheet (for OTP data)
