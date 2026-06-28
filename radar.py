@@ -21,7 +21,7 @@ TEAM_FILE = "Numbers_Export.csv"
 GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyTHahQPjxjbuZGcIWiN2AgY8lHJEDm7Pyi2QnpSJVV436Q65DOlOtmA2Ilux8UkVgl/exec"
 
 # New Registry Google Sheet (for codes + device lock)
-REGISTRY_URL = "https://script.google.com/macros/s/AKfycbwwuwcDxzOeut_Ujxil6yfZBTqA_zKKi6Zx8ZIqIln3ZNnAVUaDtvieAX3f0j_p_tPt/exec"
+REGISTRY_URL = "https://script.google.com/macros/s/AKfycbzo_Z_7CEVEeKA9fL-M3WXtznKrd19MyiXTksRlbSd1E8bNXh8nZF5HsLdedOjG2iVF/exec"
 
 # Admin Key — sirf tumhare paas
 ADMIN_KEY = "UTS_ADMIN_2024"
@@ -352,39 +352,62 @@ st.markdown("""
 # --- JAVASCRIPT: DEVICE FINGERPRINT ---
 # ============================================================
 def inject_fingerprint_js():
+    """
+    Strong device fingerprint using 9 browser signals.
+    Also fetches public IP via a free API and stores both in URL params.
+    unknown-device fingerprint = REJECTED at login.
+    """
     st.components.v1.html("""
     <script>
     (function() {
+        // --- Build device fingerprint ---
         var components = [
-            navigator.userAgent,
-            navigator.platform,
+            navigator.userAgent || '',
+            navigator.platform || '',
             screen.width + 'x' + screen.height + 'x' + screen.colorDepth,
-            Intl.DateTimeFormat().resolvedOptions().timeZone,
-            navigator.language,
-            navigator.hardwareConcurrency || 'nc',
-            navigator.maxTouchPoints || 0,
-            new Date().getTimezoneOffset(),
-            navigator.vendor || ''
+            Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+            navigator.language || '',
+            String(navigator.hardwareConcurrency || 0),
+            String(navigator.maxTouchPoints || 0),
+            String(new Date().getTimezoneOffset()),
+            navigator.vendor || '',
+            String(window.devicePixelRatio || 1),
+            navigator.oscpu || navigator.platform || ''
         ];
         var raw = components.join('||');
+
+        // djb2 hash — strong enough for fingerprinting
         var hash = 5381;
         for (var i = 0; i < raw.length; i++) {
             hash = ((hash << 5) + hash) + raw.charCodeAt(i);
             hash = hash & hash;
         }
-        var fp = Math.abs(hash).toString(16).toUpperCase().padStart(8,'0')
-               + '_' + screen.width
-               + '_' + (navigator.hardwareConcurrency || 0)
-               + '_' + screen.colorDepth;
+        var fp = 'FP'
+               + Math.abs(hash).toString(16).toUpperCase().padStart(8,'0')
+               + '_W' + screen.width
+               + '_C' + (navigator.hardwareConcurrency || 0)
+               + '_D' + screen.colorDepth
+               + '_P' + String(window.devicePixelRatio || 1).replace('.','');
 
-        var params = new URLSearchParams(window.location.search);
-        var existing = params.get('_fp');
-        var existingAc = params.get('_ac');
+        function setFpParam(fp, ip) {
+            var params = new URLSearchParams(window.location.search);
+            var changed = false;
+            if (params.get('_fp') !== fp) { params.set('_fp', fp); changed = true; }
+            if (ip && params.get('_ip') !== ip) { params.set('_ip', ip); changed = true; }
+            if (changed) {
+                window.history.replaceState({}, '', window.location.pathname + '?' + params.toString());
+            }
+        }
 
-        if (!existing || existing !== fp) {
-            params.set('_fp', fp);
-            var newUrl = window.location.pathname + '?' + params.toString();
-            window.history.replaceState({}, '', newUrl);
+        // --- Fetch public IP (ipify — free, no auth) ---
+        var existingIp = new URLSearchParams(window.location.search).get('_ip');
+        if (existingIp) {
+            setFpParam(fp, existingIp);
+        } else {
+            fetch('https://api.ipify.org?format=json')
+                .then(function(r){ return r.json(); })
+                .then(function(d){ setFpParam(fp, d.ip || ''); })
+                .catch(function(){ setFpParam(fp, 'noip'); });
         }
     })();
     </script>
@@ -396,8 +419,7 @@ def persist_auth_in_url(code):
     (function() {{
         var params = new URLSearchParams(window.location.search);
         params.set('_ac', '{code}');
-        var newUrl = window.location.pathname + '?' + params.toString();
-        window.history.replaceState({{}}, '', newUrl);
+        window.history.replaceState({{}}, '', window.location.pathname + '?' + params.toString());
     }})();
     </script>
     """, height=0)
@@ -406,10 +428,17 @@ def persist_auth_in_url(code):
 # ============================================================
 # --- REGISTRY API CALLS ---
 # ============================================================
-def check_code_api(code, fp):
-    """Verify code + device fingerprint with Google Sheet registry."""
+def check_code_api(code, fp, ip=""):
+    """Verify code + device fingerprint + IP subnet with Google Sheet registry."""
+    if not fp or fp == "unknown-device" or not fp.startswith("FP"):
+        return {"success": False, "msg": "DEVICE FINGERPRINT MISSING — Please reload the page and wait 3 seconds before logging in"}
     try:
-        payload = {"action": "check_code", "code": code.strip().upper(), "fp": fp}
+        payload = {
+            "action": "check_code",
+            "code": code.strip().upper(),
+            "fp": fp,
+            "ip": ip
+        }
         r = requests.post(REGISTRY_URL, data=json.dumps(payload),
                           headers={"Content-Type": "application/json"}, timeout=15)
         return r.json()
@@ -451,7 +480,7 @@ def list_codes_api():
 # ============================================================
 # --- LOGIN GATE ---
 # ============================================================
-def show_login_gate(raw_fp):
+def show_login_gate(raw_fp, raw_ip):
     st.markdown("""
     <div class="uts-header">
         <div class="uts-badge">UTS SYSTEMS</div>
@@ -460,6 +489,23 @@ def show_login_gate(raw_fp):
         <div class="uts-divider"></div>
     </div>
     """, unsafe_allow_html=True)
+
+    # FP not ready yet — show waiting screen
+    if not raw_fp or raw_fp == "unknown-device" or not raw_fp.startswith("FP"):
+        col1, col2, col3 = st.columns([1, 1.4, 1])
+        with col2:
+            st.markdown("""
+            <div class="login-card" style="text-align:center;">
+                <div style="font-size:36px; margin-bottom:16px;">🔄</div>
+                <div class="login-title">Initializing...</div>
+                <div class="login-sub">Device verification in progress</div>
+                <div style="font-family:'JetBrains Mono',monospace; font-size:11px;
+                     color:#5a7aa0; margin-top:20px;">
+                    Please wait 3 seconds then refresh the page.
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        st.stop()
 
     col1, col2, col3 = st.columns([1, 1.4, 1])
     with col2:
@@ -472,8 +518,8 @@ def show_login_gate(raw_fp):
 
         if st.button("▶  ACTIVATE SESSION", key="login_btn"):
             if entered_code.strip():
-                with st.spinner("Verifying..."):
-                    result = check_code_api(entered_code.strip(), raw_fp)
+                with st.spinner("Verifying device..."):
+                    result = check_code_api(entered_code.strip(), raw_fp, raw_ip)
                 if result.get("success"):
                     st.session_state["authenticated"] = True
                     st.session_state["operator_name"] = result.get("operator", "OPERATOR")
@@ -500,21 +546,22 @@ def show_login_gate(raw_fp):
 # ============================================================
 inject_fingerprint_js()
 
-qp = st.query_params
+qp     = st.query_params
 raw_fp = qp.get("_fp", "unknown-device")
+raw_ip = qp.get("_ip", "")
 
 if "authenticated" not in st.session_state or not st.session_state.get("authenticated"):
     saved_code = qp.get("_ac", "")
-    if saved_code:
-        result = check_code_api(saved_code, raw_fp)
+    if saved_code and raw_fp and raw_fp.startswith("FP"):
+        result = check_code_api(saved_code, raw_fp, raw_ip)
         if result.get("success"):
             st.session_state["authenticated"] = True
             st.session_state["operator_name"] = result.get("operator", "OPERATOR")
             st.session_state["auth_code"] = saved_code
         else:
-            show_login_gate(raw_fp)
+            show_login_gate(raw_fp, raw_ip)
     else:
-        show_login_gate(raw_fp)
+        show_login_gate(raw_fp, raw_ip)
 
 operator_name = st.session_state.get("operator_name", "OPERATOR")
 auth_code = st.session_state.get("auth_code", "")
