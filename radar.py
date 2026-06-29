@@ -3,15 +3,11 @@ import requests
 import pandas as pd
 import time
 from datetime import datetime, timedelta
-import pytz
 import phonenumbers
 from phonenumbers import geocoder
 import threading
 import json
 import hashlib
-
-# Pakistan Standard Time
-PKT = pytz.timezone("Asia/Karachi")
 
 # ============================================================
 # CONFIG
@@ -133,17 +129,27 @@ st.markdown("""
 
 # ============================================================
 # SERVER-SIDE DEVICE FINGERPRINT
+# No JS needed. Uses Streamlit's context headers.
+# Works 100% on Streamlit Cloud.
 # ============================================================
 def get_server_side_fp() -> str:
+    """
+    Build a stable device fingerprint from HTTP headers available in Streamlit.
+    User-Agent + Accept-Language + Accept-Encoding combined → SHA256 hash.
+    This is consistent per browser/device and does NOT change on refresh.
+    """
     try:
+        # Streamlit 1.31+ exposes request headers via st.context
         headers = st.context.headers
         ua      = headers.get("User-Agent", "unknown")
         lang    = headers.get("Accept-Language", "")
         enc     = headers.get("Accept-Encoding", "")
+        # Combine signals
         raw = f"{ua}|{lang}|{enc}"
         fp  = "FP" + hashlib.sha256(raw.encode()).hexdigest()[:20].upper()
         return fp
     except Exception:
+        # Fallback for older Streamlit versions
         try:
             import streamlit.web.server.websocket_headers as wh
             headers = wh.get_websocket_headers()
@@ -196,7 +202,7 @@ def list_codes_api() -> dict:
 
 
 # ============================================================
-# FINGERPRINT
+# GET FINGERPRINT — always available, no JS needed
 # ============================================================
 device_fp = get_server_side_fp()
 
@@ -206,6 +212,7 @@ device_fp = get_server_side_fp()
 # ============================================================
 if not st.session_state.get("authenticated"):
 
+    # Header
     st.markdown("""
     <div class="hdr">
         <div class="badge">UTS SYSTEMS</div>
@@ -258,7 +265,7 @@ if not st.session_state.get("authenticated"):
 
 
 # ============================================================
-# AUTHENTICATED — HELPER FUNCTIONS
+# AUTHENTICATED
 # ============================================================
 operator_name = st.session_state.get("operator_name", "OPERATOR")
 is_admin      = (operator_name == "Umer Ali")
@@ -309,83 +316,7 @@ def stream_to_google_sheet(raw_data):
     except: pass
 
 
-# ============================================================
-# LEADERBOARD HELPERS
-# ============================================================
-def get_leaderboard_period():
-    """
-    Returns (start_dt, end_dt) as timezone-aware Pakistan Time (PKT).
-    Cycle: 5:00 AM PKT → next day 5:00 AM PKT.
-    If current PKT time < 5AM → cycle started yesterday 5AM PKT.
-    If current PKT time >= 5AM → cycle started today 5AM PKT.
-    """
-    now_pkt = datetime.now(PKT)
-    today_5am_pkt = now_pkt.replace(hour=5, minute=0, second=0, microsecond=0)
-    if now_pkt < today_5am_pkt:
-        start = today_5am_pkt - timedelta(days=1)
-    else:
-        start = today_5am_pkt
-    end = start + timedelta(days=1)
-    return start, end  # timezone-aware PKT datetimes
-
-def build_leaderboard_from_sheet(sheet_records, team_data):
-    """
-    Uses only Google Sheet records.
-    Sheet timestamps are treated as UTC, converted to PKT for correct 5AM cycle filtering.
-    Counts OTPs per team member (only CSV-mapped members).
-    Returns sorted DataFrame: Rank, Member, OTPs, Last OTP (PKT)
-    """
-    start_pkt, end_pkt = get_leaderboard_period()
-
-    if not sheet_records:
-        return pd.DataFrame(columns=['Rank', 'Member', 'OTPs', 'Last OTP'])
-
-    try:
-        sf = pd.DataFrame(sheet_records)
-        if sf.empty:
-            return pd.DataFrame(columns=['Rank', 'Member', 'OTPs', 'Last OTP'])
-
-        # Parse times — assume sheet stores UTC (Google Sheets default)
-        sf['Time'] = pd.to_datetime(sf['Time'], errors='coerce', utc=True)
-        sf = sf.dropna(subset=['Time'])
-
-        # Convert to Pakistan Time
-        sf['Time_PKT'] = sf['Time'].dt.tz_convert(PKT)
-
-        # Filter to current 5AM→5AM PKT cycle
-        sf = sf[(sf['Time_PKT'] >= start_pkt) & (sf['Time_PKT'] < end_pkt)]
-
-        if sf.empty:
-            return pd.DataFrame(columns=['Rank', 'Member', 'OTPs', 'Last OTP'])
-
-        rows = []
-        for _, row in sf.iterrows():
-            member, _ = get_team_info(str(row.get('Number', '')), team_data)
-            if member:
-                rows.append({'Member': member, 'Time_PKT': row['Time_PKT']})
-
-        if not rows:
-            return pd.DataFrame(columns=['Rank', 'Member', 'OTPs', 'Last OTP'])
-
-        cdf = pd.DataFrame(rows)
-        grouped = cdf.groupby('Member').agg(
-            OTPs=('Time_PKT', 'count'),
-            Last_OTP=('Time_PKT', 'max')
-        ).reset_index()
-        grouped = grouped.sort_values('OTPs', ascending=False).reset_index(drop=True)
-        grouped.insert(0, 'Rank', range(1, len(grouped) + 1))
-        # Show last OTP in PKT
-        grouped['Last OTP'] = grouped['Last_OTP'].dt.strftime('%H:%M:%S PKT')
-        grouped = grouped[['Rank', 'Member', 'OTPs', 'Last OTP']]
-        return grouped
-
-    except Exception:
-        return pd.DataFrame(columns=['Rank', 'Member', 'OTPs', 'Last OTP'])
-
-
-# ============================================================
 # HEADER
-# ============================================================
 st.markdown(f"""
 <div class="hdr">
     <div class="badge">UTS SYSTEMS</div>
@@ -406,25 +337,19 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 
-# ============================================================
 # TABS
-# ============================================================
-tab_labels = ["📡  LIVE MONITORING", "📊  SHEET DATABASE", "🏆  LEADERBOARD"]
-if is_admin:
-    tab_labels.append("🔐  ADMIN PANEL")
-
+tab_labels = ["📡  LIVE MONITORING", "📊  SHEET DATABASE"]
+if is_admin: tab_labels.append("🔐  ADMIN PANEL")
 tab_objs = st.tabs(tab_labels)
-tab1, tab2, tab_lb = tab_objs[0], tab_objs[1], tab_objs[2]
-tab3 = tab_objs[3] if is_admin else None
+tab1, tab2 = tab_objs[0], tab_objs[1]
+tab3 = tab_objs[2] if is_admin else None
 
-# ---- TAB 1: LIVE MONITORING inputs ----
 with tab1:
     c1, c2 = st.columns([2, 1])
     with c1: target_cli = st.text_input("⚙ TARGET AGENT (CLI):", "MYOB").strip()
     with c2: msg_limit  = st.number_input("📡 STREAM BUFFER:", min_value=1, max_value=2000, value=500)
     placeholder = st.empty()
 
-# ---- TAB 2: SHEET DATABASE inputs ----
 with tab2:
     st.markdown('<div class="sl">REAL-TIME FILTERS — GOOGLE SHEET DATABASE</div>', unsafe_allow_html=True)
     f1, f2, f3 = st.columns(3)
@@ -433,23 +358,6 @@ with tab2:
     with f3: filter_msg = st.text_input("💬 Message:", "").strip()
     history_placeholder = st.empty()
 
-# ---- TAB LB: LEADERBOARD header + placeholder ----
-with tab_lb:
-    lb_period_start, lb_period_end = get_leaderboard_period()
-    st.markdown(f"""
-    <div class="opbar" style="margin-bottom:24px">
-        <div class="oi">📅 CYCLE START: <span>{lb_period_start.strftime('%d %b %Y — %H:%M PKT')}</span></div>
-        <div class="od">→</div>
-        <div class="oi">END: <span>{lb_period_end.strftime('%d %b %Y — %H:%M PKT')}</span></div>
-        <div class="od">|</div>
-        <div class="oi">RESETS: <span style="color:#f0b429">5:00 AM PKT Daily</span></div>
-        <div class="od">|</div>
-        <div class="oi">SOURCE: <span style="color:#00e676">Google Sheet</span></div>
-    </div>
-    """, unsafe_allow_html=True)
-    lb_placeholder = st.empty()
-
-# ---- TAB 3: ADMIN PANEL ----
 if is_admin and tab3:
     with tab3:
         st.markdown('<div class="sl">CODE GENERATION</div>', unsafe_allow_html=True)
@@ -521,12 +429,7 @@ if is_admin and tab3:
                                 st.error(f"❌ {r2.get('msg')}")
                 st.markdown("</div>", unsafe_allow_html=True)
 
-
-# ============================================================
-# SHARED CONFIG
-# ============================================================
 team_data = load_team_data()
-
 col_cfg = {
     "Time":        st.column_config.TextColumn("TIMESTAMP",     width="medium"),
     "App":         st.column_config.TextColumn("IDENT/CLI",     width="small"),
@@ -537,18 +440,13 @@ col_cfg = {
     "Range":       st.column_config.TextColumn("NETWORK RANGE", width="large"),
 }
 
-MEDAL  = {1: "🏆", 2: "🥈", 3: "🥉"}
-COLORS = {1: "#f0b429", 2: "#a8b4c8", 3: "#cd7f32"}
-
 
 # ============================================================
 # MAIN LOOP
 # ============================================================
 while True:
     try:
-        # ── LIVE API ──────────────────────────────────────────
         r = requests.get(URL, params={"token": TOKEN, "records": 500}, timeout=10)
-        df = pd.DataFrame()
         if r.status_code == 200:
             raw_json = r.json().get("data", [])
             df = pd.DataFrame(raw_json)
@@ -567,9 +465,9 @@ while True:
                     if len(tc) >= 2: t2n, t2c = tc.index[1], int(tc.iloc[1])
                     if len(tc) >= 3: t3n, t3c = tc.index[2], int(tc.iloc[2])
 
-                tr    = len(df)
-                uc    = df['cli'].nunique() if 'cli' in df.columns else 0
-                un    = df['num'].nunique() if 'num' in df.columns else 0
+                tr = len(df)
+                uc = df['cli'].nunique() if 'cli' in df.columns else 0
+                un = df['num'].nunique() if 'num' in df.columns else 0
                 df_tgt = df[df['cli'].str.contains(target_cli, case=False, na=False)].copy()
 
                 with placeholder.container():
@@ -620,8 +518,6 @@ while True:
                     st.dataframe(gd.style.apply(highlight_team, axis=1),
                                  use_container_width=True, height=700, hide_index=True, column_config=col_cfg)
 
-        # ── GOOGLE SHEET ──────────────────────────────────────
-        sd = None
         sr = requests.get(GOOGLE_SCRIPT_URL, timeout=10)
         if sr.status_code == 200:
             sd = sr.json()
@@ -645,118 +541,7 @@ while True:
                         st.dataframe(sdf.style.apply(highlight_team, axis=1),
                                      use_container_width=True, height=600, hide_index=True, column_config=col_cfg)
 
-        # ── LEADERBOARD (Google Sheet only) ───────────────────
-        lb_df = build_leaderboard_from_sheet(sd, team_data)
-
-        with lb_placeholder.container():
-            if lb_df.empty:
-                st.markdown("""
-                <div style="text-align:center;padding:80px 20px;
-                     font-family:'JetBrains Mono',monospace;color:#304560;font-size:13px;
-                     letter-spacing:2px">
-                    ⏳ NO TEAM OTPs RECORDED IN THIS CYCLE YET
-                </div>
-                """, unsafe_allow_html=True)
-            else:
-                max_otps = int(lb_df['OTPs'].max())
-                total_otps = int(lb_df['OTPs'].sum())
-
-                # Summary stats row
-                st.markdown(f"""
-                <div class="sr" style="grid-template-columns:repeat(3,1fr);margin-bottom:28px">
-                    <div class="sb">
-                        <div class="sv">{len(lb_df)}</div>
-                        <div class="sl2">Active Members</div>
-                    </div>
-                    <div class="sb">
-                        <div class="sv">{total_otps}</div>
-                        <div class="sl2">Total OTPs Today</div>
-                    </div>
-                    <div class="sb">
-                        <div class="sv">{max_otps}</div>
-                        <div class="sl2">Top Score</div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-
-                # Leaderboard cards
-                for _, row in lb_df.iterrows():
-                    rank      = int(row['Rank'])
-                    name      = str(row['Member'])
-                    otps      = int(row['OTPs'])
-                    last_otp  = str(row['Last OTP'])
-                    pct       = int((otps / max_otps) * 100) if max_otps else 0
-                    icon      = MEDAL.get(rank, f"#{rank}")
-                    color     = COLORS.get(rank, "#00aaff")
-                    rank_disp = f"#{rank}" if rank > 3 else ""
-
-                    st.markdown(f"""
-                    <div style="
-                        background:#0a1a35;
-                        border:1px solid #112244;
-                        border-left:4px solid {color};
-                        border-radius:4px;
-                        padding:18px 24px;
-                        margin-bottom:10px;
-                        position:relative;
-                        overflow:hidden;
-                    ">
-                        <!-- watermark rank number -->
-                        <div style="
-                            position:absolute;right:20px;top:50%;
-                            transform:translateY(-50%);
-                            font-size:54px;opacity:0.04;
-                            font-weight:900;color:{color};
-                            font-family:'Inter',sans-serif;
-                            pointer-events:none;
-                        ">{rank}</div>
-
-                        <!-- top row: icon + name + last otp -->
-                        <div style="display:flex;align-items:center;gap:14px;margin-bottom:12px">
-                            <div style="font-size:28px;min-width:36px;text-align:center">{icon if rank <= 3 else "🎯"}</div>
-                            <div style="flex:1">
-                                <div style="
-                                    font-size:19px;font-weight:800;color:#fff;
-                                    text-transform:uppercase;font-family:'Inter',sans-serif;
-                                    letter-spacing:0.5px;
-                                ">{name}</div>
-                                <div style="
-                                    font-family:'JetBrains Mono',monospace;
-                                    font-size:10px;color:#5a7aa0;
-                                    letter-spacing:1px;margin-top:2px;
-                                ">LAST OTP: <span style="color:#00aaff">{last_otp}</span></div>
-                            </div>
-                            <div style="text-align:right">
-                                <div style="
-                                    font-family:'JetBrains Mono',monospace;
-                                    font-size:26px;font-weight:800;color:{color};
-                                    line-height:1;
-                                ">{otps}</div>
-                                <div style="
-                                    font-family:'JetBrains Mono',monospace;
-                                    font-size:9px;color:#5a7aa0;letter-spacing:2px;
-                                ">OTPs</div>
-                            </div>
-                        </div>
-
-                        <!-- progress bar -->
-                        <div style="background:#071228;border-radius:2px;height:5px;overflow:hidden">
-                            <div style="
-                                width:{pct}%;height:100%;
-                                background:{color};border-radius:2px;
-                                box-shadow:0 0 8px {color};
-                            "></div>
-                        </div>
-                        <div style="
-                            font-family:'JetBrains Mono',monospace;
-                            font-size:9px;color:#304560;
-                            margin-top:4px;text-align:right;letter-spacing:1px;
-                        ">{pct}% of top</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
         time.sleep(15)
         st.rerun()
-
     except Exception:
         time.sleep(5)
