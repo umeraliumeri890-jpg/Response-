@@ -2,16 +2,15 @@ import streamlit as st
 import requests
 import pandas as pd
 import time
-from datetime import datetime, timedelta
-import pytz
+from datetime import datetime, timedelta, timezone
 import phonenumbers
 from phonenumbers import geocoder
 import threading
 import json
 import hashlib
 
-# Pakistan Standard Time
-PKT = pytz.timezone("Asia/Karachi")
+# Pakistan Standard Time = UTC+5
+PKT = timezone(timedelta(hours=5))
 
 # ============================================================
 # CONFIG
@@ -313,12 +312,6 @@ def stream_to_google_sheet(raw_data):
 # LEADERBOARD HELPERS
 # ============================================================
 def get_leaderboard_period():
-    """
-    Returns (start_dt, end_dt) as timezone-aware Pakistan Time (PKT).
-    Cycle: 5:00 AM PKT → next day 5:00 AM PKT.
-    If current PKT time < 5AM → cycle started yesterday 5AM PKT.
-    If current PKT time >= 5AM → cycle started today 5AM PKT.
-    """
     now_pkt = datetime.now(PKT)
     today_5am_pkt = now_pkt.replace(hour=5, minute=0, second=0, microsecond=0)
     if now_pkt < today_5am_pkt:
@@ -326,15 +319,9 @@ def get_leaderboard_period():
     else:
         start = today_5am_pkt
     end = start + timedelta(days=1)
-    return start, end  # timezone-aware PKT datetimes
+    return start, end
 
 def build_leaderboard_from_sheet(sheet_records, team_data):
-    """
-    Uses only Google Sheet records.
-    Sheet timestamps are treated as UTC, converted to PKT for correct 5AM cycle filtering.
-    Counts OTPs per team member (only CSV-mapped members).
-    Returns sorted DataFrame: Rank, Member, OTPs, Last OTP (PKT)
-    """
     start_pkt, end_pkt = get_leaderboard_period()
 
     if not sheet_records:
@@ -345,14 +332,11 @@ def build_leaderboard_from_sheet(sheet_records, team_data):
         if sf.empty:
             return pd.DataFrame(columns=['Rank', 'Member', 'OTPs', 'Last OTP'])
 
-        # Parse times — assume sheet stores UTC (Google Sheets default)
+        # Parse as UTC then convert to PKT (UTC+5)
         sf['Time'] = pd.to_datetime(sf['Time'], errors='coerce', utc=True)
         sf = sf.dropna(subset=['Time'])
-
-        # Convert to Pakistan Time
         sf['Time_PKT'] = sf['Time'].dt.tz_convert(PKT)
 
-        # Filter to current 5AM→5AM PKT cycle
         sf = sf[(sf['Time_PKT'] >= start_pkt) & (sf['Time_PKT'] < end_pkt)]
 
         if sf.empty:
@@ -374,7 +358,6 @@ def build_leaderboard_from_sheet(sheet_records, team_data):
         ).reset_index()
         grouped = grouped.sort_values('OTPs', ascending=False).reset_index(drop=True)
         grouped.insert(0, 'Rank', range(1, len(grouped) + 1))
-        # Show last OTP in PKT
         grouped['Last OTP'] = grouped['Last_OTP'].dt.strftime('%H:%M:%S PKT')
         grouped = grouped[['Rank', 'Member', 'OTPs', 'Last OTP']]
         return grouped
