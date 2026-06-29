@@ -104,17 +104,6 @@ st.markdown("""
     ::-webkit-scrollbar{width:4px;height:4px}
     ::-webkit-scrollbar-track{background:var(--bg)}
     ::-webkit-scrollbar-thumb{background:var(--ed);border-radius:2px}
-    /* ---- DATAFRAME DARK THEME ---- */
-    [data-testid="stDataFrame"] > div{background:var(--bg2) !important;border:1px solid var(--b1) !important;border-radius:4px !important}
-    [data-testid="stDataFrame"] iframe{background:var(--bg2) !important}
-    .dvn-scroller{background:var(--bg2) !important}
-    .dvn-underlay{background:var(--bg2) !important}
-    /* Glide-data-grid dark cells */
-    .stDataFrame [role="gridcell"]{background-color:var(--bg2) !important;color:var(--t1) !important;border-color:var(--b1) !important}
-    .stDataFrame [role="columnheader"]{background-color:var(--bg) !important;color:var(--t2) !important;border-color:var(--b1) !important;font-family:'JetBrains Mono',monospace !important;font-size:10px !important;letter-spacing:2px !important}
-    .stDataFrame [role="row"]:hover [role="gridcell"]{background-color:#0d2145 !important}
-    /* Force canvas-based dataframe dark */
-    canvas{filter:none !important}
     .stButton>button{background:var(--ed) !important;color:#fff !important;
         border:1px solid var(--e) !important;border-radius:3px !important;
         font-family:'JetBrains Mono',monospace !important;font-size:12px !important;
@@ -309,36 +298,9 @@ def get_team_info(num, team_data):
     return "", ""
 
 def highlight_team(row):
-    base = 'background-color:#071228; color:#c8deff;'
     if row.get('Team Member', '') != "":
-        return [base + 'color:#00aaff;font-weight:bold;border-right:3px solid #00aaff'] * len(row)
-    return [base] * len(row)
-
-def style_df(df):
-    return df.style.apply(highlight_team, axis=1).set_table_styles([
-        {'selector': 'thead th', 'props': [
-            ('background-color', '#040b1a'),
-            ('color', '#5a7aa0'),
-            ('font-family', 'JetBrains Mono, monospace'),
-            ('font-size', '10px'),
-            ('letter-spacing', '2px'),
-            ('border-bottom', '1px solid #112244'),
-        ]},
-        {'selector': 'tbody td', 'props': [
-            ('background-color', '#071228'),
-            ('color', '#c8deff'),
-            ('border-bottom', '1px solid #0d1e3a'),
-            ('font-family', 'JetBrains Mono, monospace'),
-            ('font-size', '12px'),
-        ]},
-        {'selector': 'tbody tr:hover td', 'props': [
-            ('background-color', '#0d2145'),
-        ]},
-        {'selector': '', 'props': [
-            ('border', '1px solid #112244'),
-            ('border-radius', '4px'),
-        ]},
-    ])
+        return ['background-color:rgba(0,170,255,.08);color:#00aaff;font-weight:bold;border-right:3px solid #00aaff'] * len(row)
+    return [''] * len(row)
 
 def stream_to_google_sheet(raw_data):
     try:
@@ -539,7 +501,7 @@ while True:
                         md['Time'] = pd.to_datetime(md['Time'])
                         md = md.sort_values('Time', ascending=False)
                         md['Time'] = md['Time'].dt.strftime('%Y-%m-%d %H:%M:%S')
-                        st.dataframe(style_df(md),
+                        st.dataframe(md.style.apply(highlight_team, axis=1),
                                      use_container_width=True, height=400, hide_index=True, column_config=col_cfg)
                     else:
                         st.caption("▸ No packets for current target agent.")
@@ -553,7 +515,7 @@ while True:
                     gd['Time'] = pd.to_datetime(gd['Time'])
                     gd = gd.sort_values('Time', ascending=False)
                     gd['Time'] = gd['Time'].dt.strftime('%Y-%m-%d %H:%M:%S')
-                    st.dataframe(style_df(gd),
+                    st.dataframe(gd.style.apply(highlight_team, axis=1),
                                  use_container_width=True, height=700, hide_index=True, column_config=col_cfg)
 
         sr = requests.get(GOOGLE_SCRIPT_URL, timeout=10)
@@ -576,7 +538,7 @@ while True:
                         except: pass
                         sdf[['Team Member', 'Range']] = sdf['Number'].apply(
                             lambda x: pd.Series(get_team_info(x, team_data)))
-                        st.dataframe(style_df(sdf),
+                        st.dataframe(sdf.style.apply(highlight_team, axis=1),
                                      use_container_width=True, height=600, hide_index=True, column_config=col_cfg)
 
         time.sleep(15)
