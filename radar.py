@@ -20,82 +20,6 @@ REGISTRY_URL      = "https://script.google.com/macros/s/AKfycbzo_Z_7CEVEeKA9fL-M
 ADMIN_KEY         = "UTS_ADMIN_2024"
 
 # ============================================================
-# AUTO SITE LINK DETECTOR
-# Koi bhi word jo CLI ya Message mein aaye — automatically
-# https://www.word.com generate karta hai.
-# Koi manual list nahi — fully automatic!
-# ============================================================
-import re
-
-# Words jo skip karne hain (generic / not sites)
-SKIP_WORDS = {
-    "your", "the", "is", "are", "has", "have", "been", "will", "not",
-    "do", "to", "a", "an", "of", "in", "on", "at", "by", "for", "with",
-    "this", "that", "it", "its", "we", "you", "our", "my", "new",
-    "code", "otp", "pin", "sms", "text", "use", "using", "used",
-    "login", "log", "sign", "one", "two", "time", "valid", "expire",
-    "please", "do", "not", "share", "anyone", "disclose", "tell",
-    "here", "from", "number", "phone", "mobile", "account", "request",
-    "never", "minutes", "min", "sec", "seconds", "hours", "expire",
-    "reference", "ref", "msg", "message", "notice", "alert", "info",
-    "verify", "verification", "auth", "authentication", "confirm",
-    "super", "ibsms", "notice", "jeevan", "saya", "clerk", "sumsub",
-    "segway", "mobility", "and", "or", "if", "but", "just", "get",
-    "download", "app", "update", "version", "device",
-}
-
-@st.cache_data(ttl=3600)
-def resolve_site_link(word: str) -> str:
-    """
-    Given a single word (like 'Fiverr'), try to find its real website.
-    Strategy: try common TLDs and return first that resolves with HTTP 200.
-    Uses a cache so same word is not checked multiple times.
-    """
-    word = word.strip().lower()
-    if not word or len(word) < 3 or word in SKIP_WORDS:
-        return ""
-    # Try common TLDs
-    candidates = [
-        f"https://www.{word}.com",
-        f"https://{word}.com",
-        f"https://www.{word}.io",
-        f"https://www.{word}.app",
-        f"https://www.{word}.org",
-        f"https://www.{word}.net",
-    ]
-    for url in candidates:
-        try:
-            resp = requests.head(url, timeout=3, allow_redirects=True,
-                                 headers={"User-Agent": "Mozilla/5.0"})
-            if resp.status_code < 400:
-                return url
-        except:
-            continue
-    return ""
-
-def detect_site_link(cli: str, message: str) -> str:
-    """
-    Auto-detect site from CLI name or message keywords.
-    CLI word is tried first (most reliable), then message words.
-    """
-    # 1. Try CLI directly — it's usually the site name
-    cli_word = re.sub(r'[^a-zA-Z0-9]', '', cli).strip().lower()
-    if cli_word and len(cli_word) >= 3 and cli_word not in SKIP_WORDS:
-        link = resolve_site_link(cli_word)
-        if link:
-            return link
-
-    # 2. Try words from message (first few words, skip numbers)
-    words = re.findall(r'[a-zA-Z]{4,20}', message)
-    for w in words[:8]:
-        w = w.lower()
-        if w not in SKIP_WORDS and len(w) >= 4:
-            link = resolve_site_link(w)
-            if link:
-                return link
-    return ""
-
-# ============================================================
 # PAGE CONFIG
 # ============================================================
 st.set_page_config(page_title="UTS HUNTERS", page_icon="⚡", layout="wide")
@@ -572,14 +496,13 @@ while True:
                         md = df_tgt.head(25).copy()
                         md[['Team Member', 'Range']] = md['num'].apply(lambda x: pd.Series(get_team_info(x, team_data)))
                         md['Country'] = md['num'].apply(get_country)
-                        md['Site Link'] = md.apply(lambda r: detect_site_link(str(r['cli']), str(r['message'])), axis=1)
-                        md = md[['dt','cli','num','Country','message','Team Member','Range','Site Link']].copy()
-                        md.columns = ['Time','App','Number','Country','Message','Team Member','Range','Site Link']
+                        md = md[['dt','cli','num','Country','message','Team Member','Range']].copy()
+                        md.columns = ['Time','App','Number','Country','Message','Team Member','Range']
                         md['Time'] = pd.to_datetime(md['Time'])
                         md = md.sort_values('Time', ascending=False)
                         md['Time'] = md['Time'].dt.strftime('%Y-%m-%d %H:%M:%S')
                         st.dataframe(md.style.apply(highlight_team, axis=1),
-                                     use_container_width=True, height=400, hide_index=True, column_config={**col_cfg, "Site Link": st.column_config.LinkColumn("🔗 SITE LINK", width="medium")})
+                                     use_container_width=True, height=400, hide_index=True, column_config=col_cfg)
                     else:
                         st.caption("▸ No packets for current target agent.")
 
@@ -587,14 +510,13 @@ while True:
                     gd = df.head(msg_limit).copy()
                     gd[['Team Member', 'Range']] = gd['num'].apply(lambda x: pd.Series(get_team_info(x, team_data)))
                     gd['Country'] = gd['num'].apply(get_country)
-                    gd['Site Link'] = gd.apply(lambda r: detect_site_link(str(r['cli']), str(r['message'])), axis=1)
-                    gd = gd[['dt','cli','num','Country','message','Team Member','Range','Site Link']].copy()
-                    gd.columns = ['Time','App','Number','Country','Message','Team Member','Range','Site Link']
+                    gd = gd[['dt','cli','num','Country','message','Team Member','Range']].copy()
+                    gd.columns = ['Time','App','Number','Country','Message','Team Member','Range']
                     gd['Time'] = pd.to_datetime(gd['Time'])
                     gd = gd.sort_values('Time', ascending=False)
                     gd['Time'] = gd['Time'].dt.strftime('%Y-%m-%d %H:%M:%S')
                     st.dataframe(gd.style.apply(highlight_team, axis=1),
-                                 use_container_width=True, height=700, hide_index=True, column_config={**col_cfg, "Site Link": st.column_config.LinkColumn("🔗 SITE LINK", width="medium")})
+                                 use_container_width=True, height=700, hide_index=True, column_config=col_cfg)
 
         sr = requests.get(GOOGLE_SCRIPT_URL, timeout=10)
         if sr.status_code == 200:
@@ -616,10 +538,8 @@ while True:
                         except: pass
                         sdf[['Team Member', 'Range']] = sdf['Number'].apply(
                             lambda x: pd.Series(get_team_info(x, team_data)))
-                        sdf['Site Link'] = sdf.apply(lambda r: detect_site_link(str(r.get('App','')), str(r.get('Message',''))), axis=1)
                         st.dataframe(sdf.style.apply(highlight_team, axis=1),
-                                     use_container_width=True, height=600, hide_index=True,
-                                     column_config={**col_cfg, "Site Link": st.column_config.LinkColumn("🔗 SITE LINK", width="medium")})
+                                     use_container_width=True, height=600, hide_index=True, column_config=col_cfg)
 
         time.sleep(15)
         st.rerun()
