@@ -332,10 +332,11 @@ def build_leaderboard_from_sheet(sheet_records, team_data):
         if sf.empty:
             return pd.DataFrame(columns=['Rank', 'Member', 'OTPs', 'Last OTP'])
 
-        # Parse as UTC then convert to PKT (UTC+5)
-        sf['Time'] = pd.to_datetime(sf['Time'], errors='coerce', utc=True)
+        # Sheet stores PKT time already — parse as naive then localize to PKT directly
+        sf['Time'] = pd.to_datetime(sf['Time'], errors='coerce')
         sf = sf.dropna(subset=['Time'])
-        sf['Time_PKT'] = sf['Time'].dt.tz_convert(PKT)
+        # Localize as PKT (sheet stores local Pakistan time, not UTC)
+        sf['Time_PKT'] = sf['Time'].dt.tz_localize(PKT, ambiguous='infer', nonexistent='shift_forward')
 
         sf = sf[(sf['Time_PKT'] >= start_pkt) & (sf['Time_PKT'] < end_pkt)]
 
