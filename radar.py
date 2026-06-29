@@ -312,7 +312,12 @@ def stream_to_google_sheet(raw_data):
 # LEADERBOARD HELPERS
 # ============================================================
 def get_leaderboard_period():
-    now_pkt = datetime.now(PKT)
+    """
+    PKT = UTC+5. Cycle: 5AM PKT → next day 5AM PKT.
+    Returns naive datetimes representing PKT (no tz object needed).
+    """
+    now_utc = datetime.utcnow()
+    now_pkt = now_utc + timedelta(hours=5)
     today_5am_pkt = now_pkt.replace(hour=5, minute=0, second=0, microsecond=0)
     if now_pkt < today_5am_pkt:
         start = today_5am_pkt - timedelta(days=1)
@@ -322,7 +327,15 @@ def get_leaderboard_period():
     return start, end
 
 def build_leaderboard_from_sheet(sheet_records, team_data):
+    """
+    Sheet mein Number column se CSV match karke member name nikalo.
+    stream_to_google_sheet UTC time save karta hai (live API UTC hota hai).
+    UTC+5 = PKT. Cycle start/end bhi PKT mein hain (naive).
+    """
     start_pkt, end_pkt = get_leaderboard_period()
+    # UTC window = PKT window - 5 hours
+    start_utc = start_pkt - timedelta(hours=5)
+    end_utc   = end_pkt   - timedelta(hours=5)
 
     if not sheet_records:
         return pd.DataFrame(columns=['Rank', 'Member', 'OTPs', 'Last OTP'])
@@ -332,22 +345,22 @@ def build_leaderboard_from_sheet(sheet_records, team_data):
         if sf.empty:
             return pd.DataFrame(columns=['Rank', 'Member', 'OTPs', 'Last OTP'])
 
-        # Sheet stores PKT time already — parse as naive then localize to PKT directly
         sf['Time'] = pd.to_datetime(sf['Time'], errors='coerce')
         sf = sf.dropna(subset=['Time'])
-        # Localize as PKT (sheet stores local Pakistan time, not UTC)
-        sf['Time_PKT'] = sf['Time'].dt.tz_localize(PKT, ambiguous='infer', nonexistent='shift_forward')
 
-        sf = sf[(sf['Time_PKT'] >= start_pkt) & (sf['Time_PKT'] < end_pkt)]
+        # Filter by UTC window
+        sf = sf[(sf['Time'] >= start_utc) & (sf['Time'] < end_utc)]
 
         if sf.empty:
             return pd.DataFrame(columns=['Rank', 'Member', 'OTPs', 'Last OTP'])
 
         rows = []
         for _, row in sf.iterrows():
+            # Number column → CSV match → member name
             member, _ = get_team_info(str(row.get('Number', '')), team_data)
             if member:
-                rows.append({'Member': member, 'Time_PKT': row['Time_PKT']})
+                pkt_time = row['Time'] + timedelta(hours=5)  # UTC → PKT
+                rows.append({'Member': member, 'Time_PKT': pkt_time})
 
         if not rows:
             return pd.DataFrame(columns=['Rank', 'Member', 'OTPs', 'Last OTP'])
@@ -428,7 +441,7 @@ with tab_lb:
         <div class="od">|</div>
         <div class="oi">RESETS: <span style="color:#f0b429">5:00 AM PKT Daily</span></div>
         <div class="od">|</div>
-        <div class="oi">SOURCE: <span style="color:#00e676">Google Sheet</span></div>
+        <div class="oi">SOURCE: <span style="color:#00e676">Google Sheet + CSV Match</span></div>
     </div>
     """, unsafe_allow_html=True)
     lb_placeholder = st.empty()
