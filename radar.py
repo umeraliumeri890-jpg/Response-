@@ -326,40 +326,35 @@ def get_leaderboard_period():
     end = start + timedelta(days=1)
     return start, end
 
-def build_leaderboard_from_sheet(sheet_records, team_data):
+def build_leaderboard_from_live(live_df, team_data):
     """
-    Sheet mein Number column se CSV match karke member name nikalo.
-    stream_to_google_sheet UTC time save karta hai (live API UTC hota hai).
-    UTC+5 = PKT. Cycle start/end bhi PKT mein hain (naive).
+    Live API DataFrame se leaderboard banao.
+    'dt' column UTC time, 'num' column se CSV match karke member name lo.
+    Cycle: 5AM PKT → next 5AM PKT  (UTC mein = 12AM UTC → next 12AM UTC)
     """
     start_pkt, end_pkt = get_leaderboard_period()
-    # UTC window = PKT window - 5 hours
     start_utc = start_pkt - timedelta(hours=5)
     end_utc   = end_pkt   - timedelta(hours=5)
 
-    if not sheet_records:
+    if live_df is None or live_df.empty:
         return pd.DataFrame(columns=['Rank', 'Member', 'OTPs', 'Last OTP'])
 
     try:
-        sf = pd.DataFrame(sheet_records)
-        if sf.empty:
-            return pd.DataFrame(columns=['Rank', 'Member', 'OTPs', 'Last OTP'])
+        df = live_df.copy()
+        df['dt'] = pd.to_datetime(df['dt'], errors='coerce')
+        df = df.dropna(subset=['dt'])
 
-        sf['Time'] = pd.to_datetime(sf['Time'], errors='coerce')
-        sf = sf.dropna(subset=['Time'])
+        # Filter to current day cycle (UTC window)
+        df = df[(df['dt'] >= start_utc) & (df['dt'] < end_utc)]
 
-        # Filter by UTC window
-        sf = sf[(sf['Time'] >= start_utc) & (sf['Time'] < end_utc)]
-
-        if sf.empty:
+        if df.empty:
             return pd.DataFrame(columns=['Rank', 'Member', 'OTPs', 'Last OTP'])
 
         rows = []
-        for _, row in sf.iterrows():
-            # Number column → CSV match → member name
-            member, _ = get_team_info(str(row.get('Number', '')), team_data)
+        for _, row in df.iterrows():
+            member, _ = get_team_info(str(row.get('num', '')), team_data)
             if member:
-                pkt_time = row['Time'] + timedelta(hours=5)  # UTC → PKT
+                pkt_time = row['dt'] + timedelta(hours=5)
                 rows.append({'Member': member, 'Time_PKT': pkt_time})
 
         if not rows:
@@ -642,27 +637,24 @@ while True:
                         st.dataframe(sdf.style.apply(highlight_team, axis=1),
                                      use_container_width=True, height=600, hide_index=True, column_config=col_cfg)
 
-        # ── LEADERBOARD (Google Sheet only) ───────────────────
-        lb_df = build_leaderboard_from_sheet(sd, team_data)
+        # ── LEADERBOARD (Live API se — same data jo already fetch ho chuka hai) ─
+        lb_df = build_leaderboard_from_live(df if not df.empty else None, team_data)
 
         with lb_placeholder.container():
+            now_pkt     = datetime.utcnow() + timedelta(hours=5)
+            s_pkt, e_pkt = get_leaderboard_period()
+            total_in_api = len(df) if not df.empty else 0
 
-            # DEBUG BLOCK — sheet ki raw times dekhne ke liye
-            if sd:
-                try:
-                    _dbg = pd.DataFrame(sd).head(3)
-                    if 'Time' in _dbg.columns:
-                        st.markdown(f"""
-                        <div style="background:#0a1a35;border:1px solid #f0b429;border-radius:4px;
-                             padding:12px 18px;margin-bottom:16px;font-family:'JetBrains Mono',monospace;font-size:11px">
-                            <span style="color:#f0b429;font-weight:700">🔍 DEBUG — Sheet raw times (first 3 rows):</span><br>
-                            {'<br>'.join([f"<span style='color:#00aaff'>{v}</span>" for v in _dbg['Time'].tolist()])}
-                            <br><span style="color:#5a7aa0">Current UTC: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}</span>
-                            <br><span style="color:#5a7aa0">Current PKT (+5): {(datetime.utcnow()+timedelta(hours=5)).strftime('%Y-%m-%d %H:%M:%S')}</span>
-                            <br><span style="color:#5a7aa0">Cycle filter (UTC): {(get_leaderboard_period()[0]-timedelta(hours=5)).strftime('%Y-%m-%d %H:%M:%S')} → {(get_leaderboard_period()[1]-timedelta(hours=5)).strftime('%Y-%m-%d %H:%M:%S')}</span>
-                        </div>
-                        """, unsafe_allow_html=True)
-                except: pass
+            # Debug info
+            st.markdown(f"""
+            <div style="background:#071228;border:1px solid #1a3a70;border-radius:4px;
+                 padding:10px 16px;margin-bottom:14px;font-family:'JetBrains Mono',monospace;font-size:10px;color:#5a7aa0">
+                ⏱ PKT Now: <span style="color:#00aaff">{now_pkt.strftime('%Y-%m-%d %H:%M:%S')}</span> &nbsp;|&nbsp;
+                Cycle: <span style="color:#00aaff">{s_pkt.strftime('%d %b %H:%M')} → {e_pkt.strftime('%d %b %H:%M')}</span> &nbsp;|&nbsp;
+                Live API records: <span style="color:#00e676">{total_in_api}</span> &nbsp;|&nbsp;
+                Leaderboard rows: <span style="color:#f0b429">{len(lb_df)}</span>
+            </div>
+            """, unsafe_allow_html=True)
             if lb_df.empty:
                 st.markdown("""
                 <div style="text-align:center;padding:80px 20px;
