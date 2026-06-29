@@ -646,6 +646,23 @@ while True:
         lb_df = build_leaderboard_from_sheet(sd, team_data)
 
         with lb_placeholder.container():
+
+            # DEBUG BLOCK — sheet ki raw times dekhne ke liye
+            if sd:
+                try:
+                    _dbg = pd.DataFrame(sd).head(3)
+                    if 'Time' in _dbg.columns:
+                        st.markdown(f"""
+                        <div style="background:#0a1a35;border:1px solid #f0b429;border-radius:4px;
+                             padding:12px 18px;margin-bottom:16px;font-family:'JetBrains Mono',monospace;font-size:11px">
+                            <span style="color:#f0b429;font-weight:700">🔍 DEBUG — Sheet raw times (first 3 rows):</span><br>
+                            {'<br>'.join([f"<span style='color:#00aaff'>{v}</span>" for v in _dbg['Time'].tolist()])}
+                            <br><span style="color:#5a7aa0">Current UTC: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}</span>
+                            <br><span style="color:#5a7aa0">Current PKT (+5): {(datetime.utcnow()+timedelta(hours=5)).strftime('%Y-%m-%d %H:%M:%S')}</span>
+                            <br><span style="color:#5a7aa0">Cycle filter (UTC): {(get_leaderboard_period()[0]-timedelta(hours=5)).strftime('%Y-%m-%d %H:%M:%S')} → {(get_leaderboard_period()[1]-timedelta(hours=5)).strftime('%Y-%m-%d %H:%M:%S')}</span>
+                        </div>
+                        """, unsafe_allow_html=True)
+                except: pass
             if lb_df.empty:
                 st.markdown("""
                 <div style="text-align:center;padding:80px 20px;
