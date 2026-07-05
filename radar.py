@@ -508,19 +508,43 @@ def compute_date_filter(date_range_str):
     return start, now
 
 
-def build_analytics_content(sdf, team_data, date_range_str, chart_type_str, sort_by_str):
-    """Build the full analytics dashboard from Google Sheet data."""
-    if sdf is None or sdf.empty:
-        analytics_placeholder.caption("▸ No data available for analytics. Waiting for Google Sheet records...")
-        return
+def build_analytics_content(sdf, team_data, date_range_str, chart_type_str, sort_by_str, live_df=None):
+    """Build the full analytics dashboard from Google Sheet data, with live API fallback."""
+    # Try sheet data first, then fall back to live API data
+    df = None
+    source_label = ""
 
-    df = sdf.copy()
-    # Parse time
-    try:
-        df['Time'] = pd.to_datetime(df['Time'], errors='coerce')
-        df = df.dropna(subset=['Time'])
-    except:
-        analytics_placeholder.caption("▸ Unable to parse timestamps in data.")
+    if sdf is not None and not sdf.empty:
+        df = sdf.copy()
+        source_label = "Google Sheet"
+        try:
+            df['Time'] = pd.to_datetime(df['Time'], errors='coerce')
+            df = df.dropna(subset=['Time'])
+        except:
+            df = None
+
+    if (df is None or df.empty) and live_df is not None and not live_df.empty:
+        df = live_df.copy()
+        source_label = "Live API"
+        try:
+            df['Time'] = pd.to_datetime(df['Time'], errors='coerce')
+            df = df.dropna(subset=['Time'])
+        except:
+            df = None
+
+    if df is None or df.empty:
+        with analytics_placeholder.container():
+            st.markdown("""
+            <div style="text-align:center;padding:60px 20px">
+                <div style="font-size:48px;margin-bottom:16px;opacity:0.3">📊</div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#5a7aa0;margin-bottom:8px">
+                    Waiting for data...
+                </div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#304560">
+                    Analytics will appear once OTP data is received from the API or Google Sheet.
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
         return
 
     # Date filter
@@ -528,23 +552,47 @@ def build_analytics_content(sdf, team_data, date_range_str, chart_type_str, sort
     df = df[(df['Time'] >= start_dt) & (df['Time'] <= end_dt)]
 
     if df.empty:
-        analytics_placeholder.caption(f"▸ No records in the selected period ({date_range_str}).")
+        with analytics_placeholder.container():
+            st.markdown(f"""
+            <div style="text-align:center;padding:40px 20px">
+                <div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#5a7aa0">
+                    No records in the selected period ({date_range_str}).
+                </div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#304560;margin-top:8px">
+                    Try selecting "All Time" or a different date range.
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
         return
 
-    # Enrich with team info
+    # Enrich with team info — show "Unassigned" for numbers without team mapping
     df[['Team Member', 'Range']] = df['Number'].apply(
         lambda x: pd.Series(get_team_info(x, team_data)))
+    df.loc[df['Team Member'].astype(str).str.strip() == '', 'Team Member'] = 'Unassigned'
+    df.loc[df['Range'].astype(str).str.strip() == '', 'Range'] = '—'
 
-    # Only rows with a team member
-    df_team = df[df['Team Member'].astype(str).str.strip() != ""].copy()
+    # All data including unassigned
+    df_all = df.copy()
+    # Team-mapped only (exclude Unassigned)
+    df_team = df[df['Team Member'] != 'Unassigned'].copy()
 
     with analytics_placeholder.container():
+        # ── DATA SOURCE BADGE ──
+        src_color = "#00e676" if source_label == "Live API" else "#00aaff"
+        st.markdown(f"""
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#304560;
+             margin-bottom:16px;text-align:right">
+            📡 Data Source: <span style="color:{src_color};font-weight:700">{source_label}</span>
+             · {len(df_all)} records · Updated {datetime.now().strftime('%H:%M:%S')}
+        </div>
+        """, unsafe_allow_html=True)
+
         # ── OVERVIEW METRICS ──
-        total_otps = len(df)
+        total_otps = len(df_all)
         total_team_otps = len(df_team)
-        unique_members = df_team['Team Member'].nunique() if not df_team.empty else 0
-        unique_apps = df['App'].nunique() if 'App' in df.columns else 0
-        unique_numbers = df['Number'].nunique() if 'Number' in df.columns else 0
+        unique_members = df_all['Team Member'].nunique()
+        unique_apps = df_all['App'].nunique() if 'App' in df_all.columns else 0
+        unique_numbers = df_all['Number'].nunique() if 'Number' in df_all.columns else 0
 
         st.markdown(f"""
         <div class="analytics-grid">
@@ -555,12 +603,12 @@ def build_analytics_content(sdf, team_data, date_range_str, chart_type_str, sort
         </div>
         """, unsafe_allow_html=True)
 
-        if df_team.empty:
-            st.caption("▸ No team-mapped data in this period. Assign numbers to team members in Numbers_Export.csv to see analytics.")
+        if df_all.empty:
+            st.caption("▸ No data available.")
             return
 
         # ── PER-MEMBER STATS TABLE ──
-        member_stats = df_team.groupby('Team Member').agg(
+        member_stats = df_all.groupby('Team Member').agg(
             Total_OTPs=('Number', 'count'),
             Unique_Numbers=('Number', 'nunique'),
             Unique_Apps=('App', 'nunique'),
@@ -647,8 +695,8 @@ def build_analytics_content(sdf, team_data, date_range_str, chart_type_str, sort
 
         elif chart_type_str == "Trend Line":
             # Trend line: OTPs over time per team member
-            df_team['TimeHour'] = df_team['Time'].dt.floor('H')
-            trend = df_team.groupby(['TimeHour', 'Team Member']).size().reset_index(name='OTPs')
+            df_all['TimeHour'] = df_all['Time'].dt.floor('H')
+            trend = df_all.groupby(['TimeHour', 'Team Member']).size().reset_index(name='OTPs')
             fig = go.Figure()
             for i, member in enumerate(trend['Team Member'].unique()):
                 md = trend[trend['Team Member'] == member]
@@ -672,7 +720,7 @@ def build_analytics_content(sdf, team_data, date_range_str, chart_type_str, sort
 
         elif chart_type_str == "Heatmap":
             # Heatmap: Team Member x App, value = OTP count
-            heat = df_team.groupby(['Team Member', 'App']).size().reset_index(name='OTPs')
+            heat = df_all.groupby(['Team Member', 'App']).size().reset_index(name='OTPs')
             heat_pivot = heat.pivot(index='Team Member', columns='App', values='OTPs').fillna(0)
             fig = go.Figure(data=go.Heatmap(
                 z=heat_pivot.values,
@@ -715,7 +763,7 @@ def build_analytics_content(sdf, team_data, date_range_str, chart_type_str, sort
 
         # ── APP DISTRIBUTION (bonus mini-chart) ──
         st.markdown('<div class="sl">🌐 OTP DISTRIBUTION BY APP/CLI</div>', unsafe_allow_html=True)
-        app_stats = df.groupby('App').size().reset_index(name='OTPs').sort_values('OTPs', ascending=False).head(10)
+        app_stats = df_all.groupby('App').size().reset_index(name='OTPs').sort_values('OTPs', ascending=False).head(10)
         fig2 = go.Figure(data=[
             go.Bar(
                 x=app_stats['OTPs'],
@@ -824,32 +872,48 @@ while True:
                                  use_container_width=True, height=700, hide_index=True, column_config=col_cfg)
 
         sr = requests.get(GOOGLE_SCRIPT_URL, timeout=10)
+        sheet_sdf = None
         if sr.status_code == 200:
             sd = sr.json()
             if sd:
-                sdf = pd.DataFrame(sd)
+                sheet_sdf = pd.DataFrame(sd)
 
-                # ── ANALYTICS TAB ──
-                build_analytics_content(sdf, team_data, date_range, chart_type, sort_by)
+        # ── Build live_df from current API data for analytics fallback ──
+        live_df_analytics = None
+        try:
+            if r.status_code == 200 and not df.empty:
+                live_df_analytics = pd.DataFrame({
+                    'Time':  pd.to_datetime(df['dt']),
+                    'App':   df['cli'],
+                    'Number': df['num'].astype(str),
+                    'Message': df['message'].astype(str),
+                })
+        except:
+            pass
 
-                # ── SHEET DATABASE TAB ──
-                if filter_cli: sdf = sdf[sdf['App'].astype(str).str.contains(filter_cli, case=False, na=False)]
-                if filter_num: sdf = sdf[sdf['Number'].astype(str).str.contains(filter_num, na=False)]
-                if filter_msg: sdf = sdf[sdf['Message'].astype(str).str.contains(filter_msg, case=False, na=False)]
-                with history_placeholder.container():
-                    st.markdown(f'<div style="font-family:JetBrains Mono,monospace;font-size:11px;'
-                                f'color:#5a7aa0;margin-bottom:12px"><span style="color:#00aaff;font-weight:700">'
-                                f'{len(sdf)}</span> permanent records</div>', unsafe_allow_html=True)
-                    if not sdf.empty:
-                        try:
-                            sdf['Time'] = pd.to_datetime(sdf['Time'])
-                            sdf = sdf.sort_values('Time', ascending=False)
-                            sdf['Time'] = sdf['Time'].dt.strftime('%Y-%m-%d %H:%M:%S')
-                        except: pass
-                        sdf[['Team Member', 'Range']] = sdf['Number'].apply(
-                            lambda x: pd.Series(get_team_info(x, team_data)))
-                        st.dataframe(sdf.style.apply(highlight_team, axis=1),
-                                     use_container_width=True, height=600, hide_index=True, column_config=col_cfg)
+        # ── ANALYTICS TAB ──
+        build_analytics_content(sheet_sdf, team_data, date_range, chart_type, sort_by, live_df=live_df_analytics)
+
+        # ── SHEET DATABASE TAB ──
+        if sheet_sdf is not None:
+            sdf = sheet_sdf
+            if filter_cli: sdf = sdf[sdf['App'].astype(str).str.contains(filter_cli, case=False, na=False)]
+            if filter_num: sdf = sdf[sdf['Number'].astype(str).str.contains(filter_num, na=False)]
+            if filter_msg: sdf = sdf[sdf['Message'].astype(str).str.contains(filter_msg, case=False, na=False)]
+            with history_placeholder.container():
+                st.markdown(f'<div style="font-family:JetBrains Mono,monospace;font-size:11px;'
+                            f'color:#5a7aa0;margin-bottom:12px"><span style="color:#00aaff;font-weight:700">'
+                            f'{len(sdf)}</span> permanent records</div>', unsafe_allow_html=True)
+                if not sdf.empty:
+                    try:
+                        sdf['Time'] = pd.to_datetime(sdf['Time'])
+                        sdf = sdf.sort_values('Time', ascending=False)
+                        sdf['Time'] = sdf['Time'].dt.strftime('%Y-%m-%d %H:%M:%S')
+                    except: pass
+                    sdf[['Team Member', 'Range']] = sdf['Number'].apply(
+                        lambda x: pd.Series(get_team_info(x, team_data)))
+                    st.dataframe(sdf.style.apply(highlight_team, axis=1),
+                                 use_container_width=True, height=600, hide_index=True, column_config=col_cfg)
 
         time.sleep(15)
         st.rerun()
