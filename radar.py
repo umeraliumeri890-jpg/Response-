@@ -3,9 +3,6 @@ import requests
 import pandas as pd
 import time
 from datetime import datetime, timedelta
-import phonenumbers
-from phonenumbers import geocoder
-import threading
 import json
 import hashlib
 from streamlit_autorefresh import st_autorefresh
@@ -248,17 +245,27 @@ if not st.session_state.get("authenticated"):
 operator_name = st.session_state.get("operator_name", "OPERATOR")
 is_admin      = (operator_name == "Umer Ali")
 
+# PERMANENT FIX: Segmentation Fault se bachne ke liye standard lookup lagaya (No Binary/C Extensions)
 def get_country(num):
-    try:
-        parsed = phonenumbers.parse("+" + str(num).strip())
-        return geocoder.description_for_number(parsed, "en")
-    except:
-        return "Global"
+    s = str(num).strip().lstrip('+')
+    if not s: return "Global"
+    
+    # Common International Routing prefixes mapping
+    prefixes = {
+        '1': 'USA/Canada', '44': 'United Kingdom', '61': 'Australia', '64': 'New Zealand',
+        '92': 'Pakistan', '91': 'India', '971': 'UAE', '966': 'Saudi Arabia', '27': 'South Africa',
+        '33': 'France', '49': 'Germany', '31': 'Netherlands', '39': 'Italy', '34': 'Spain',
+        '65': 'Singapore', '60': 'Malaysia', '62': 'Indonesia', '66': 'Thailand', '84': 'Vietnam',
+        '852': 'Hong Kong', '81': 'Japan', '82': 'South Korea', '353': 'Ireland', '41': 'Switzerland'
+    }
+    for length in [3, 2, 1]:
+        if len(s) >= length and s[:length] in prefixes:
+            return prefixes[s[:length]]
+    return "Global"
 
 @st.cache_data(ttl=300)
 def load_team_data():
     try:
-        # DtypeWarning handle karne ke liye dtype=str lagaya
         df = pd.read_csv(TEAM_FILE, dtype=str)
         df['Phone Number'] = df['Phone Number'].astype(str).str.split('.').str[0].str.strip()
         df['Status']       = df['Status'].fillna('')
@@ -280,13 +287,12 @@ def highlight_team(row):
         return ['background-color:rgba(0,170,255,.08);color:#00aaff;font-weight:bold;border-right:3px solid #00aaff'] * len(row)
     return [''] * len(row)
 
-# SegFault se bachne ke liye threading ki jagah safe sequential call sync kiya
 def stream_to_google_sheet_safe(raw_data):
     try:
         bg = pd.DataFrame(raw_data)
         if bg.empty: return
         bg['dt'] = pd.to_datetime(bg['dt']).dt.strftime('%Y-%m-%d %H:%M:%S')
-        for _, row in bg.head(5).iterrows(): # Buffer optimized to top 5 to prevent timeouts
+        for _, row in bg.head(5).iterrows(): 
             requests.post(GOOGLE_SCRIPT_URL,
                 data=json.dumps({"Time": row['dt'], "App": row['cli'],
                     "Number": str(row['num']), "Country": get_country(row['num']),
@@ -373,7 +379,6 @@ if is_admin and tab3:
                     if v == "DEACTIVATED": return "color:#ff3d71;font-weight:bold"
                     return "color:#f0b429"
                 
-                # use_container_width='stretch' update kiya naye streamlit framework ke mutabik
                 st.dataframe(cdf.style.applymap(cs, subset=["status"]),
                     width='stretch', hide_index=True,
                     column_config={
@@ -421,7 +426,6 @@ try:
         raw_json = r.json().get("data", [])
         df = pd.DataFrame(raw_json)
         if not df.empty:
-            # Threading hata kar data sync execute kiya takay segmentation fault se bacha ja sakay
             stream_to_google_sheet_safe(raw_json)
             df['dt'] = pd.to_datetime(df['dt'])
             now   = datetime.now()
