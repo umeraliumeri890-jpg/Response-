@@ -5,12 +5,11 @@ import time
 from datetime import datetime, timedelta
 import phonenumbers
 from phonenumbers import geocoder
-import threading
 import json
 import hashlib
 
 # ============================================================
-# CONFIG (Google Sheet URLs completely removed)
+# CONFIG
 # ============================================================
 URL               = "http://51.77.216.195/crapi/lamix/viewstats"
 TOKEN             = "aXZ0gVZXgoCAc2loX4iFSl9mVWB8hVdgdFVhW3SVZXM="
@@ -233,43 +232,76 @@ if not st.session_state.get("authenticated"):
     st.stop()
 
 # ============================================================
-# HELPER DATA FUNCTIONS
+# CACHED HIGH-PERFORMANCE DATA LOADING
 # ============================================================
 operator_name = st.session_state.get("operator_name", "OPERATOR")
 is_admin      = (operator_name == "Umer Ali")
 
-def get_country(num):
+@st.cache_data(ttl=60)
+def get_country_cached(num_str):
     try:
-        parsed = phonenumbers.parse("+" + str(num).strip())
+        parsed = phonenumbers.parse("+" + num_str)
         return geocoder.description_for_number(parsed, "en")
     except:
         return "Global"
 
 @st.cache_data(ttl=300)
-def load_team_data():
+def load_team_dataframe():
     try:
-        df = pd.read_csv(TEAM_FILE)
+        # Dtype Warning ko fix karne ke liye low_memory=False lagaya
+        df = pd.read_csv(TEAM_FILE, low_memory=False)
         df['Phone Number'] = df['Phone Number'].astype(str).str.split('.').str[0].str.strip()
         df['Status']       = df['Status'].fillna('')
         df['MemberName']   = df['Status'].str.replace('Allocated: ', '', case=False, regex=False).str.strip()
+        df = df[df['Phone Number'] != '']
         return df.set_index('Phone Number')[['Range', 'MemberName']].to_dict('index')
     except:
         return {}
 
-def get_team_info(num, team_data):
-    n = str(num).split('.')[0].strip()
-    if n in team_data:
-        name = team_data[n]['MemberName']
-        if name in ["UTS_Umer1", "UTS_Khadija"]: return "", ""
-        return name, team_data[n]['Range']
-    return "", ""
+team_data = load_team_dataframe()
+
+# Ultra-fast Dictionary lookup loop vectorization se bachne ke liye
+def process_dataframe_fast(input_df, limit_size=500):
+    if input_df.empty:
+        return pd.DataFrame()
+    
+    working_df = input_df.head(limit_size).copy()
+    working_df['num_clean'] = working_df['num'].astype(str).str.split('.').str[0].str.strip()
+    
+    team_members = []
+    ranges = []
+    countries = []
+    
+    # Fast native zip loop (is se memory segmentation fault bilkul ruk jayega)
+    for num in working_df['num_clean']:
+        countries.append(get_country_cached(num))
+        if num in team_data:
+            name = team_data[num]['MemberName']
+            if name in ["UTS_Umer1", "UTS_Khadija"]:
+                team_members.append("")
+                ranges.append("")
+            else:
+                team_members.append(name)
+                ranges.append(team_data[num]['Range'])
+        else:
+            team_members.append("")
+            ranges.append("")
+            
+    working_df['Team Member'] = team_members
+    working_df['Range'] = ranges
+    working_df['Country'] = countries
+    
+    # Format and clean columns
+    working_df = working_df[['dt', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
+    working_df.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
+    working_df['Time'] = pd.to_datetime(working_df['Time']).dt.strftime('%Y-%m-%d %H:%M:%S')
+    return working_df
 
 def highlight_team(row):
     if row.get('Team Member', '') != "":
         return ['background-color:rgba(0,170,255,.08);color:#00aaff;font-weight:bold;border-right:3px solid #00aaff'] * len(row)
     return [''] * len(row)
 
-team_data = load_team_data()
 col_cfg = {
     "Time":        st.column_config.TextColumn("TIMESTAMP",     width="medium"),
     "App":         st.column_config.TextColumn("IDENT/CLI",     width="small"),
@@ -302,17 +334,15 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# Google sheet tab completely removed, clean tabs left
 tab_labels = ["📡  LIVE MONITORING"]
 if is_admin: tab_labels.append("🔐  ADMIN PANEL")
 tab_objs = st.tabs(tab_labels)
 tab1 = tab_objs[0]
 tab3 = tab_objs[1] if is_admin else None
 
-# Fetch global variables smoothly from API
 raw_json = []
 try:
-    r = requests.get(URL, params={"token": TOKEN, "records": 500}, timeout=8)
+    r = requests.get(URL, params={"token": TOKEN, "records": 400}, timeout=6)
     if r.status_code == 200:
         raw_json = r.json().get("data", [])
 except: pass
@@ -322,7 +352,7 @@ df = pd.DataFrame(raw_json)
 with tab1:
     c1, c2 = st.columns([2, 1])
     with c1: target_cli = st.text_input("⚙ TARGET AGENT (CLI):", "MYOB", key="target_cli_input").strip()
-    with c2: msg_limit  = st.number_input("📡 STREAM BUFFER:", min_value=1, max_value=2000, value=500, key="buffer_input")
+    with c2: msg_limit  = st.number_input("📡 STREAM BUFFER:", min_value=1, max_value=1000, value=300, key="buffer_input")
     
     if not df.empty:
         df['dt'] = pd.to_datetime(df['dt'])
@@ -341,8 +371,7 @@ with tab1:
         tr = len(df)
         uc = df['cli'].nunique() if 'cli' in df.columns else 0
         un = df['num'].nunique() if 'num' in df.columns else 0
-        df_tgt = df[df['cli'].str.contains(target_cli, case=False, na=False)].copy()
-
+        
         st.markdown(f"""
         <div class="sr">
             <div class="sb"><div class="sv">{tr}</div><div class="sl2">Total Records</div></div>
@@ -363,30 +392,21 @@ with tab1:
         </div>
         """, unsafe_allow_html=True)
 
+        # Optimization: Target Stream logic ko optimize kiya
+        df_tgt = df[df['cli'].str.contains(target_cli, case=False, na=False)].copy()
+        
         st.markdown(f'<div class="sl">LIVE TARGET TRACKER — AGENT: {target_cli.upper()}</div>', unsafe_allow_html=True)
         if not df_tgt.empty:
-            md = df_tgt.head(25).copy()
-            md[['Team Member', 'Range']] = md['num'].apply(lambda x: pd.Series(get_team_info(x, team_data)))
-            md['Country'] = md['num'].apply(get_country)
-            md = md[['dt','cli','num','Country','message','Team Member','Range']].copy()
-            md.columns = ['Time','App','Number','Country','Message','Team Member','Range']
-            md['Time'] = pd.to_datetime(md['Time'])
-            md = md.sort_values('Time', ascending=False)
-            md['Time'] = md['Time'].dt.strftime('%Y-%m-%d %H:%M:%S')
-            st.dataframe(md.style.apply(highlight_team, axis=1), use_container_width=True, height=350, hide_index=True, column_config=col_cfg)
+            md = process_dataframe_fast(df_tgt, limit_size=25)
+            if not md.empty:
+                st.dataframe(md.style.apply(highlight_team, axis=1), use_container_width=True, height=280, hide_index=True, column_config=col_cfg)
         else:
             st.caption("▸ No packets for current target agent.")
 
         st.markdown('<div class="sl">GLOBAL LIVE NETWORK STREAM</div>', unsafe_allow_html=True)
-        gd = df.head(msg_limit).copy()
-        gd[['Team Member', 'Range']] = gd['num'].apply(lambda x: pd.Series(get_team_info(x, team_data)))
-        gd['Country'] = gd['num'].apply(get_country)
-        gd = gd[['dt','cli','num','Country','message','Team Member','Range']].copy()
-        gd.columns = ['Time','App','Number','Country','Message','Team Member','Range']
-        gd['Time'] = pd.to_datetime(gd['Time'])
-        gd = gd.sort_values('Time', ascending=False)
-        gd['Time'] = gd['Time'].dt.strftime('%Y-%m-%d %H:%M:%S')
-        st.dataframe(gd.style.apply(highlight_team, axis=1), use_container_width=True, height=500, hide_index=True, column_config=col_cfg)
+        gd = process_dataframe_fast(df, limit_size=int(msg_limit))
+        if not gd.empty:
+            st.dataframe(gd.style.apply(highlight_team, axis=1), use_container_width=True, height=500, hide_index=True, column_config=col_cfg)
     else:
         st.warning("No live data streams found at this moment.")
 
@@ -453,7 +473,7 @@ if is_admin and tab3:
         st.markdown("</div>", unsafe_allow_html=True)
 
 # ============================================================
-# AUTOMATIC 15-SECOND REFRESH
+# AUTOMATIC REFRESH CYCLE
 # ============================================================
 time.sleep(15)
 st.rerun()
