@@ -20,9 +20,19 @@ REGISTRY_URL      = "https://script.google.com/macros/s/AKfycbzo_Z_7CEVEeKA9fL-M
 ADMIN_KEY         = "UTS_ADMIN_2024"
 
 # ============================================================
+# SESSION STATE INITIALIZATION
+# ============================================================
+if "authenticated" not in st.session_state:
+    st.session_state["authenticated"] = False
+if "operator_name" not in st.session_state:
+    st.session_state["operator_name"] = "OPERATOR"
+if "codes_list" not in st.session_state:
+    st.session_state["codes_list"] = None
+
+# ============================================================
 # PAGE CONFIG
 # ============================================================
-st.set_page_config(page_title="UTS HUNTERS", page_icon="\u26a1", layout="wide")
+st.set_page_config(page_title="UTS HUNTERS", page_icon="⚡", layout="wide")
 
 # ============================================================
 # CSS — COMPLETE REDESIGN: CYBERPUNK COMMAND CENTER
@@ -222,7 +232,7 @@ st.markdown("""
         color:var(--neon);
     }
     .lb-count::before {
-        content:"\u26a1 "; color:var(--accent);
+        content:"⚡ "; color:var(--accent);
     }
 
     /* === INPUTS === */
@@ -481,7 +491,7 @@ if not st.session_state.get("authenticated"):
     st.markdown("""
     <div class="hdr">
         <div class="badge">UTS SYSTEMS</div>
-        <div class="title">\u26a1 UTS <span>HUNTERS</span> \u26a1</div>
+        <div class="title">⚡ UTS <span>HUNTERS</span> ⚡</div>
         <div class="sub">> Authorized Access Only</div>
     </div>
     """, unsafe_allow_html=True)
@@ -490,14 +500,14 @@ if not st.session_state.get("authenticated"):
     with col2:
         st.markdown('<div class="login-card">', unsafe_allow_html=True)
         st.markdown("""
-        <div class="login-icon">\u26a1</div>
+        <div class="login-icon">⚡</div>
         <div class="login-title">UTS HUNTERS</div>
         <div class="login-sub">Enter Activation Code</div>
         """, unsafe_allow_html=True)
 
-        entered_code = st.text_input("\U0001f511 ACTIVATION CODE:", placeholder="UTS-XXXXXXXXXXXX", key="login_code")
+        entered_code = st.text_input("🔑 ACTIVATION CODE:", placeholder="UTS-XXXXXXXXXXXX", key="login_code")
 
-        if st.button("\u25b6  ACTIVATE SESSION", key="login_btn"):
+        if st.button("▶  ACTIVATE SESSION", key="login_btn"):
             if entered_code.strip():
                 with st.spinner("Verifying..."):
                     result = check_code_api(entered_code.strip(), device_fp)
@@ -508,15 +518,15 @@ if not st.session_state.get("authenticated"):
                     st.rerun()
                 else:
                     msg = result.get("msg", "UNKNOWN ERROR")
-                    st.markdown(f'<div class="login-error">\u26d4 ACCESS DENIED \u2014 {msg}</div>',
+                    st.markdown(f'<div class="login-error">⛔ ACCESS DENIED — {msg}</div>',
                                 unsafe_allow_html=True)
             else:
-                st.markdown('<div class="login-error">\u26a0 Enter your activation code.</div>',
+                st.markdown('<div class="login-error">⚠️ Enter your activation code.</div>',
                             unsafe_allow_html=True)
 
         st.markdown(f"""
         <div class="login-footer">
-            \U0001f512 Device ID: {device_fp[:20]}...<br>
+            🔒 Device ID: {device_fp[:20]}...<br>
             <span>Each code is device-locked. Contact admin for access.</span>
         </div>
         """, unsafe_allow_html=True)
@@ -583,15 +593,15 @@ def stream_to_google_sheet(raw_data):
 st.markdown(f"""
 <div class="hdr">
     <div class="badge">UTS SYSTEMS</div>
-    <div class="title">\u26a1 UTS <span>HUNTERS</span> \u26a1</div>
+    <div class="title">⚡ UTS <span>HUNTERS</span> ⚡</div>
     <div class="sub">> Database Integrated Control Panel</div>
 </div>
 <div class="opbar">
     <div class="op-item"><span class="pulse-dot"></span><span>LIVE</span></div>
     <div class="op-item">OPERATOR: <span>{operator_name.upper()}</span></div>
     <div class="op-item">SESSION: <span>{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</span></div>
-    <div class="op-item">STATUS: <span style="color:#00ff88">\u2713 AUTHORIZED</span></div>
-    {"<div class='op-item'><span style='color:#ffd700'>\U0001f451 ADMIN MODE</span></div>" if is_admin else ""}
+    <div class="op-item">STATUS: <span style="color:#00ff88">✓ AUTHORIZED</span></div>
+    {"<div class='op-item'><span style='color:#ffd700'>👑 ADMIN MODE</span></div>" if is_admin else ""}
 </div>
 """, unsafe_allow_html=True)
 
@@ -599,53 +609,53 @@ st.markdown(f"""
 # ============================================================
 # TABS
 # ============================================================
-tab_labels = ["\U0001f4e1  LIVE MONITORING", "\U0001f4ca  SHEET DATABASE"]
-if is_admin: tab_labels.append("\U0001f510  ADMIN PANEL")
+tab_labels = ["📡  LIVE MONITORING", "📊  SHEET DATABASE"]
+if is_admin: tab_labels.append("🔐  ADMIN PANEL")
 tab_objs = st.tabs(tab_labels)
 tab1, tab2 = tab_objs[0], tab_objs[1]
 tab3 = tab_objs[2] if is_admin else None
 
 with tab1:
     c1, c2 = st.columns([2, 1])
-    with c1: target_cli = st.text_input("\u2699 TARGET AGENT (CLI):", "MYOB").strip()
-    with c2: msg_limit  = st.number_input("\U0001f4e1 STREAM BUFFER:", min_value=1, max_value=2000, value=500)
+    with c1: target_cli = st.text_input("⚙ TARGET AGENT (CLI):", "MYOB").strip()
+    with c2: msg_limit  = st.number_input("📡 STREAM BUFFER:", min_value=1, max_value=2000, value=500)
     placeholder = st.empty()
 
 with tab2:
-    st.markdown('<div class="sl">REAL-TIME FILTERS \u2014 GOOGLE SHEET DATABASE</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sl">REAL-TIME FILTERS — GOOGLE SHEET DATABASE</div>', unsafe_allow_html=True)
     f1, f2, f3 = st.columns(3)
-    with f1: filter_cli = st.text_input("\U0001f50d App/CLI:", "").strip()
-    with f2: filter_num = st.text_input("\U0001f4de Number:", "").strip()
-    with f3: filter_msg = st.text_input("\U0001f4ac Message:", "").strip()
+    with f1: filter_cli = st.text_input("🔍 App/CLI:", "").strip()
+    with f2: filter_num = st.text_input("📞 Number:", "").strip()
+    with f3: filter_msg = st.text_input("💬 Message:", "").strip()
     history_placeholder = st.empty()
 
 if is_admin and tab3:
     with tab3:
         st.markdown('<div class="sl">CODE GENERATION</div>', unsafe_allow_html=True)
-        st.markdown('<div class="admin-card"><div class="admin-title">\u26a1 Generate New Codes</div>', unsafe_allow_html=True)
+        st.markdown('<div class="admin-card"><div class="admin-title">⚡ Generate New Codes</div>', unsafe_allow_html=True)
         g1, g2, g3 = st.columns([1, 1, 2])
         with g1: gen_count  = st.number_input("How many?", min_value=1, max_value=50, value=5)
         with g2: gen_prefix = st.text_input("Prefix:", value="UTS")
         with g3:
             st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("\u26a1 GENERATE", key="gen_btn"):
+            if st.button("⚡ GENERATE", key="gen_btn"):
                 with st.spinner("Generating..."):
                     res = generate_codes_api(int(gen_count), gen_prefix)
                 if res.get("success"):
-                    st.success(f"\u2705 {len(res['codes'])} codes generated!")
+                    st.success(f"✓ {len(res['codes'])} codes generated!")
                     st.code("\n".join(res['codes']), language=None)
                     st.caption("Give each code to ONE person only.")
                 else:
-                    st.error(f"\u274c {res.get('msg')}")
+                    st.error(f"❌ {res.get('msg')}")
         st.markdown('</div>', unsafe_allow_html=True)
 
         st.markdown('<div class="sl">ALL CODES</div>', unsafe_allow_html=True)
         col_r, _ = st.columns([1, 4])
         with col_r:
-            if st.button("\U0001f504 REFRESH", key="ref_btn"):
+            if st.button("🔄 REFRESH", key="ref_btn"):
                 st.session_state["codes_list"] = None
 
-        if st.button("\U0001f4cb LOAD ALL CODES", key="load_codes") or st.session_state.get("codes_list"):
+        if st.button("📋 LOAD ALL CODES", key="load_codes") or st.session_state.get("codes_list"):
             if not st.session_state.get("codes_list"):
                 with st.spinner("Loading..."):
                     res = list_codes_api()
@@ -661,7 +671,14 @@ if is_admin and tab3:
                     if v == "ACTIVE":      return "color:#00ff88;font-weight:bold"
                     if v == "DEACTIVATED": return "color:#ff2d55;font-weight:bold"
                     return "color:#ffd700"
-                st.dataframe(cdf.style.map(cs, subset=["status"]),
+                
+                # SAFE VERSION-AGNOSTIC PANDAS STYLING BINDING
+                try:
+                    styled_df = cdf.style.map(cs, subset=["status"])
+                except AttributeError:
+                    styled_df = cdf.style.applymap(cs, subset=["status"])
+                    
+                st.dataframe(styled_df,
                     use_container_width=True, hide_index=True,
                     column_config={
                         "code":         st.column_config.TextColumn("ACTIVATION CODE", width="large"),
@@ -672,22 +689,22 @@ if is_admin and tab3:
                         "last_seen":    st.column_config.TextColumn("LAST SEEN",       width="medium"),
                     })
 
-                st.markdown('<div class="admin-card"><div class="admin-title">\U0001f512 Deactivate / Reset Code</div>', unsafe_allow_html=True)
+                st.markdown('<div class="admin-card"><div class="admin-title">🔒 Deactivate / Reset Code</div>', unsafe_allow_html=True)
                 d1, d2 = st.columns([2, 1])
                 with d1:
                     deact_code = st.text_input("Code to deactivate:", placeholder="UTS-XXXXXXXXXXXX", key="deact_in")
                 with d2:
                     st.markdown("<br>", unsafe_allow_html=True)
-                    if st.button("\U0001f6ab DEACTIVATE", key="deact_btn"):
+                    if st.button("🚫 DEACTIVATE", key="deact_btn"):
                         if deact_code.strip():
                             with st.spinner("Processing..."):
                                 r2 = deactivate_code_api(deact_code.strip().upper())
                             if r2.get("success"):
-                                st.success("\u2705 Deactivated! Device lock removed.")
+                                st.success("✓ Deactivated! Device lock removed.")
                                 st.session_state["codes_list"] = None
                                 st.rerun()
                             else:
-                                st.error(f"\u274c {r2.get('msg')}")
+                                st.error(f"❌ {r2.get('msg')}")
                 st.markdown("</div>", unsafe_allow_html=True)
 
 
@@ -707,142 +724,37 @@ col_cfg = {
 
 
 # ============================================================
-# MAIN DATA FETCH (single pass, no while True loop)
+# MAIN DATA FETCH
 # ============================================================
 try:
     r = requests.get(URL, params={"token": TOKEN, "records": 500}, timeout=10)
     if r.status_code == 200:
         raw_json = r.json().get("data", [])
-        df = pd.DataFrame(raw_json)
-        if not df.empty:
-            threading.Thread(target=stream_to_google_sheet, args=(raw_json,), daemon=True).start()
-            df['dt'] = pd.to_datetime(df['dt'])
-            now   = datetime.now()
-            df_5m = df[df['dt'] >= now - timedelta(minutes=5)]
-
-            t1n, t1c = "NO DATA", 0
-            t2n, t2c = "NO DATA", 0
-            t3n, t3c = "NO DATA", 0
-            if not df_5m.empty and 'cli' in df_5m.columns:
-                tc = df_5m['cli'].value_counts().head(3)
-                if len(tc) >= 1: t1n, t1c = tc.index[0], int(tc.iloc[0])
-                if len(tc) >= 2: t2n, t2c = tc.index[1], int(tc.iloc[1])
-                if len(tc) >= 3: t3n, t3c = tc.index[2], int(tc.iloc[2])
-
-            tr = len(df)
-            uc = df['cli'].nunique() if 'cli' in df.columns else 0
-            un = df['num'].nunique() if 'num' in df.columns else 0
-            df_tgt = df[df['cli'].str.contains(target_cli, case=False, na=False)].copy()
-
-            with placeholder.container():
-                st.markdown(f"""
-                <div class="stat-grid">
-                    <div class="stat-card"><div class="stat-val">{tr}</div><div class="stat-label">Total Records</div></div>
-                    <div class="stat-card"><div class="stat-val">{t1c}</div><div class="stat-label">Top CLI (5min)</div></div>
-                    <div class="stat-card"><div class="stat-val">{uc}</div><div class="stat-label">Unique CLIs</div></div>
-                    <div class="stat-card"><div class="stat-val">{un}</div><div class="stat-label">Unique Numbers</div></div>
-                </div>
-                <div class="lb-grid">
-                    <div class="lb-card lb-1"><div class="lb-rank">1</div>
-                        <div class="lb-label">\U0001f3c6 Top 1 \u2014 Last 5 Min</div>
-                        <div class="lb-name">{t1n}</div><div class="lb-count">{t1c} OTPs</div></div>
-                    <div class="lb-card lb-2"><div class="lb-rank">2</div>
-                        <div class="lb-label">\U0001f948 Top 2 \u2014 Last 5 Min</div>
-                        <div class="lb-name">{t2n}</div><div class="lb-count">{t2c} OTPs</div></div>
-                    <div class="lb-card lb-3"><div class="lb-rank">3</div>
-                        <div class="lb-label">\U0001f949 Top 3 \u2014 Last 5 Min</div>
-                        <div class="lb-name">{t3n}</div><div class="lb-count">{t3c} OTPs</div></div>
-                </div>
-                """, unsafe_allow_html=True)
-
-                st.markdown(f'<div class="sl">LIVE TARGET TRACKER \u2014 AGENT: {target_cli.upper()}</div>', unsafe_allow_html=True)
-                if not df_tgt.empty:
-                    md = df_tgt.head(25).copy()
-                    md[['Team Member', 'Range']] = md['num'].apply(lambda x: pd.Series(get_team_info(x, team_data)))
-                    md['Country'] = md['num'].apply(get_country)
-                    md = md[['dt','cli','num','Country','message','Team Member','Range']].copy()
-                    md.columns = ['Time','App','Number','Country','Message','Team Member','Range']
-                    md['Time'] = pd.to_datetime(md['Time'])
-                    md = md.sort_values('Time', ascending=False)
-                    md['Time'] = md['Time'].dt.strftime('%Y-%m-%d %H:%M:%S')
-                    st.dataframe(md.style.apply(highlight_team, axis=1),
-                                 use_container_width=True, height=400, hide_index=True, column_config=col_cfg)
-                else:
-                    st.markdown('<div class="info-msg"><span>\u25b8</span>No packets for current target agent.</div>', unsafe_allow_html=True)
-
-                st.markdown('<div class="sl">GLOBAL LIVE NETWORK STREAM</div>', unsafe_allow_html=True)
-                gd = df.head(msg_limit).copy()
-                gd[['Team Member', 'Range']] = gd['num'].apply(lambda x: pd.Series(get_team_info(x, team_data)))
-                gd['Country'] = gd['num'].apply(get_country)
-                gd = gd[['dt','cli','num','Country','message','Team Member','Range']].copy()
-                gd.columns = ['Time','App','Number','Country','Message','Team Member','Range']
-                gd['Time'] = pd.to_datetime(gd['Time'])
-                gd = gd.sort_values('Time', ascending=False)
-                gd['Time'] = gd['Time'].dt.strftime('%Y-%m-%d %H:%M:%S')
-                st.dataframe(gd.style.apply(highlight_team, axis=1),
-                             use_container_width=True, height=700, hide_index=True, column_config=col_cfg)
-        else:
-            with placeholder.container():
-                st.markdown('<div class="info-msg"><span>\u23f3</span>Waiting for data stream...</div>', unsafe_allow_html=True)
-    else:
-        with placeholder.container():
-            st.markdown(f'<div class="warn-msg"><span>\u26a0</span>API returned status {r.status_code}. Retrying...</div>', unsafe_allow_html=True)
-except requests.exceptions.ConnectionError:
-    with placeholder.container():
-        st.markdown('<div class="error-msg"><span>\U0001f6a7</span>Cannot connect to data server (51.77.216.195).<br>Check if the server is online.</div>', unsafe_allow_html=True)
-except requests.exceptions.Timeout:
-    with placeholder.container():
-        st.markdown('<div class="warn-msg"><span>\u23f3</span>Data server timed out. Will retry on next refresh.</div>', unsafe_allow_html=True)
-except Exception as e:
-    with placeholder.container():
-        st.markdown(f'<div class="error-msg"><span>\u274c</span>Error: {str(e)}</div>', unsafe_allow_html=True)
-
-
-# ============================================================
-# SHEET DATABASE (separate try/except)
-# ============================================================
-try:
-    sr = requests.get(GOOGLE_SCRIPT_URL, timeout=10)
-    if sr.status_code == 200:
-        sd = sr.json()
-        if sd:
-            sdf = pd.DataFrame(sd)
-            if filter_cli: sdf = sdf[sdf['App'].astype(str).str.contains(filter_cli, case=False, na=False)]
-            if filter_num: sdf = sdf[sdf['Number'].astype(str).str.contains(filter_num, na=False)]
-            if filter_msg: sdf = sdf[sdf['Message'].astype(str).str.contains(filter_msg, case=False, na=False)]
-            with history_placeholder.container():
-                st.markdown(f"""
-                <div style="font-family:'JetBrains Mono',monospace;font-size:11px;
-                     color:var(--t2);margin-bottom:14px;padding:8px 16px;
-                     background:linear-gradient(135deg,var(--bg2),var(--card));
-                     border:1px solid var(--b2);border-radius:6px;display:inline-block">
-                    <span style="color:var(--neon);font-weight:700;font-size:14px">{len(sdf)}</span>
-                    <span style="margin-left:6px">PERMANENT RECORDS</span>
-                </div>
-                """, unsafe_allow_html=True)
-                if not sdf.empty:
-                    try:
-                        sdf['Time'] = pd.to_datetime(sdf['Time'])
-                        sdf = sdf.sort_values('Time', ascending=False)
-                        sdf['Time'] = sdf['Time'].dt.strftime('%Y-%m-%d %H:%M:%S')
-                    except: pass
-                    sdf[['Team Member', 'Range']] = sdf['Number'].apply(
-                        lambda x: pd.Series(get_team_info(x, team_data)))
-                    st.dataframe(sdf.style.apply(highlight_team, axis=1),
-                                 use_container_width=True, height=600, hide_index=True, column_config=col_cfg)
-                else:
-                    st.markdown('<div class="info-msg"><span>\U0001f4c4</span>No records match current filters.</div>', unsafe_allow_html=True)
-except Exception:
-    pass
-
-
-# ============================================================
-# AUTO-REFRESH (replaces while True + st.rerun() loop)
-# ============================================================
-REFRESH_SECONDS = 15
-st.markdown(
-    f'<div class="refresh-indicator">\u21bb Auto-refresh in <span>{REFRESH_SECONDS}s</span> \u2014 System Online</div>',
-    unsafe_allow_html=True
-)
-time.sleep(REFRESH_SECONDS)
-st.rerun()
+        if raw_json:
+            # Process and display live tracking content safely below
+            df_items = []
+            for item in raw_json:
+                tm, rng = get_team_info(item.get("num"), team_data)
+                df_items.append({
+                    "Time": item.get("dt"),
+                    "App": item.get("cli"),
+                    "Number": str(item.get("num")),
+                    "Country": get_country(item.get("num")),
+                    "Message": item.get("message"),
+                    "Team Member": tm,
+                    "Range": rng
+                })
+            main_df = pd.DataFrame(df_items)
+            
+            with tab1:
+                filtered_live = main_df[main_df["App"].str.contains(target_cli, case=False, na=False)].head(msg_limit)
+                placeholder.dataframe(filtered_live.style.apply(highlight_team, axis=1), use_container_width=True, column_config=col_cfg, hide_index=True)
+                
+            with tab2:
+                f_df = main_df.copy()
+                if filter_cli: f_df = f_df[f_df["App"].str.contains(filter_cli, case=False, na=False)]
+                if filter_num: f_df = f_df[f_df["Number"].str.contains(filter_num, na=False)]
+                if filter_msg: f_df = f_df[f_df["Message"].str.contains(filter_msg, case=False, na=False)]
+                history_placeholder.dataframe(f_df, use_container_width=True, column_config=col_cfg, hide_index=True)
+except Exception as main_e:
+    st.error(f"Data stream exception: {str(main_e)}")
