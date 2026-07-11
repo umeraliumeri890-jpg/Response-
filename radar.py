@@ -22,325 +22,376 @@ ADMIN_KEY         = "UTS_ADMIN_2024"
 # ============================================================
 # PAGE CONFIG
 # ============================================================
-st.set_page_config(page_title="UTS HUNTERS", page_icon="\u26a1", layout="wide")
+st.set_page_config(page_title="UTS HUNTERS", page_icon="\u26a1", layout="wide",
+                   initial_sidebar_state="expanded")
 
 # ============================================================
-# CSS — V3 REDESIGN: "NEXUS COMMAND" — Dark Glass + Emerald/Coral
+# CSS — V4 "OBSIDIAN" — Deep Slate + Amber/Gold + Teal
+# Completely new structure: sidebar nav, split login, hex stats
 # ============================================================
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600;700&family=Audiowide&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600;700&family=Russo+One&display=swap');
 
     :root {
-        --bg:#0a0e14; --bg2:#0f1419; --card:#131922; --card2:#171e29;
-        --b1:#1e2733; --b2:#2a3543; --b3:#3a4757;
-        --accent:#00d9a3; --accent-d:#00a37a; --accent-glow:rgba(0,217,163,.12);
-        --coral:#ff6b6b; --coral-d:#cc4f4f;
-        --amber:#ffa940; --amber-d:#cc8120;
-        --teal:#4ecdc4; --teal-d:#3a9a93;
-        --gold:#ffd93d; --gold-d:#c9a830;
-        --silver:#c8cdd6; --bronze:#cd9b6e;
-        --green:#00d9a3; --red:#ff4757; --orange:#ff8c42;
-        --t1:#dfe6f0; --t2:#6b7a8f; --t3:#3d4a5c; --t4:#202a37;
+        --bg:#0c0f14; --bg2:#11161e; --card:#161c26; --card2:#1c2430;
+        --b1:#222b38; --b2:#2e3a4c; --b3:#3d4d63;
+        --amber:#f5a623; --amber-d:#c97e0a; --amber-glow:rgba(245,166,35,.1);
+        --teal:#2dd4bf; --teal-d:#14a89a; --teal-glow:rgba(45,212,191,.1);
+        --rose:#f43f5e; --rose-d:#cc2a45;
+        --gold:#fbbf24; --silver:#cbd5e1; --bronze:#b87333;
+        --green:#22c55e; --red:#ef4444; --orange:#f97316;
+        --t1:#e2e8f0; --t2:#64748b; --t3:#334155; --t4:#1e293b;
     }
 
-    /* === BACKGROUND === */
+    /* === BACKGROUND — subtle layered === */
     .stApp {
         background-color:var(--bg) !important;
         background-image:
-            radial-gradient(circle at 20% 10%, rgba(0,217,163,.04) 0%, transparent 40%),
-            radial-gradient(circle at 80% 90%, rgba(255,107,107,.03) 0%, transparent 40%),
-            radial-gradient(circle at 50% 50%, rgba(78,205,196,.02) 0%, transparent 60%);
-        font-family:'Space Grotesk',sans-serif;
+            radial-gradient(circle at 0% 0%, rgba(245,166,35,.03) 0%, transparent 35%),
+            radial-gradient(circle at 100% 100%, rgba(45,212,191,.03) 0%, transparent 35%);
+        font-family:'Chakra Petch',sans-serif;
     }
 
-    /* === HEADER === */
-    .hdr {
-        text-align:center; padding:44px 20px 16px; position:relative;
+    /* === SIDEBAR === */
+    section[data-testid="stSidebar"] {
+        background:linear-gradient(180deg, var(--bg2), var(--bg)) !important;
+        border-right:1px solid var(--b1) !important;
     }
-    .hdr::after {
-        content:""; position:absolute; bottom:0; left:50%; transform:translateX(-50%);
-        width:50%; height:1px;
-        background:linear-gradient(90deg, transparent, var(--accent), transparent);
-        opacity:.4;
+    section[data-testid="stSidebar"] .stMarkdown {
+        font-family:'Chakra Petch',sans-serif;
     }
-    .badge {
-        display:inline-block; position:relative;
-        background:var(--card); border:1px solid var(--b2); border-radius:20px;
-        padding:6px 28px; font-family:'JetBrains Mono',monospace;
-        font-size:10px; font-weight:600; color:var(--accent);
-        letter-spacing:6px; text-transform:uppercase; margin-bottom:18px;
+
+    /* === SIDEBAR NAV ITEMS === */
+    .nav-header {
+        font-family:'Russo One',sans-serif; font-size:18px; font-weight:400;
+        color:var(--amber); letter-spacing:2px; text-transform:uppercase;
+        padding:20px 0 10px; border-bottom:1px solid var(--b1); margin-bottom:16px;
     }
-    .badge::before, .badge::after {
-        content:""; position:absolute; top:50%; transform:translateY(-50%);
-        width:40px; height:1px; background:linear-gradient(90deg, transparent, var(--b2));
+    .nav-item {
+        display:flex; align-items:center; gap:12px;
+        padding:12px 16px; margin:4px 0; border-radius:8px;
+        font-family:'Chakra Petch',sans-serif; font-size:13px; font-weight:500;
+        color:var(--t2); cursor:pointer; transition:all .2s ease;
+        border:1px solid transparent;
     }
-    .badge::before { left:-45px; }
-    .badge::after { right:-45px; background:linear-gradient(90deg, var(--b2), transparent); }
-    .title {
-        font-family:'Audiowide',sans-serif; font-size:54px; font-weight:400;
-        color:var(--t1); letter-spacing:4px; line-height:1.1; margin-bottom:10px;
+    .nav-item:hover {
+        background:var(--card); color:var(--t1); border-color:var(--b1);
     }
-    .title span {
-        color:var(--accent);
-        text-shadow:0 0 30px rgba(0,217,163,.3);
+    .nav-item.active {
+        background:rgba(245,166,35,.06); color:var(--amber);
+        border-color:var(--amber-d);
     }
-    .sub {
+    .nav-item .nav-icon { font-size:18px; }
+    .nav-divider { height:1px; background:var(--b1); margin:16px 0; }
+    .nav-stat {
+        padding:12px 16px; font-family:'JetBrains Mono',monospace;
+        font-size:10px; color:var(--t3); line-height:2;
+    }
+    .nav-stat span { color:var(--teal); font-weight:600; }
+
+    /* === TOP BAR === */
+    .topbar {
+        display:flex; justify-content:space-between; align-items:center;
+        padding:16px 28px; background:var(--card);
+        border:1px solid var(--b1); border-radius:12px; margin-bottom:24px;
+    }
+    .topbar-left {
+        display:flex; align-items:center; gap:16px;
+    }
+    .topbar-logo {
+        font-family:'Russo One',sans-serif; font-size:22px; font-weight:400;
+        color:var(--t1); letter-spacing:2px;
+    }
+    .topbar-logo span { color:var(--amber); }
+    .topbar-badge {
+        font-family:'JetBrains Mono',monospace; font-size:9px; font-weight:600;
+        color:var(--teal); background:rgba(45,212,191,.08);
+        border:1px solid var(--teal-d); border-radius:4px;
+        padding:3px 10px; letter-spacing:2px; text-transform:uppercase;
+    }
+    .topbar-right {
+        display:flex; align-items:center; gap:20px;
         font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--t2);
-        letter-spacing:4px; text-transform:uppercase; margin-bottom:32px;
+    }
+    .topbar-right .live-dot {
+        display:inline-block; width:8px; height:8px; border-radius:50%;
+        background:var(--green); box-shadow:0 0 8px var(--green);
+        animation:blink 1.5s infinite; margin-right:6px;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+    .topbar-right span { color:var(--amber); font-weight:600; }
+
+    /* === SECTION HEADER === */
+    .sec-h {
+        font-family:'Russo One',sans-serif; font-size:16px; font-weight:400;
+        color:var(--t1); letter-spacing:3px; text-transform:uppercase;
+        margin:28px 0 16px; display:flex; align-items:center; gap:14px;
+    }
+    .sec-h::before {
+        content:""; width:24px; height:2px; border-radius:1px;
+        background:var(--amber);
+    }
+    .sec-h::after {
+        content:""; flex:1; height:1px; background:var(--b1);
     }
 
-    /* === OPERATOR BAR === */
-    .opbar {
-        display:flex; justify-content:center; align-items:center; gap:0;
-        margin-bottom:32px; font-family:'JetBrains Mono',monospace;
-        font-size:11px; flex-wrap:wrap;
+    /* === STAT TILES — hexagon-inspired rounded === */
+    .stat-row {
+        display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:28px;
     }
-    .op-item {
-        display:flex; align-items:center; gap:8px;
-        padding:10px 22px; color:var(--t2);
-        background:var(--card); border:1px solid var(--b1);
-        transition:all .2s ease;
+    .stat-tile {
+        background:var(--card); border:1px solid var(--b1); border-radius:16px;
+        padding:24px 20px; text-align:center; position:relative; overflow:hidden;
+        transition:all .3s ease;
     }
-    .op-item:first-child { border-radius:8px 0 0 8px; }
-    .op-item:last-child { border-radius:0 8px 8px 0; }
-    .op-item + .op-item { border-left:none; }
-    .op-item span { color:var(--accent); font-weight:600; }
-
-    /* === PULSE DOT === */
-    .pulse-dot {
-        display:inline-block; width:7px; height:7px; border-radius:50%;
-        background:var(--green); box-shadow:0 0 6px var(--green);
-        animation:pulse 1.8s ease-in-out infinite; margin-right:8px;
+    .stat-tile:hover { border-color:var(--b2); transform:translateY(-2px); }
+    .stat-tile::before {
+        content:""; position:absolute; top:0; left:50%; transform:translateX(-50%);
+        width:40%; height:3px; border-radius:0 0 4px 4px;
+        background:var(--tile-c, var(--amber));
     }
-    @keyframes pulse {
-        0%,100%{opacity:1;transform:scale(1)}
-        50%{opacity:.4;transform:scale(.6)}
+    .stat-tile.t1 { --tile-c:var(--amber); }
+    .stat-tile.t2 { --tile-c:var(--teal); }
+    .stat-tile.t3 { --tile-c:var(--rose); }
+    .stat-tile.t4 { --tile-c:var(--green); }
+    .stat-num {
+        font-family:'Russo One',sans-serif; font-size:34px; font-weight:400;
+        color:var(--tile-c, var(--amber)); line-height:1.1; margin-bottom:4px;
     }
-
-    /* === SECTION LABEL === */
-    .sl {
-        font-family:'Space Grotesk',sans-serif; font-size:13px; font-weight:600;
-        color:var(--t1); letter-spacing:2px; text-transform:uppercase;
-        margin-top:36px; margin-bottom:16px; padding:10px 0;
-        display:flex; align-items:center; gap:10px;
-        border-bottom:1px solid var(--b1);
-    }
-    .sl::before {
-        content:""; width:3px; height:16px; border-radius:2px;
-        background:var(--accent);
+    .stat-txt {
+        font-family:'JetBrains Mono',monospace; font-size:9px; color:var(--t2);
+        letter-spacing:2px; text-transform:uppercase;
     }
 
-    /* === STAT CARDS === */
-    .stat-grid {
-        display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:28px;
+    /* === PODIUM — Top 3 === */
+    .podium {
+        display:grid; grid-template-columns:1fr 1.2fr 1fr; gap:16px;
+        margin-bottom:28px; align-items:end;
     }
-    .stat-card {
-        background:var(--card); border:1px solid var(--b1); border-radius:12px;
-        padding:20px; text-align:center; position:relative; overflow:hidden;
-        transition:all .25s ease;
+    .pod {
+        background:var(--card); border:1px solid var(--b1); border-radius:16px;
+        padding:24px 20px; position:relative; overflow:hidden;
+        transition:all .3s ease; text-align:center;
     }
-    .stat-card:hover { border-color:var(--b2); background:var(--card2); }
-    .stat-card::before {
-        content:""; position:absolute; top:0; left:0; right:0; height:2px;
-        background:var(--accent); opacity:.3;
+    .pod:hover { transform:translateY(-3px); border-color:var(--pod-c); }
+    .pod::before {
+        content:""; position:absolute; top:0; left:0; right:0; height:4px;
+        background:var(--pod-c); border-radius:16px 16px 0 0;
     }
-    .stat-val {
-        font-family:'Audiowide',monospace; font-size:30px; font-weight:400;
-        color:var(--accent); line-height:1.2;
+    .pod-1 { --pod-c:var(--gold); padding:32px 20px; }
+    .pod-2 { --pod-c:var(--silver); }
+    .pod-3 { --pod-c:var(--bronze); }
+    .pod-medal {
+        font-family:'Russo One',sans-serif; font-size:14px; color:var(--pod-c);
+        letter-spacing:3px; text-transform:uppercase; margin-bottom:12px;
     }
-    .stat-label {
+    .pod-name {
+        font-family:'Chakra Petch',sans-serif; font-size:24px; font-weight:600;
+        color:var(--t1); text-transform:uppercase; overflow:hidden;
+        text-overflow:ellipsis; white-space:nowrap; margin-bottom:10px;
+    }
+    .pod-1 .pod-name { font-size:28px; }
+    .pod-score {
+        font-family:'Russo One',sans-serif; font-size:36px; font-weight:400;
+        color:var(--pod-c); line-height:1;
+    }
+    .pod-label {
         font-family:'JetBrains Mono',monospace; font-size:9px; color:var(--t2);
         letter-spacing:2px; text-transform:uppercase; margin-top:6px;
     }
-
-    /* === LEADERBOARD === */
-    .lb-grid {
-        display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:28px;
-    }
-    .lb-card {
-        background:var(--card); border:1px solid var(--b1); border-radius:14px;
-        padding:26px 24px; position:relative; overflow:hidden;
-        transition:all .25s ease;
-    }
-    .lb-card:hover { transform:translateY(-2px); border-color:var(--accent); }
-    .lb-card::before {
-        content:""; position:absolute; top:0; left:0; right:0; height:3px;
-        background:var(--rank-color); border-radius:14px 14px 0 0;
-    }
-    .lb-1 { --rank-color:var(--gold); }
-    .lb-2 { --rank-color:var(--silver); }
-    .lb-3 { --rank-color:var(--bronze); }
-    .lb-rank {
-        position:absolute; right:20px; top:50%; transform:translateY(-50%);
-        font-family:'Audiowide',sans-serif; font-size:60px; font-weight:400;
-        color:var(--rank-color); opacity:.05;
-    }
-    .lb-label {
-        font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:600;
-        letter-spacing:2px; text-transform:uppercase; margin-bottom:14px;
-        color:var(--rank-color);
-    }
-    .lb-name {
-        font-family:'Space Grotesk',sans-serif; font-size:26px; font-weight:600;
-        color:var(--t1); text-transform:uppercase; overflow:hidden;
-        text-overflow:ellipsis; white-space:nowrap; margin-bottom:8px;
-    }
-    .lb-count {
-        font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:500;
-        color:var(--accent);
+    .pod-watermark {
+        position:absolute; right:10px; bottom:0;
+        font-family:'Russo One',sans-serif; font-size:72px; font-weight:400;
+        color:var(--pod-c); opacity:.04; line-height:1;
     }
 
     /* === INPUTS === */
     .stTextInput>div>div>input, .stNumberInput>div>div>input {
         background:var(--card) !important; color:var(--t1) !important;
-        border:1px solid var(--b1) !important; border-radius:8px !important;
+        border:1px solid var(--b1) !important; border-radius:10px !important;
         font-family:'JetBrains Mono',monospace !important; font-size:13px !important;
         transition:all .2s ease !important;
     }
     .stTextInput>div>div>input:focus, .stNumberInput>div>div>input:focus {
-        border-color:var(--accent-d) !important;
-        box-shadow:0 0 0 3px rgba(0,217,163,.08) !important;
+        border-color:var(--amber-d) !important;
+        box-shadow:0 0 0 3px rgba(245,166,35,.08) !important;
     }
     label {
         color:var(--t2) !important; font-family:'JetBrains Mono',monospace !important;
         font-size:11px !important; letter-spacing:1px !important;
     }
 
-    /* === TABS === */
+    /* === TABS — pill style === */
     .stTabs [data-baseweb="tab-list"] {
         background:var(--card) !important; border:1px solid var(--b1) !important;
-        border-radius:10px !important; gap:2px !important; padding:4px !important;
+        border-radius:12px !important; gap:4px !important; padding:6px !important;
     }
     .stTabs [data-baseweb="tab"] {
         background:transparent !important; color:var(--t2) !important;
-        font-family:'Space Grotesk',sans-serif !important; font-size:12px !important;
+        font-family:'Chakra Petch',sans-serif !important; font-size:12px !important;
         font-weight:500 !important; letter-spacing:2px !important;
         text-transform:uppercase !important; border-radius:8px !important;
-        padding:10px 22px !important; border:1px solid transparent !important;
+        padding:10px 24px !important; border:1px solid transparent !important;
         transition:all .2s ease !important;
     }
     .stTabs [data-baseweb="tab"]:hover {
-        color:var(--t1) !important; background:rgba(0,217,163,.04) !important;
+        color:var(--t1) !important; background:rgba(245,166,35,.04) !important;
     }
     .stTabs [aria-selected="true"] {
-        color:var(--accent) !important;
-        background:rgba(0,217,163,.06) !important;
-        border:1px solid var(--accent-d) !important;
+        color:var(--amber) !important;
+        background:rgba(245,166,35,.06) !important;
+        border:1px solid var(--amber-d) !important;
     }
     .stTabs [data-baseweb="tab-panel"] { background:transparent !important; padding-top:20px !important; }
 
     /* === BUTTONS === */
     .stButton>button {
-        background:var(--accent-d) !important; color:var(--bg) !important;
-        border:none !important; border-radius:8px !important;
-        font-family:'Space Grotesk',sans-serif !important; font-size:13px !important;
+        background:linear-gradient(135deg, var(--amber-d), var(--amber)) !important;
+        color:var(--bg) !important; border:none !important; border-radius:10px !important;
+        font-family:'Chakra Petch',sans-serif !important; font-size:13px !important;
         font-weight:600 !important; letter-spacing:1px !important;
-        padding:10px 32px !important; text-transform:uppercase !important;
+        padding:12px 36px !important; text-transform:uppercase !important;
         transition:all .2s ease !important;
     }
     .stButton>button:hover {
-        background:var(--accent) !important; box-shadow:0 4px 15px rgba(0,217,163,.2) !important;
+        box-shadow:0 4px 20px rgba(245,166,35,.25) !important; transform:translateY(-1px);
     }
 
     /* === SCROLLBAR === */
-    ::-webkit-scrollbar { width:5px; height:5px; }
+    ::-webkit-scrollbar { width:6px; height:6px; }
     ::-webkit-scrollbar-track { background:var(--bg); }
     ::-webkit-scrollbar-thumb { background:var(--b2); border-radius:3px; }
     ::-webkit-scrollbar-thumb:hover { background:var(--b3); }
 
-    /* === LOGIN CARD === */
-    .login-card {
-        background:var(--card); border:1px solid var(--b1); border-radius:20px;
-        padding:56px 48px; position:relative; overflow:hidden;
-        box-shadow:0 25px 70px rgba(0,0,0,.4);
+    /* === LOGIN — SPLIT SCREEN === */
+    .login-wrap {
+        display:flex; min-height:500px; border-radius:20px; overflow:hidden;
+        border:1px solid var(--b1); box-shadow:0 30px 80px rgba(0,0,0,.4);
     }
-    .login-card::before {
+    .login-left {
+        flex:1; background:linear-gradient(135deg, var(--card2), var(--bg2));
+        padding:48px 40px; display:flex; flex-direction:column;
+        justify-content:center; align-items:center; text-align:center;
+        position:relative; overflow:hidden;
+    }
+    .login-left::before {
         content:""; position:absolute; top:0; left:0; right:0; height:3px;
-        background:linear-gradient(90deg, var(--accent), var(--teal), var(--accent));
+        background:linear-gradient(90deg, var(--amber), var(--teal));
     }
-    .login-icon {
-        font-size:52px; text-align:center; margin-bottom:18px;
-        animation:float 3s ease-in-out infinite;
+    .login-left::after {
+        content:""; position:absolute; bottom:0; left:0; right:0; height:1px;
+        background:linear-gradient(90deg, transparent, var(--b2), transparent);
     }
-    @keyframes float {
-        0%,100%{transform:translateY(0)}
-        50%{transform:translateY(-6px)}
+    .login-icon-big {
+        font-size:64px; margin-bottom:20px;
+        animation:bob 3s ease-in-out infinite;
     }
-    .login-title {
-        font-family:'Audiowide',sans-serif; font-size:26px; font-weight:400;
-        color:var(--t1); text-align:center; margin-bottom:8px; letter-spacing:3px;
+    @keyframes bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+    .login-brand {
+        font-family:'Russo One',sans-serif; font-size:32px; font-weight:400;
+        color:var(--t1); letter-spacing:3px; margin-bottom:8px;
     }
-    .login-sub {
+    .login-brand span { color:var(--amber); }
+    .login-tagline {
         font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--t3);
-        letter-spacing:4px; text-transform:uppercase; text-align:center; margin-bottom:36px;
+        letter-spacing:4px; text-transform:uppercase; margin-bottom:32px;
+    }
+    .login-features {
+        font-family:'Chakra Petch',sans-serif; font-size:13px; color:var(--t2);
+        line-height:2.2; text-align:left; width:100%; max-width:280px;
+    }
+    .login-features div { display:flex; align-items:center; gap:10px; }
+    .login-features div::before {
+        content:"\u25c6"; color:var(--amber); font-size:10px;
+    }
+    .login-right {
+        flex:1; background:var(--card); padding:48px 40px;
+        display:flex; flex-direction:column; justify-content:center;
+    }
+    .login-right-title {
+        font-family:'Russo One',sans-serif; font-size:20px; font-weight:400;
+        color:var(--t1); letter-spacing:2px; margin-bottom:6px;
+    }
+    .login-right-sub {
+        font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--t3);
+        letter-spacing:3px; text-transform:uppercase; margin-bottom:32px;
     }
     .login-error {
-        background:rgba(255,71,87,.06); border:1px solid rgba(255,71,87,.2);
-        border-radius:8px; padding:12px 18px; font-family:'JetBrains Mono',monospace;
+        background:rgba(239,68,68,.06); border:1px solid rgba(239,68,68,.2);
+        border-radius:10px; padding:14px 18px; font-family:'JetBrains Mono',monospace;
         font-size:11px; color:var(--red); margin-top:14px;
     }
     .login-footer {
         margin-top:28px; font-family:'JetBrains Mono',monospace; font-size:9px;
-        color:var(--t3); text-align:center; line-height:2.2;
+        color:var(--t3); line-height:2.2;
     }
 
     /* === ADMIN CARDS === */
-    .admin-card {
-        background:var(--card); border:1px solid var(--b1); border-radius:12px;
+    .adm-card {
+        background:var(--card); border:1px solid var(--b1); border-radius:14px;
         padding:28px; margin-bottom:24px; position:relative; overflow:hidden;
     }
-    .admin-card::before {
+    .adm-card::before {
         content:""; position:absolute; top:0; left:0; right:0; height:2px;
-        background:linear-gradient(90deg, var(--accent), var(--teal));
+        background:linear-gradient(90deg, var(--amber), var(--teal));
     }
-    .admin-title {
-        font-family:'Space Grotesk',sans-serif; font-size:13px; font-weight:600;
-        color:var(--accent); letter-spacing:2px; text-transform:uppercase;
+    .adm-title {
+        font-family:'Russo One',sans-serif; font-size:13px; font-weight:400;
+        color:var(--amber); letter-spacing:2px; text-transform:uppercase;
         margin-bottom:20px; padding-bottom:10px; border-bottom:1px solid var(--b1);
         display:flex; align-items:center; gap:10px;
     }
-    .admin-title::before {
+    .adm-title::before {
         content:""; width:6px; height:6px; border-radius:50%;
-        background:var(--accent); box-shadow:0 0 6px var(--accent);
+        background:var(--amber); box-shadow:0 0 6px var(--amber);
     }
 
     /* === DATAFRAME === */
-    .stDataFrame { border:1px solid var(--b1); border-radius:10px; overflow:hidden; }
+    .stDataFrame { border:1px solid var(--b1); border-radius:12px; overflow:hidden; }
 
-    /* === REFRESH INDICATOR === */
-    .refresh-indicator {
+    /* === REFRESH BAR === */
+    .refresh-bar {
         text-align:center; font-family:'JetBrains Mono',monospace; font-size:10px;
-        color:var(--t3); margin-top:24px; padding:14px;
+        color:var(--t3); margin-top:28px; padding:16px;
         border-top:1px solid var(--b1);
     }
-    .refresh-indicator span { color:var(--accent); }
+    .refresh-bar span { color:var(--amber); }
 
     /* === UTILITY MESSAGES === */
     .info-msg {
-        text-align:center; padding:48px; font-family:'JetBrains Mono',monospace;
-        font-size:13px; color:var(--t2);
+        text-align:center; padding:56px; font-family:'Chakra Petch',sans-serif;
+        font-size:14px; color:var(--t2);
     }
-    .info-msg span { color:var(--accent); font-size:32px; display:block; margin-bottom:14px; }
+    .info-msg span { color:var(--amber); font-size:40px; display:block; margin-bottom:16px; }
     .error-msg {
-        text-align:center; padding:36px; font-family:'JetBrains Mono',monospace;
-        font-size:13px; color:var(--red);
+        text-align:center; padding:40px; font-family:'Chakra Petch',sans-serif;
+        font-size:14px; color:var(--red);
     }
-    .error-msg span { font-size:36px; display:block; margin-bottom:14px; }
+    .error-msg span { font-size:44px; display:block; margin-bottom:16px; }
     .warn-msg {
-        text-align:center; padding:36px; font-family:'JetBrains Mono',monospace;
-        font-size:13px; color:var(--orange);
+        text-align:center; padding:40px; font-family:'Chakra Petch',sans-serif;
+        font-size:14px; color:var(--orange);
     }
-    .warn-msg span { font-size:36px; display:block; margin-bottom:14px; }
+    .warn-msg span { font-size:44px; display:block; margin-bottom:16px; }
 
-    /* === HIDE STREAMLIT BRANDING === */
+    /* === HIDE BRANDING === */
     #MainMenu { visibility:hidden; }
     footer { visibility:hidden; }
     header[data-testid="stHeader"] { background:transparent !important; }
     .stDeployButton { display:none; }
 
     /* === SPINNER === */
-    .stSpinner>div { border-color:var(--accent) !important; }
+    .stSpinner>div { border-color:var(--amber) !important; }
+
+    /* === SIDEBAR RADIO === */
+    .stRadio>div { gap:4px; }
+    .stRadio label {
+        font-family:'Chakra Petch',sans-serif !important; font-size:13px !important;
+        color:var(--t2) !important; padding:8px 12px !important;
+        border-radius:8px; transition:all .2s ease;
+    }
+    .stRadio label:hover { background:var(--card); color:var(--t1) !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -416,27 +467,34 @@ device_fp = get_server_side_fp()
 
 
 # ============================================================
-# AUTH FLOW
+# AUTH FLOW — SPLIT SCREEN LOGIN
 # ============================================================
 if not st.session_state.get("authenticated"):
 
     st.markdown("""
-    <div class="hdr">
-        <div class="badge">UTS SYSTEMS</div>
-        <div class="title">UTS <span>HUNTERS</span></div>
-        <div class="sub">> Authorized Access Only</div>
+    <div class="login-wrap">
+        <div class="login-left">
+            <div class="login-icon-big">\u26a1</div>
+            <div class="login-brand">UTS <span>HUNTERS</span></div>
+            <div class="login-tagline">> Authorized Access Only</div>
+            <div class="login-features">
+                <div>Real-time OTP Monitoring</div>
+                <div>Live Network Stream</div>
+                <div>Team Member Tracking</div>
+                <div>Google Sheet Database</div>
+                <div>Admin Code Management</div>
+            </div>
+        </div>
+        <div class="login-right">
+            <div class="login-right-title">ACCESS PORTAL</div>
+            <div class="login-right-sub">Enter your activation code</div>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
-    col1, col2, col3 = st.columns([1, 1.2, 1])
-    with col2:
-        st.markdown('<div class="login-card">', unsafe_allow_html=True)
-        st.markdown("""
-        <div class="login-icon">\u26a1</div>
-        <div class="login-title">UTS HUNTERS</div>
-        <div class="login-sub">Enter Activation Code</div>
-        """, unsafe_allow_html=True)
-
+    # Input below the visual card
+    col_a, col_b, col_c = st.columns([1, 2, 1])
+    with col_b:
         entered_code = st.text_input("\U0001f511 ACTIVATION CODE:", placeholder="UTS-XXXXXXXXXXXX", key="login_code")
 
         if st.button("\u25b6  ACTIVATE SESSION", key="login_btn"):
@@ -462,7 +520,6 @@ if not st.session_state.get("authenticated"):
             Each code is device-locked. Contact admin for access.
         </div>
         """, unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
 
     st.stop()
 
@@ -502,7 +559,7 @@ def get_team_info(num, team_data):
 
 def highlight_team(row):
     if row.get('Team Member', '') != "":
-        return ['background-color:rgba(0,217,163,.06);color:#00d9a3;font-weight:bold;border-right:3px solid #00d9a3'] * len(row)
+        return ['background-color:rgba(245,166,35,.06);color:#f5a623;font-weight:bold;border-right:3px solid #f5a623'] * len(row)
     return [''] * len(row)
 
 def stream_to_google_sheet(raw_data):
@@ -520,117 +577,59 @@ def stream_to_google_sheet(raw_data):
 
 
 # ============================================================
-# HEADER
+# SIDEBAR NAVIGATION
+# ============================================================
+with st.sidebar:
+    st.markdown('<div class="nav-header">\u26a1 UTS HUNTERS</div>', unsafe_allow_html=True)
+
+    nav_options = ["\U0001f4e1  Live Monitor", "\U0001f4ca  Sheet Database"]
+    if is_admin:
+        nav_options.append("\U0001f510  Admin Panel")
+
+    nav_choice = st.radio("NAVIGATION", nav_options, label_visibility="collapsed")
+
+    st.markdown('<div class="nav-divider"></div>', unsafe_allow_html=True)
+
+    st.markdown(f"""
+    <div class="nav-stat">
+        OPERATOR: <span>{operator_name.upper()}</span><br>
+        SESSION: <span>{datetime.now().strftime("%H:%M:%S")}</span><br>
+        STATUS: <span>\u2713 ONLINE</span><br>
+        {"ADMIN: <span>\U0001f451 YES</span><br>" if is_admin else ""}
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown('<div class="nav-divider"></div>', unsafe_allow_html=True)
+
+    if "\U0001f4e1" in nav_choice:
+        st.markdown("**\u2699 TARGET AGENT (CLI):**")
+        target_cli = st.text_input("", value="MYOB", key="sb_cli", label_visibility="collapsed").strip()
+        st.markdown("**\U0001f4e1 STREAM BUFFER:**")
+        msg_limit = st.number_input("", min_value=1, max_value=2000, value=500, key="sb_limit", label_visibility="collapsed")
+    elif "\U0001f4ca" in nav_choice:
+        st.markdown("**\U0001f50d FILTERS**")
+        filter_cli = st.text_input("App/CLI:", "", key="sb_fcli").strip()
+        filter_num = st.text_input("Number:", "", key="sb_fnum").strip()
+        filter_msg = st.text_input("Message:", "", key="sb_fmsg").strip()
+
+
+# ============================================================
+# TOP BAR
 # ============================================================
 st.markdown(f"""
-<div class="hdr">
-    <div class="badge">UTS SYSTEMS</div>
-    <div class="title">UTS <span>HUNTERS</span></div>
-    <div class="sub">> Database Integrated Control Panel</div>
-</div>
-<div class="opbar">
-    <div class="op-item"><span class="pulse-dot"></span><span>LIVE</span></div>
-    <div class="op-item">OPERATOR: <span>{operator_name.upper()}</span></div>
-    <div class="op-item">SESSION: <span>{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</span></div>
-    <div class="op-item">STATUS: <span style="color:#00d9a3">\u2713 AUTHORIZED</span></div>
-    {"<div class='op-item'><span style='color:#ffd93d'>\U0001f451 ADMIN MODE</span></div>" if is_admin else ""}
+<div class="topbar">
+    <div class="topbar-left">
+        <div class="topbar-logo">UTS <span>HUNTERS</span></div>
+        <div class="topbar-badge">v4 OBSIDIAN</div>
+    </div>
+    <div class="topbar-right">
+        <div><span class="live-dot"></span>LIVE</div>
+        <div>OPERATOR: <span>{operator_name.upper()}</span></div>
+        <div>{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</div>
+        {"<div><span>\U0001f451 ADMIN</span></div>" if is_admin else ""}
+    </div>
 </div>
 """, unsafe_allow_html=True)
-
-
-# ============================================================
-# TABS
-# ============================================================
-tab_labels = ["\U0001f4e1  LIVE MONITORING", "\U0001f4ca  SHEET DATABASE"]
-if is_admin: tab_labels.append("\U0001f510  ADMIN PANEL")
-tab_objs = st.tabs(tab_labels)
-tab1, tab2 = tab_objs[0], tab_objs[1]
-tab3 = tab_objs[2] if is_admin else None
-
-with tab1:
-    c1, c2 = st.columns([2, 1])
-    with c1: target_cli = st.text_input("\u2699 TARGET AGENT (CLI):", "MYOB").strip()
-    with c2: msg_limit  = st.number_input("\U0001f4e1 STREAM BUFFER:", min_value=1, max_value=2000, value=500)
-    placeholder = st.empty()
-
-with tab2:
-    st.markdown('<div class="sl">REAL-TIME FILTERS \u2014 GOOGLE SHEET DATABASE</div>', unsafe_allow_html=True)
-    f1, f2, f3 = st.columns(3)
-    with f1: filter_cli = st.text_input("\U0001f50d App/CLI:", "").strip()
-    with f2: filter_num = st.text_input("\U0001f4de Number:", "").strip()
-    with f3: filter_msg = st.text_input("\U0001f4ac Message:", "").strip()
-    history_placeholder = st.empty()
-
-if is_admin and tab3:
-    with tab3:
-        st.markdown('<div class="sl">CODE GENERATION</div>', unsafe_allow_html=True)
-        st.markdown('<div class="admin-card"><div class="admin-title">\u26a1 Generate New Codes</div>', unsafe_allow_html=True)
-        g1, g2, g3 = st.columns([1, 1, 2])
-        with g1: gen_count  = st.number_input("How many?", min_value=1, max_value=50, value=5)
-        with g2: gen_prefix = st.text_input("Prefix:", value="UTS")
-        with g3:
-            st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("\u26a1 GENERATE", key="gen_btn"):
-                with st.spinner("Generating..."):
-                    res = generate_codes_api(int(gen_count), gen_prefix)
-                if res.get("success"):
-                    st.success(f"\u2705 {len(res['codes'])} codes generated!")
-                    st.code("\n".join(res['codes']), language=None)
-                    st.caption("Give each code to ONE person only.")
-                else:
-                    st.error(f"\u274c {res.get('msg')}")
-        st.markdown('</div>', unsafe_allow_html=True)
-
-        st.markdown('<div class="sl">ALL CODES</div>', unsafe_allow_html=True)
-        col_r, _ = st.columns([1, 4])
-        with col_r:
-            if st.button("\U0001f504 REFRESH", key="ref_btn"):
-                st.session_state["codes_list"] = None
-
-        if st.button("\U0001f4cb LOAD ALL CODES", key="load_codes") or st.session_state.get("codes_list"):
-            if not st.session_state.get("codes_list"):
-                with st.spinner("Loading..."):
-                    res = list_codes_api()
-                if res.get("success"):
-                    st.session_state["codes_list"] = res.get("codes", [])
-                else:
-                    st.error(f"Error: {res.get('msg')}")
-
-            codes_list = st.session_state.get("codes_list", [])
-            if codes_list:
-                cdf = pd.DataFrame(codes_list)
-                def cs(v):
-                    if v == "ACTIVE":      return "color:#00d9a3;font-weight:bold"
-                    if v == "DEACTIVATED": return "color:#ff4757;font-weight:bold"
-                    return "color:#ffd93d"
-                st.dataframe(cdf.style.map(cs, subset=["status"]),
-                    use_container_width=True, hide_index=True,
-                    column_config={
-                        "code":         st.column_config.TextColumn("ACTIVATION CODE", width="large"),
-                        "operator":     st.column_config.TextColumn("OPERATOR",        width="medium"),
-                        "status":       st.column_config.TextColumn("STATUS",          width="small"),
-                        "created":      st.column_config.TextColumn("CREATED",         width="medium"),
-                        "activated_at": st.column_config.TextColumn("LOCKED AT",       width="medium"),
-                        "last_seen":    st.column_config.TextColumn("LAST SEEN",       width="medium"),
-                    })
-
-                st.markdown('<div class="admin-card"><div class="admin-title">\U0001f512 Deactivate / Reset Code</div>', unsafe_allow_html=True)
-                d1, d2 = st.columns([2, 1])
-                with d1:
-                    deact_code = st.text_input("Code to deactivate:", placeholder="UTS-XXXXXXXXXXXX", key="deact_in")
-                with d2:
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    if st.button("\U0001f6ab DEACTIVATE", key="deact_btn"):
-                        if deact_code.strip():
-                            with st.spinner("Processing..."):
-                                r2 = deactivate_code_api(deact_code.strip().upper())
-                            if r2.get("success"):
-                                st.success("\u2705 Deactivated! Device lock removed.")
-                                st.session_state["codes_list"] = None
-                                st.rerun()
-                            else:
-                                st.error(f"\u274c {r2.get('msg')}")
-                st.markdown("</div>", unsafe_allow_html=True)
 
 
 # ============================================================
@@ -646,6 +645,10 @@ col_cfg = {
     "Team Member": st.column_config.TextColumn("OPERATOR",      width="medium"),
     "Range":       st.column_config.TextColumn("NETWORK RANGE", width="large"),
 }
+
+# Initialize placeholders
+placeholder = st.empty()
+history_placeholder = st.empty()
 
 
 # ============================================================
@@ -676,53 +679,142 @@ try:
             un = df['num'].nunique() if 'num' in df.columns else 0
             df_tgt = df[df['cli'].str.contains(target_cli, case=False, na=False)].copy()
 
-            with placeholder.container():
-                st.markdown(f"""
-                <div class="stat-grid">
-                    <div class="stat-card"><div class="stat-val">{tr}</div><div class="stat-label">Total Records</div></div>
-                    <div class="stat-card"><div class="stat-val">{t1c}</div><div class="stat-label">Top CLI (5min)</div></div>
-                    <div class="stat-card"><div class="stat-val">{uc}</div><div class="stat-label">Unique CLIs</div></div>
-                    <div class="stat-card"><div class="stat-val">{un}</div><div class="stat-label">Unique Numbers</div></div>
-                </div>
-                <div class="lb-grid">
-                    <div class="lb-card lb-1"><div class="lb-rank">1</div>
-                        <div class="lb-label">\U0001f3c6 Top 1 \u2014 Last 5 Min</div>
-                        <div class="lb-name">{t1n}</div><div class="lb-count">{t1c} OTPs</div></div>
-                    <div class="lb-card lb-2"><div class="lb-rank">2</div>
-                        <div class="lb-label">\U0001f948 Top 2 \u2014 Last 5 Min</div>
-                        <div class="lb-name">{t2n}</div><div class="lb-count">{t2c} OTPs</div></div>
-                    <div class="lb-card lb-3"><div class="lb-rank">3</div>
-                        <div class="lb-label">\U0001f949 Top 3 \u2014 Last 5 Min</div>
-                        <div class="lb-name">{t3n}</div><div class="lb-count">{t3c} OTPs</div></div>
-                </div>
-                """, unsafe_allow_html=True)
+            # === LIVE MONITOR TAB ===
+            if "\U0001f4e1" in nav_choice:
+                with placeholder.container():
+                    st.markdown("""
+                    <div class="stat-row">
+                        <div class="stat-tile t1"><div class="stat-num">""" + str(tr) + """</div><div class="stat-txt">Total Records</div></div>
+                        <div class="stat-tile t2"><div class="stat-num">""" + str(t1c) + """</div><div class="stat-txt">Top CLI (5min)</div></div>
+                        <div class="stat-tile t3"><div class="stat-num">""" + str(uc) + """</div><div class="stat-txt">Unique CLIs</div></div>
+                        <div class="stat-tile t4"><div class="stat-num">""" + str(un) + """</div><div class="stat-txt">Unique Numbers</div></div>
+                    </div>
+                    """, unsafe_allow_html=True)
 
-                st.markdown(f'<div class="sl">LIVE TARGET TRACKER \u2014 AGENT: {target_cli.upper()}</div>', unsafe_allow_html=True)
-                if not df_tgt.empty:
-                    md = df_tgt.head(25).copy()
-                    md[['Team Member', 'Range']] = md['num'].apply(lambda x: pd.Series(get_team_info(x, team_data)))
-                    md['Country'] = md['num'].apply(get_country)
-                    md = md[['dt','cli','num','Country','message','Team Member','Range']].copy()
-                    md.columns = ['Time','App','Number','Country','Message','Team Member','Range']
-                    md['Time'] = pd.to_datetime(md['Time'])
-                    md = md.sort_values('Time', ascending=False)
-                    md['Time'] = md['Time'].dt.strftime('%Y-%m-%d %H:%M:%S')
-                    st.dataframe(md.style.apply(highlight_team, axis=1),
-                                 use_container_width=True, height=400, hide_index=True, column_config=col_cfg)
-                else:
-                    st.markdown('<div class="info-msg"><span>\u25b8</span>No packets for current target agent.</div>', unsafe_allow_html=True)
+                    st.markdown("""
+                    <div class="podium">
+                        <div class="pod pod-2"><div class="pod-watermark">2</div>
+                            <div class="pod-medal">\U0001f948 SILVER</div>
+                            <div class="pod-name">""" + str(t2n) + """</div>
+                            <div class="pod-score">""" + str(t2c) + """</div>
+                            <div class="pod-label">OTPs (5min)</div></div>
+                        <div class="pod pod-1"><div class="pod-watermark">1</div>
+                            <div class="pod-medal">\U0001f3c6 GOLD</div>
+                            <div class="pod-name">""" + str(t1n) + """</div>
+                            <div class="pod-score">""" + str(t1c) + """</div>
+                            <div class="pod-label">OTPs (5min)</div></div>
+                        <div class="pod pod-3"><div class="pod-watermark">3</div>
+                            <div class="pod-medal">\U0001f949 BRONZE</div>
+                            <div class="pod-name">""" + str(t3n) + """</div>
+                            <div class="pod-score">""" + str(t3c) + """</div>
+                            <div class="pod-label">OTPs (5min)</div></div>
+                    </div>
+                    """, unsafe_allow_html=True)
 
-                st.markdown('<div class="sl">GLOBAL LIVE NETWORK STREAM</div>', unsafe_allow_html=True)
-                gd = df.head(msg_limit).copy()
-                gd[['Team Member', 'Range']] = gd['num'].apply(lambda x: pd.Series(get_team_info(x, team_data)))
-                gd['Country'] = gd['num'].apply(get_country)
-                gd = gd[['dt','cli','num','Country','message','Team Member','Range']].copy()
-                gd.columns = ['Time','App','Number','Country','Message','Team Member','Range']
-                gd['Time'] = pd.to_datetime(gd['Time'])
-                gd = gd.sort_values('Time', ascending=False)
-                gd['Time'] = gd['Time'].dt.strftime('%Y-%m-%d %H:%M:%S')
-                st.dataframe(gd.style.apply(highlight_team, axis=1),
-                             use_container_width=True, height=700, hide_index=True, column_config=col_cfg)
+                    st.markdown(f'<div class="sec-h">LIVE TARGET TRACKER \u2014 {target_cli.upper()}</div>', unsafe_allow_html=True)
+                    if not df_tgt.empty:
+                        md = df_tgt.head(25).copy()
+                        md[['Team Member', 'Range']] = md['num'].apply(lambda x: pd.Series(get_team_info(x, team_data)))
+                        md['Country'] = md['num'].apply(get_country)
+                        md = md[['dt','cli','num','Country','message','Team Member','Range']].copy()
+                        md.columns = ['Time','App','Number','Country','Message','Team Member','Range']
+                        md['Time'] = pd.to_datetime(md['Time'])
+                        md = md.sort_values('Time', ascending=False)
+                        md['Time'] = md['Time'].dt.strftime('%Y-%m-%d %H:%M:%S')
+                        st.dataframe(md.style.apply(highlight_team, axis=1),
+                                     use_container_width=True, height=400, hide_index=True, column_config=col_cfg)
+                    else:
+                        st.markdown('<div class="info-msg"><span>\u25b8</span>No packets for current target agent.</div>', unsafe_allow_html=True)
+
+                    st.markdown('<div class="sec-h">GLOBAL LIVE NETWORK STREAM</div>', unsafe_allow_html=True)
+                    gd = df.head(msg_limit).copy()
+                    gd[['Team Member', 'Range']] = gd['num'].apply(lambda x: pd.Series(get_team_info(x, team_data)))
+                    gd['Country'] = gd['num'].apply(get_country)
+                    gd = gd[['dt','cli','num','Country','message','Team Member','Range']].copy()
+                    gd.columns = ['Time','App','Number','Country','Message','Team Member','Range']
+                    gd['Time'] = pd.to_datetime(gd['Time'])
+                    gd = gd.sort_values('Time', ascending=False)
+                    gd['Time'] = gd['Time'].dt.strftime('%Y-%m-%d %H:%M:%S')
+                    st.dataframe(gd.style.apply(highlight_team, axis=1),
+                                 use_container_width=True, height=700, hide_index=True, column_config=col_cfg)
+
+            # === SHEET DATABASE TAB ===
+            elif "\U0001f4ca" in nav_choice:
+                with placeholder.container():
+                    st.markdown('<div class="sec-h">GOOGLE SHEET DATABASE</div>', unsafe_allow_html=True)
+                    st.info("Loading database from Google Sheets...")
+
+            # === ADMIN PANEL TAB ===
+            elif "\U0001f510" in nav_choice and is_admin:
+                with placeholder.container():
+                    st.markdown('<div class="sec-h">CODE GENERATION</div>', unsafe_allow_html=True)
+                    st.markdown('<div class="adm-card"><div class="adm-title">\u26a1 Generate New Codes</div>', unsafe_allow_html=True)
+                    g1, g2, g3 = st.columns([1, 1, 2])
+                    with g1: gen_count  = st.number_input("How many?", min_value=1, max_value=50, value=5)
+                    with g2: gen_prefix = st.text_input("Prefix:", value="UTS")
+                    with g3:
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        if st.button("\u26a1 GENERATE", key="gen_btn"):
+                            with st.spinner("Generating..."):
+                                res = generate_codes_api(int(gen_count), gen_prefix)
+                            if res.get("success"):
+                                st.success(f"\u2705 {len(res['codes'])} codes generated!")
+                                st.code("\n".join(res['codes']), language=None)
+                                st.caption("Give each code to ONE person only.")
+                            else:
+                                st.error(f"\u274c {res.get('msg')}")
+                    st.markdown('</div>', unsafe_allow_html=True)
+
+                    st.markdown('<div class="sec-h">ALL CODES</div>', unsafe_allow_html=True)
+                    col_r, _ = st.columns([1, 4])
+                    with col_r:
+                        if st.button("\U0001f504 REFRESH", key="ref_btn"):
+                            st.session_state["codes_list"] = None
+
+                    if st.button("\U0001f4cb LOAD ALL CODES", key="load_codes") or st.session_state.get("codes_list"):
+                        if not st.session_state.get("codes_list"):
+                            with st.spinner("Loading..."):
+                                res = list_codes_api()
+                            if res.get("success"):
+                                st.session_state["codes_list"] = res.get("codes", [])
+                            else:
+                                st.error(f"Error: {res.get('msg')}")
+
+                        codes_list = st.session_state.get("codes_list", [])
+                        if codes_list:
+                            cdf = pd.DataFrame(codes_list)
+                            def cs(v):
+                                if v == "ACTIVE":      return "color:#22c55e;font-weight:bold"
+                                if v == "DEACTIVATED": return "color:#ef4444;font-weight:bold"
+                                return "color:#fbbf24"
+                            st.dataframe(cdf.style.map(cs, subset=["status"]),
+                                use_container_width=True, hide_index=True,
+                                column_config={
+                                    "code":         st.column_config.TextColumn("ACTIVATION CODE", width="large"),
+                                    "operator":     st.column_config.TextColumn("OPERATOR",        width="medium"),
+                                    "status":       st.column_config.TextColumn("STATUS",          width="small"),
+                                    "created":      st.column_config.TextColumn("CREATED",         width="medium"),
+                                    "activated_at": st.column_config.TextColumn("LOCKED AT",       width="medium"),
+                                    "last_seen":    st.column_config.TextColumn("LAST SEEN",       width="medium"),
+                                })
+
+                            st.markdown('<div class="adm-card"><div class="adm-title">\U0001f512 Deactivate / Reset Code</div>', unsafe_allow_html=True)
+                            d1, d2 = st.columns([2, 1])
+                            with d1:
+                                deact_code = st.text_input("Code to deactivate:", placeholder="UTS-XXXXXXXXXXXX", key="deact_in")
+                            with d2:
+                                st.markdown("<br>", unsafe_allow_html=True)
+                                if st.button("\U0001f6ab DEACTIVATE", key="deact_btn"):
+                                    if deact_code.strip():
+                                        with st.spinner("Processing..."):
+                                            r2 = deactivate_code_api(deact_code.strip().upper())
+                                        if r2.get("success"):
+                                            st.success("\u2705 Deactivated! Device lock removed.")
+                                            st.session_state["codes_list"] = None
+                                            st.rerun()
+                                        else:
+                                            st.error(f"\u274c {r2.get('msg')}")
+                            st.markdown("</div>", unsafe_allow_html=True)
         else:
             with placeholder.container():
                 st.markdown('<div class="info-msg"><span>\u23f3</span>Waiting for data stream...</div>', unsafe_allow_html=True)
@@ -741,41 +833,42 @@ except Exception as e:
 
 
 # ============================================================
-# SHEET DATABASE (separate try/except)
+# SHEET DATABASE (separate try/except, only when on that tab)
 # ============================================================
-try:
-    sr = requests.get(GOOGLE_SCRIPT_URL, timeout=10)
-    if sr.status_code == 200:
-        sd = sr.json()
-        if sd:
-            sdf = pd.DataFrame(sd)
-            if filter_cli: sdf = sdf[sdf['App'].astype(str).str.contains(filter_cli, case=False, na=False)]
-            if filter_num: sdf = sdf[sdf['Number'].astype(str).str.contains(filter_num, na=False)]
-            if filter_msg: sdf = sdf[sdf['Message'].astype(str).str.contains(filter_msg, case=False, na=False)]
-            with history_placeholder.container():
-                st.markdown(f"""
-                <div style="font-family:'JetBrains Mono',monospace;font-size:11px;
-                     color:var(--t2);margin-bottom:14px;padding:8px 18px;
-                     background:var(--card);border:1px solid var(--b1);
-                     border-radius:8px;display:inline-block">
-                    <span style="color:var(--accent);font-weight:600;font-size:14px">{len(sdf)}</span>
-                    <span style="margin-left:6px">PERMANENT RECORDS</span>
-                </div>
-                """, unsafe_allow_html=True)
-                if not sdf.empty:
-                    try:
-                        sdf['Time'] = pd.to_datetime(sdf['Time'])
-                        sdf = sdf.sort_values('Time', ascending=False)
-                        sdf['Time'] = sdf['Time'].dt.strftime('%Y-%m-%d %H:%M:%S')
-                    except: pass
-                    sdf[['Team Member', 'Range']] = sdf['Number'].apply(
-                        lambda x: pd.Series(get_team_info(x, team_data)))
-                    st.dataframe(sdf.style.apply(highlight_team, axis=1),
-                                 use_container_width=True, height=600, hide_index=True, column_config=col_cfg)
-                else:
-                    st.markdown('<div class="info-msg"><span>\U0001f4c4</span>No records match current filters.</div>', unsafe_allow_html=True)
-except Exception:
-    pass
+if "\U0001f4ca" in nav_choice:
+    try:
+        sr = requests.get(GOOGLE_SCRIPT_URL, timeout=10)
+        if sr.status_code == 200:
+            sd = sr.json()
+            if sd:
+                sdf = pd.DataFrame(sd)
+                if filter_cli: sdf = sdf[sdf['App'].astype(str).str.contains(filter_cli, case=False, na=False)]
+                if filter_num: sdf = sdf[sdf['Number'].astype(str).str.contains(filter_num, na=False)]
+                if filter_msg: sdf = sdf[sdf['Message'].astype(str).str.contains(filter_msg, case=False, na=False)]
+                with history_placeholder.container():
+                    st.markdown(f"""
+                    <div style="font-family:'JetBrains Mono',monospace;font-size:11px;
+                         color:var(--t2);margin-bottom:16px;padding:10px 20px;
+                         background:var(--card);border:1px solid var(--b1);
+                         border-radius:10px;display:inline-block">
+                        <span style="color:var(--amber);font-weight:600;font-size:16px">{len(sdf)}</span>
+                        <span style="margin-left:8px">PERMANENT RECORDS</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    if not sdf.empty:
+                        try:
+                            sdf['Time'] = pd.to_datetime(sdf['Time'])
+                            sdf = sdf.sort_values('Time', ascending=False)
+                            sdf['Time'] = sdf['Time'].dt.strftime('%Y-%m-%d %H:%M:%S')
+                        except: pass
+                        sdf[['Team Member', 'Range']] = sdf['Number'].apply(
+                            lambda x: pd.Series(get_team_info(x, team_data)))
+                        st.dataframe(sdf.style.apply(highlight_team, axis=1),
+                                     use_container_width=True, height=600, hide_index=True, column_config=col_cfg)
+                    else:
+                        st.markdown('<div class="info-msg"><span>\U0001f4c4</span>No records match current filters.</div>', unsafe_allow_html=True)
+    except Exception:
+        pass
 
 
 # ============================================================
@@ -783,7 +876,7 @@ except Exception:
 # ============================================================
 REFRESH_SECONDS = 15
 st.markdown(
-    f'<div class="refresh-indicator">\u21bb Auto-refresh in <span>{REFRESH_SECONDS}s</span> \u2014 System Online</div>',
+    f'<div class="refresh-bar">\u21bb Auto-refresh in <span>{REFRESH_SECONDS}s</span> \u2014 System Online</div>',
     unsafe_allow_html=True
 )
 time.sleep(REFRESH_SECONDS)
