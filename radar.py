@@ -10,12 +10,11 @@ import json
 import hashlib
 
 # ============================================================
-# CONFIG
+# CONFIG (Google Sheet URLs completely removed)
 # ============================================================
 URL               = "http://51.77.216.195/crapi/lamix/viewstats"
 TOKEN             = "aXZ0gVZXgoCAc2loX4iFSl9mVWB8hVdgdFVhW3SVZXM="
 TEAM_FILE         = "Numbers_Export.csv"
-GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyTHahQPjxjbuZGcIWiN2AgY8lHJEDm7Pyi2QnpSJVV436Q65DOlOtmA2Ilux8UkVgl/exec"
 REGISTRY_URL      = "https://script.google.com/macros/s/AKfycbzo_Z_7CEVEeKA9fL-M3WXtznKrd19MyiXTksRlbSd1E8bNXh8nZF5HsLdedOjG2iVF/exec"
 ADMIN_KEY         = "UTS_ADMIN_2024"
 
@@ -270,17 +269,6 @@ def highlight_team(row):
         return ['background-color:rgba(0,170,255,.08);color:#00aaff;font-weight:bold;border-right:3px solid #00aaff'] * len(row)
     return [''] * len(row)
 
-def stream_to_google_sheet(raw_data):
-    try:
-        bg = pd.DataFrame(raw_data)
-        if bg.empty: return
-        bg['dt'] = pd.to_datetime(bg['dt']).dt.strftime('%Y-%m-%d %H:%M:%S')
-        for _, row in bg.head(20).iterrows():
-            requests.post(GOOGLE_SCRIPT_URL,
-                data=json.dumps({"Time": row['dt'], "App": row['cli'], "Number": str(row['num']), "Country": get_country(row['num']), "Message": str(row['message'])}),
-                headers={'Content-Type': 'application/json'}, timeout=5)
-    except: pass
-
 team_data = load_team_data()
 col_cfg = {
     "Time":        st.column_config.TextColumn("TIMESTAMP",     width="medium"),
@@ -299,7 +287,7 @@ st.markdown(f"""
 <div class="hdr">
     <div class="badge">UTS SYSTEMS</div>
     <div class="title">⚡ UTS <span>HUNTERS</span> ⚡</div>
-    <div class="sub">> Database Integrated Control Panel</div>
+    <div class="sub">> Live Network Monitor</div>
     <div class="divider"></div>
 </div>
 <div class="opbar">
@@ -314,16 +302,17 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-tab_labels = ["📡  LIVE MONITORING", "📊  SHEET DATABASE"]
+# Google sheet tab completely removed, clean tabs left
+tab_labels = ["📡  LIVE MONITORING"]
 if is_admin: tab_labels.append("🔐  ADMIN PANEL")
 tab_objs = st.tabs(tab_labels)
-tab1, tab2 = tab_objs[0], tab_objs[1]
-tab3 = tab_objs[2] if is_admin else None
+tab1 = tab_objs[0]
+tab3 = tab_objs[1] if is_admin else None
 
-# Fetch global variables so tabs can share metrics without blocking
+# Fetch global variables smoothly from API
 raw_json = []
 try:
-    r = requests.get(URL, params={"token": TOKEN, "records": 500}, timeout=10)
+    r = requests.get(URL, params={"token": TOKEN, "records": 500}, timeout=8)
     if r.status_code == 200:
         raw_json = r.json().get("data", [])
 except: pass
@@ -336,7 +325,6 @@ with tab1:
     with c2: msg_limit  = st.number_input("📡 STREAM BUFFER:", min_value=1, max_value=2000, value=500, key="buffer_input")
     
     if not df.empty:
-        threading.Thread(target=stream_to_google_sheet, args=(raw_json,), daemon=True).start()
         df['dt'] = pd.to_datetime(df['dt'])
         now   = datetime.now()
         df_5m = df[df['dt'] >= now - timedelta(minutes=5)]
@@ -401,32 +389,6 @@ with tab1:
         st.dataframe(gd.style.apply(highlight_team, axis=1), use_container_width=True, height=500, hide_index=True, column_config=col_cfg)
     else:
         st.warning("No live data streams found at this moment.")
-
-with tab2:
-    st.markdown('<div class="sl">REAL-TIME FILTERS — GOOGLE SHEET DATABASE</div>', unsafe_allow_html=True)
-    f1, f2, f3 = st.columns(3)
-    with f1: filter_cli = st.text_input("🔍 App/CLI:", "", key="filter_cli_input").strip()
-    with f2: filter_num = st.text_input("📞 Number:", "", key="filter_num_input").strip()
-    with f3: filter_msg = st.text_input("💬 Message:", "", key="filter_msg_input").strip()
-    
-    sr = requests.get(GOOGLE_SCRIPT_URL, timeout=10)
-    if sr.status_code == 200:
-        sd = sr.json()
-        if sd:
-            sdf = pd.DataFrame(sd)
-            if filter_cli: sdf = sdf[sdf['App'].astype(str).str.contains(filter_cli, case=False, na=False)]
-            if filter_num: sdf = sdf[sdf['Number'].astype(str).str.contains(filter_num, na=False)]
-            if filter_msg: sdf = sdf[sdf['Message'].astype(str).str.contains(filter_msg, case=False, na=False)]
-            
-            st.markdown(f'<div style="font-family:JetBrains Mono,monospace;font-size:11px;color:#5a7aa0;margin-bottom:12px"><span style="color:#00aaff;font-weight:700">{len(sdf)}</span> permanent records</div>', unsafe_allow_html=True)
-            if not sdf.empty:
-                try:
-                    sdf['Time'] = pd.to_datetime(sdf['Time'])
-                    sdf = sdf.sort_values('Time', ascending=False)
-                    sdf['Time'] = sdf['Time'].dt.strftime('%Y-%m-%d %H:%M:%S')
-                except: pass
-                sdf[['Team Member', 'Range']] = sdf['Number'].apply(lambda x: pd.Series(get_team_info(x, team_data)))
-                st.dataframe(sdf.style.apply(highlight_team, axis=1), use_container_width=True, height=500, hide_index=True, column_config=col_cfg)
 
 if is_admin and tab3:
     with tab3:
