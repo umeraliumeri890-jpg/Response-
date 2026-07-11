@@ -22,7 +22,7 @@ ADMIN_KEY         = "UTS_ADMIN_2024"
 # ============================================================
 # PAGE CONFIG
 # ============================================================
-st.set_page_config(page_title="UTS HUNTERS", page_icon="⚡", layout="wide")
+st.set_page_config(page_title="UTS HUNTERS", page_icon="\u26a1", layout="wide")
 
 # ============================================================
 # CSS
@@ -129,27 +129,17 @@ st.markdown("""
 
 # ============================================================
 # SERVER-SIDE DEVICE FINGERPRINT
-# No JS needed. Uses Streamlit's context headers.
-# Works 100% on Streamlit Cloud.
 # ============================================================
 def get_server_side_fp() -> str:
-    """
-    Build a stable device fingerprint from HTTP headers available in Streamlit.
-    User-Agent + Accept-Language + Accept-Encoding combined → SHA256 hash.
-    This is consistent per browser/device and does NOT change on refresh.
-    """
     try:
-        # Streamlit 1.31+ exposes request headers via st.context
         headers = st.context.headers
         ua      = headers.get("User-Agent", "unknown")
         lang    = headers.get("Accept-Language", "")
         enc     = headers.get("Accept-Encoding", "")
-        # Combine signals
         raw = f"{ua}|{lang}|{enc}"
         fp  = "FP" + hashlib.sha256(raw.encode()).hexdigest()[:20].upper()
         return fp
     except Exception:
-        # Fallback for older Streamlit versions
         try:
             import streamlit.web.server.websocket_headers as wh
             headers = wh.get_websocket_headers()
@@ -202,7 +192,7 @@ def list_codes_api() -> dict:
 
 
 # ============================================================
-# GET FINGERPRINT — always available, no JS needed
+# GET FINGERPRINT
 # ============================================================
 device_fp = get_server_side_fp()
 
@@ -212,11 +202,10 @@ device_fp = get_server_side_fp()
 # ============================================================
 if not st.session_state.get("authenticated"):
 
-    # Header
     st.markdown("""
     <div class="hdr">
         <div class="badge">UTS SYSTEMS</div>
-        <div class="title">⚡ UTS <span>HUNTERS</span> ⚡</div>
+        <div class="title">\u26a1 UTS <span>HUNTERS</span> \u26a1</div>
         <div class="sub">> Authorized Access Only</div>
         <div class="divider"></div>
     </div>
@@ -227,15 +216,15 @@ if not st.session_state.get("authenticated"):
         st.markdown('<div class="lc">', unsafe_allow_html=True)
         st.markdown("""
         <div style="text-align:center;margin-bottom:24px">
-            <div style="font-size:44px;margin-bottom:10px">⚡</div>
+            <div style="font-size:44px;margin-bottom:10px">\u26a1</div>
             <div style="font-family:Inter,sans-serif;font-size:24px;font-weight:900;color:#fff;margin-bottom:4px">UTS HUNTERS</div>
             <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#304560;letter-spacing:3px;text-transform:uppercase">Enter Activation Code</div>
         </div>
         """, unsafe_allow_html=True)
 
-        entered_code = st.text_input("🔑 ACTIVATION CODE:", placeholder="UTS-XXXXXXXXXXXX", key="login_code")
+        entered_code = st.text_input("\U0001f511 ACTIVATION CODE:", placeholder="UTS-XXXXXXXXXXXX", key="login_code")
 
-        if st.button("▶  ACTIVATE SESSION", key="login_btn"):
+        if st.button("\u25b6  ACTIVATE SESSION", key="login_btn"):
             if entered_code.strip():
                 with st.spinner("Verifying..."):
                     result = check_code_api(entered_code.strip(), device_fp)
@@ -246,16 +235,16 @@ if not st.session_state.get("authenticated"):
                     st.rerun()
                 else:
                     msg = result.get("msg", "UNKNOWN ERROR")
-                    st.markdown(f'<div class="le">⛔ ACCESS DENIED — {msg}</div>',
+                    st.markdown(f'<div class="le">\u26d4 ACCESS DENIED \u2014 {msg}</div>',
                                 unsafe_allow_html=True)
             else:
-                st.markdown('<div class="le">⚠ Enter your activation code.</div>',
+                st.markdown('<div class="le">\u26a0 Enter your activation code.</div>',
                             unsafe_allow_html=True)
 
         st.markdown(f"""
         <div style="margin-top:20px;font-family:'JetBrains Mono',monospace;
              font-size:9px;color:#1a3a70;text-align:center;line-height:2">
-            🔒 Device ID: {device_fp[:20]}...<br>
+            \U0001f512 Device ID: {device_fp[:20]}...<br>
             <span style="color:#304560">Each code is device-locked. Contact admin for access.</span>
         </div>
         """, unsafe_allow_html=True)
@@ -320,7 +309,7 @@ def stream_to_google_sheet(raw_data):
 st.markdown(f"""
 <div class="hdr">
     <div class="badge">UTS SYSTEMS</div>
-    <div class="title">⚡ UTS <span>HUNTERS</span> ⚡</div>
+    <div class="title">\u26a1 UTS <span>HUNTERS</span> \u26a1</div>
     <div class="sub">> Database Integrated Control Panel</div>
     <div class="divider"></div>
 </div>
@@ -331,60 +320,60 @@ st.markdown(f"""
     <div class="od">|</div>
     <div class="oi">SESSION: <span>{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</span></div>
     <div class="od">|</div>
-    <div class="oi">STATUS: <span style="color:#00e676">✓ AUTHORIZED</span></div>
-    {"<div class='od'>|</div><div class='oi'><span style='color:#f0b429'>👑 ADMIN</span></div>" if is_admin else ""}
+    <div class="oi">STATUS: <span style="color:#00e676">\u2713 AUTHORIZED</span></div>
+    {"<div class='od'>|</div><div class='oi'><span style='color:#f0b429'>\U0001f451 ADMIN</span></div>" if is_admin else ""}
 </div>
 """, unsafe_allow_html=True)
 
 
 # TABS
-tab_labels = ["📡  LIVE MONITORING", "📊  SHEET DATABASE"]
-if is_admin: tab_labels.append("🔐  ADMIN PANEL")
+tab_labels = ["\U0001f4e1  LIVE MONITORING", "\U0001f4ca  SHEET DATABASE"]
+if is_admin: tab_labels.append("\U0001f510  ADMIN PANEL")
 tab_objs = st.tabs(tab_labels)
 tab1, tab2 = tab_objs[0], tab_objs[1]
 tab3 = tab_objs[2] if is_admin else None
 
 with tab1:
     c1, c2 = st.columns([2, 1])
-    with c1: target_cli = st.text_input("⚙ TARGET AGENT (CLI):", "MYOB").strip()
-    with c2: msg_limit  = st.number_input("📡 STREAM BUFFER:", min_value=1, max_value=2000, value=500)
+    with c1: target_cli = st.text_input("\u2699 TARGET AGENT (CLI):", "MYOB").strip()
+    with c2: msg_limit  = st.number_input("\U0001f4e1 STREAM BUFFER:", min_value=1, max_value=2000, value=500)
     placeholder = st.empty()
 
 with tab2:
-    st.markdown('<div class="sl">REAL-TIME FILTERS — GOOGLE SHEET DATABASE</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sl">REAL-TIME FILTERS \u2014 GOOGLE SHEET DATABASE</div>', unsafe_allow_html=True)
     f1, f2, f3 = st.columns(3)
-    with f1: filter_cli = st.text_input("🔍 App/CLI:", "").strip()
-    with f2: filter_num = st.text_input("📞 Number:", "").strip()
-    with f3: filter_msg = st.text_input("💬 Message:", "").strip()
+    with f1: filter_cli = st.text_input("\U0001f50d App/CLI:", "").strip()
+    with f2: filter_num = st.text_input("\U0001f4de Number:", "").strip()
+    with f3: filter_msg = st.text_input("\U0001f4ac Message:", "").strip()
     history_placeholder = st.empty()
 
 if is_admin and tab3:
     with tab3:
         st.markdown('<div class="sl">CODE GENERATION</div>', unsafe_allow_html=True)
-        st.markdown('<div class="ac"><div class="at">⚡ Generate New Codes</div>', unsafe_allow_html=True)
+        st.markdown('<div class="ac"><div class="at">\u26a1 Generate New Codes</div>', unsafe_allow_html=True)
         g1, g2, g3 = st.columns([1, 1, 2])
         with g1: gen_count  = st.number_input("How many?", min_value=1, max_value=50, value=5)
         with g2: gen_prefix = st.text_input("Prefix:", value="UTS")
         with g3:
             st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("⚡ GENERATE", key="gen_btn"):
+            if st.button("\u26a1 GENERATE", key="gen_btn"):
                 with st.spinner("Generating..."):
                     res = generate_codes_api(int(gen_count), gen_prefix)
                 if res.get("success"):
-                    st.success(f"✅ {len(res['codes'])} codes generated!")
+                    st.success(f"\u2705 {len(res['codes'])} codes generated!")
                     st.code("\n".join(res['codes']), language=None)
                     st.caption("Give each code to ONE person only.")
                 else:
-                    st.error(f"❌ {res.get('msg')}")
+                    st.error(f"\u274c {res.get('msg')}")
         st.markdown('</div>', unsafe_allow_html=True)
 
         st.markdown('<div class="sl">ALL CODES</div>', unsafe_allow_html=True)
         col_r, _ = st.columns([1, 4])
         with col_r:
-            if st.button("🔄 REFRESH", key="ref_btn"):
+            if st.button("\U0001f504 REFRESH", key="ref_btn"):
                 st.session_state["codes_list"] = None
 
-        if st.button("📋 LOAD ALL CODES", key="load_codes") or st.session_state.get("codes_list"):
+        if st.button("\U0001f4cb LOAD ALL CODES", key="load_codes") or st.session_state.get("codes_list"):
             if not st.session_state.get("codes_list"):
                 with st.spinner("Loading..."):
                     res = list_codes_api()
@@ -400,7 +389,8 @@ if is_admin and tab3:
                     if v == "ACTIVE":      return "color:#00e676;font-weight:bold"
                     if v == "DEACTIVATED": return "color:#ff3d71;font-weight:bold"
                     return "color:#f0b429"
-                st.dataframe(cdf.style.applymap(cs, subset=["status"]),
+                # FIX: Use .map() instead of deprecated .applymap()
+                st.dataframe(cdf.style.map(cs, subset=["status"]),
                     use_container_width=True, hide_index=True,
                     column_config={
                         "code":         st.column_config.TextColumn("ACTIVATION CODE", width="large"),
@@ -411,22 +401,22 @@ if is_admin and tab3:
                         "last_seen":    st.column_config.TextColumn("LAST SEEN",       width="medium"),
                     })
 
-                st.markdown('<div class="ac"><div class="at">🔒 Deactivate / Reset Code</div>', unsafe_allow_html=True)
+                st.markdown('<div class="ac"><div class="at">\U0001f512 Deactivate / Reset Code</div>', unsafe_allow_html=True)
                 d1, d2 = st.columns([2, 1])
                 with d1:
                     deact_code = st.text_input("Code to deactivate:", placeholder="UTS-XXXXXXXXXXXX", key="deact_in")
                 with d2:
                     st.markdown("<br>", unsafe_allow_html=True)
-                    if st.button("🚫 DEACTIVATE", key="deact_btn"):
+                    if st.button("\U0001f6ab DEACTIVATE", key="deact_btn"):
                         if deact_code.strip():
                             with st.spinner("Processing..."):
                                 r2 = deactivate_code_api(deact_code.strip().upper())
                             if r2.get("success"):
-                                st.success("✅ Deactivated! Device lock removed.")
+                                st.success("\u2705 Deactivated! Device lock removed.")
                                 st.session_state["codes_list"] = None
                                 st.rerun()
                             else:
-                                st.error(f"❌ {r2.get('msg')}")
+                                st.error(f"\u274c {r2.get('msg')}")
                 st.markdown("</div>", unsafe_allow_html=True)
 
 team_data = load_team_data()
@@ -442,106 +432,135 @@ col_cfg = {
 
 
 # ============================================================
-# MAIN LOOP
+# MAIN DATA FETCH (NO while True loop)
 # ============================================================
-while True:
-    try:
-        r = requests.get(URL, params={"token": TOKEN, "records": 500}, timeout=10)
-        if r.status_code == 200:
-            raw_json = r.json().get("data", [])
-            df = pd.DataFrame(raw_json)
-            if not df.empty:
-                threading.Thread(target=stream_to_google_sheet, args=(raw_json,), daemon=True).start()
-                df['dt'] = pd.to_datetime(df['dt'])
-                now   = datetime.now()
-                df_5m = df[df['dt'] >= now - timedelta(minutes=5)]
+try:
+    r = requests.get(URL, params={"token": TOKEN, "records": 500}, timeout=10)
+    if r.status_code == 200:
+        raw_json = r.json().get("data", [])
+        df = pd.DataFrame(raw_json)
+        if not df.empty:
+            threading.Thread(target=stream_to_google_sheet, args=(raw_json,), daemon=True).start()
+            df['dt'] = pd.to_datetime(df['dt'])
+            now   = datetime.now()
+            df_5m = df[df['dt'] >= now - timedelta(minutes=5)]
 
-                t1n, t1c = "NO DATA", 0
-                t2n, t2c = "NO DATA", 0
-                t3n, t3c = "NO DATA", 0
-                if not df_5m.empty and 'cli' in df_5m.columns:
-                    tc = df_5m['cli'].value_counts().head(3)
-                    if len(tc) >= 1: t1n, t1c = tc.index[0], int(tc.iloc[0])
-                    if len(tc) >= 2: t2n, t2c = tc.index[1], int(tc.iloc[1])
-                    if len(tc) >= 3: t3n, t3c = tc.index[2], int(tc.iloc[2])
+            t1n, t1c = "NO DATA", 0
+            t2n, t2c = "NO DATA", 0
+            t3n, t3c = "NO DATA", 0
+            if not df_5m.empty and 'cli' in df_5m.columns:
+                tc = df_5m['cli'].value_counts().head(3)
+                if len(tc) >= 1: t1n, t1c = tc.index[0], int(tc.iloc[0])
+                if len(tc) >= 2: t2n, t2c = tc.index[1], int(tc.iloc[1])
+                if len(tc) >= 3: t3n, t3c = tc.index[2], int(tc.iloc[2])
 
-                tr = len(df)
-                uc = df['cli'].nunique() if 'cli' in df.columns else 0
-                un = df['num'].nunique() if 'num' in df.columns else 0
-                df_tgt = df[df['cli'].str.contains(target_cli, case=False, na=False)].copy()
+            tr = len(df)
+            uc = df['cli'].nunique() if 'cli' in df.columns else 0
+            un = df['num'].nunique() if 'num' in df.columns else 0
+            df_tgt = df[df['cli'].str.contains(target_cli, case=False, na=False)].copy()
 
-                with placeholder.container():
-                    st.markdown(f"""
-                    <div class="sr">
-                        <div class="sb"><div class="sv">{tr}</div><div class="sl2">Total Records</div></div>
-                        <div class="sb"><div class="sv">{t1c}</div><div class="sl2">Top CLI (5min)</div></div>
-                        <div class="sb"><div class="sv">{uc}</div><div class="sl2">Unique CLIs</div></div>
-                        <div class="sb"><div class="sv">{un}</div><div class="sl2">Unique Numbers</div></div>
-                    </div>
-                    <div class="lg">
-                        <div class="rc r1"><div class="rwm">1</div>
-                            <div class="rb">🏆 Top 1 — Last 5 Min</div>
-                            <div class="rn">{t1n}</div><div class="rc_">⚡ {t1c} OTPs</div></div>
-                        <div class="rc r2"><div class="rwm">2</div>
-                            <div class="rb">🥈 Top 2 — Last 5 Min</div>
-                            <div class="rn">{t2n}</div><div class="rc_">⚡ {t2c} OTPs</div></div>
-                        <div class="rc r3"><div class="rwm">3</div>
-                            <div class="rb">🥉 Top 3 — Last 5 Min</div>
-                            <div class="rn">{t3n}</div><div class="rc_">⚡ {t3c} OTPs</div></div>
-                    </div>
-                    """, unsafe_allow_html=True)
+            with placeholder.container():
+                st.markdown(f"""
+                <div class="sr">
+                    <div class="sb"><div class="sv">{tr}</div><div class="sl2">Total Records</div></div>
+                    <div class="sb"><div class="sv">{t1c}</div><div class="sl2">Top CLI (5min)</div></div>
+                    <div class="sb"><div class="sv">{uc}</div><div class="sl2">Unique CLIs</div></div>
+                    <div class="sb"><div class="sv">{un}</div><div class="sl2">Unique Numbers</div></div>
+                </div>
+                <div class="lg">
+                    <div class="rc r1"><div class="rwm">1</div>
+                        <div class="rb">\U0001f3c6 Top 1 \u2014 Last 5 Min</div>
+                        <div class="rn">{t1n}</div><div class="rc_">\u26a1 {t1c} OTPs</div></div>
+                    <div class="rc r2"><div class="rwm">2</div>
+                        <div class="rb">\U0001f948 Top 2 \u2014 Last 5 Min</div>
+                        <div class="rn">{t2n}</div><div class="rc_">\u26a1 {t2c} OTPs</div></div>
+                    <div class="rc r3"><div class="rwm">3</div>
+                        <div class="rb">\U0001f949 Top 3 \u2014 Last 5 Min</div>
+                        <div class="rn">{t3n}</div><div class="rc_">\u26a1 {t3c} OTPs</div></div>
+                </div>
+                """, unsafe_allow_html=True)
 
-                    st.markdown(f'<div class="sl">LIVE TARGET TRACKER — AGENT: {target_cli.upper()}</div>', unsafe_allow_html=True)
-                    if not df_tgt.empty:
-                        md = df_tgt.head(25).copy()
-                        md[['Team Member', 'Range']] = md['num'].apply(lambda x: pd.Series(get_team_info(x, team_data)))
-                        md['Country'] = md['num'].apply(get_country)
-                        md = md[['dt','cli','num','Country','message','Team Member','Range']].copy()
-                        md.columns = ['Time','App','Number','Country','Message','Team Member','Range']
-                        md['Time'] = pd.to_datetime(md['Time'])
-                        md = md.sort_values('Time', ascending=False)
-                        md['Time'] = md['Time'].dt.strftime('%Y-%m-%d %H:%M:%S')
-                        st.dataframe(md.style.apply(highlight_team, axis=1),
-                                     use_container_width=True, height=400, hide_index=True, column_config=col_cfg)
-                    else:
-                        st.caption("▸ No packets for current target agent.")
+                st.markdown(f'<div class="sl">LIVE TARGET TRACKER \u2014 AGENT: {target_cli.upper()}</div>', unsafe_allow_html=True)
+                if not df_tgt.empty:
+                    md = df_tgt.head(25).copy()
+                    md[['Team Member', 'Range']] = md['num'].apply(lambda x: pd.Series(get_team_info(x, team_data)))
+                    md['Country'] = md['num'].apply(get_country)
+                    md = md[['dt','cli','num','Country','message','Team Member','Range']].copy()
+                    md.columns = ['Time','App','Number','Country','Message','Team Member','Range']
+                    md['Time'] = pd.to_datetime(md['Time'])
+                    md = md.sort_values('Time', ascending=False)
+                    md['Time'] = md['Time'].dt.strftime('%Y-%m-%d %H:%M:%S')
+                    st.dataframe(md.style.apply(highlight_team, axis=1),
+                                 use_container_width=True, height=400, hide_index=True, column_config=col_cfg)
+                else:
+                    st.caption("\u25b8 No packets for current target agent.")
 
-                    st.markdown('<div class="sl">GLOBAL LIVE NETWORK STREAM</div>', unsafe_allow_html=True)
-                    gd = df.head(msg_limit).copy()
-                    gd[['Team Member', 'Range']] = gd['num'].apply(lambda x: pd.Series(get_team_info(x, team_data)))
-                    gd['Country'] = gd['num'].apply(get_country)
-                    gd = gd[['dt','cli','num','Country','message','Team Member','Range']].copy()
-                    gd.columns = ['Time','App','Number','Country','Message','Team Member','Range']
-                    gd['Time'] = pd.to_datetime(gd['Time'])
-                    gd = gd.sort_values('Time', ascending=False)
-                    gd['Time'] = gd['Time'].dt.strftime('%Y-%m-%d %H:%M:%S')
-                    st.dataframe(gd.style.apply(highlight_team, axis=1),
-                                 use_container_width=True, height=700, hide_index=True, column_config=col_cfg)
+                st.markdown('<div class="sl">GLOBAL LIVE NETWORK STREAM</div>', unsafe_allow_html=True)
+                gd = df.head(msg_limit).copy()
+                gd[['Team Member', 'Range']] = gd['num'].apply(lambda x: pd.Series(get_team_info(x, team_data)))
+                gd['Country'] = gd['num'].apply(get_country)
+                gd = gd[['dt','cli','num','Country','message','Team Member','Range']].copy()
+                gd.columns = ['Time','App','Number','Country','Message','Team Member','Range']
+                gd['Time'] = pd.to_datetime(gd['Time'])
+                gd = gd.sort_values('Time', ascending=False)
+                gd['Time'] = gd['Time'].dt.strftime('%Y-%m-%d %H:%M:%S')
+                st.dataframe(gd.style.apply(highlight_team, axis=1),
+                             use_container_width=True, height=700, hide_index=True, column_config=col_cfg)
+        else:
+            with placeholder.container():
+                st.info("\u23f3 Waiting for data stream...")
+    else:
+        with placeholder.container():
+            st.warning(f"\u26a0 API returned status {r.status_code}. Retrying in 15s...")
+except requests.exceptions.ConnectionError:
+    with placeholder.container():
+        st.error("\U0001f6a7 Cannot connect to data server (51.77.216.195). Check if the server is online.")
+except requests.exceptions.Timeout:
+    with placeholder.container():
+        st.warning("\u23f3 Data server timed out. Will retry on next refresh.")
+except Exception as e:
+    with placeholder.container():
+        st.error(f"\u274c Error: {str(e)}")
 
-        sr = requests.get(GOOGLE_SCRIPT_URL, timeout=10)
-        if sr.status_code == 200:
-            sd = sr.json()
-            if sd:
-                sdf = pd.DataFrame(sd)
-                if filter_cli: sdf = sdf[sdf['App'].astype(str).str.contains(filter_cli, case=False, na=False)]
-                if filter_num: sdf = sdf[sdf['Number'].astype(str).str.contains(filter_num, na=False)]
-                if filter_msg: sdf = sdf[sdf['Message'].astype(str).str.contains(filter_msg, case=False, na=False)]
-                with history_placeholder.container():
-                    st.markdown(f'<div style="font-family:JetBrains Mono,monospace;font-size:11px;'
-                                f'color:#5a7aa0;margin-bottom:12px"><span style="color:#00aaff;font-weight:700">'
-                                f'{len(sdf)}</span> permanent records</div>', unsafe_allow_html=True)
-                    if not sdf.empty:
-                        try:
-                            sdf['Time'] = pd.to_datetime(sdf['Time'])
-                            sdf = sdf.sort_values('Time', ascending=False)
-                            sdf['Time'] = sdf['Time'].dt.strftime('%Y-%m-%d %H:%M:%S')
-                        except: pass
-                        sdf[['Team Member', 'Range']] = sdf['Number'].apply(
-                            lambda x: pd.Series(get_team_info(x, team_data)))
-                        st.dataframe(sdf.style.apply(highlight_team, axis=1),
-                                     use_container_width=True, height=600, hide_index=True, column_config=col_cfg)
+# ============================================================
+# SHEET DATABASE (separate try/except so it doesn't kill the live tab)
+# ============================================================
+try:
+    sr = requests.get(GOOGLE_SCRIPT_URL, timeout=10)
+    if sr.status_code == 200:
+        sd = sr.json()
+        if sd:
+            sdf = pd.DataFrame(sd)
+            if filter_cli: sdf = sdf[sdf['App'].astype(str).str.contains(filter_cli, case=False, na=False)]
+            if filter_num: sdf = sdf[sdf['Number'].astype(str).str.contains(filter_num, na=False)]
+            if filter_msg: sdf = sdf[sdf['Message'].astype(str).str.contains(filter_msg, case=False, na=False)]
+            with history_placeholder.container():
+                st.markdown(f'<div style="font-family:JetBrains Mono,monospace;font-size:11px;'
+                            f'color:#5a7aa0;margin-bottom:12px"><span style="color:#00aaff;font-weight:700">'
+                            f'{len(sdf)}</span> permanent records</div>', unsafe_allow_html=True)
+                if not sdf.empty:
+                    try:
+                        sdf['Time'] = pd.to_datetime(sdf['Time'])
+                        sdf = sdf.sort_values('Time', ascending=False)
+                        sdf['Time'] = sdf['Time'].dt.strftime('%Y-%m-%d %H:%M:%S')
+                    except: pass
+                    sdf[['Team Member', 'Range']] = sdf['Number'].apply(
+                        lambda x: pd.Series(get_team_info(x, team_data)))
+                    st.dataframe(sdf.style.apply(highlight_team, axis=1),
+                                 use_container_width=True, height=600, hide_index=True, column_config=col_cfg)
+except Exception:
+    pass
 
-        time.sleep(15)
-        st.rerun()
-    except Exception:
-        time.sleep(5)
+# ============================================================
+# AUTO-REFRESH (replaces the while True + st.rerun() loop)
+# Uses a meta-refresh approach that works on Streamlit Cloud
+# without causing memory buildup
+# ============================================================
+REFRESH_SECONDS = 15
+st.markdown(
+    f'<div style="text-align:center;font-family:JetBrains Mono,monospace;font-size:10px;'
+    f'color:#304560;margin-top:20px">\u21bb Auto-refresh in {REFRESH_SECONDS}s</div>',
+    unsafe_allow_html=True
+)
+time.sleep(REFRESH_SECONDS)
+st.rerun()
