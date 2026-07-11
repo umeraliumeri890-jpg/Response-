@@ -8,7 +8,7 @@ from phonenumbers import geocoder
 import threading
 import json
 import hashlib
-from streamlit_autorefresh import st_autorefresh  # Autorefresh component import kiya
+from streamlit_autorefresh import st_autorefresh
 
 # ============================================================
 # CONFIG
@@ -127,30 +127,18 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-
 # ============================================================
 # SERVER-SIDE DEVICE FINGERPRINT
-# No JS needed. Uses Streamlit's context headers.
-# Works 100% on Streamlit Cloud.
 # ============================================================
 def get_server_side_fp() -> str:
-    """
-    Build a stable device fingerprint from HTTP headers available in Streamlit.
-    User-Agent + Accept-Language + Accept-Encoding combined → SHA256 hash.
-    This is consistent per browser/device and does NOT change on refresh.
-    """
     try:
-        # Streamlit 1.31+ exposes request headers via st.context
         headers = st.context.headers
         ua      = headers.get("User-Agent", "unknown")
         lang    = headers.get("Accept-Language", "")
         enc     = headers.get("Accept-Encoding", "")
-        # Combine signals
         raw = f"{ua}|{lang}|{enc}"
-        fp  = "FP" + hashlib.sha256(raw.encode()).hexdigest()[:20].upper()
-        return fp
+        return "FP" + hashlib.sha256(raw.encode()).hexdigest()[:20].upper()
     except Exception:
-        # Fallback for older Streamlit versions
         try:
             import streamlit.web.server.websocket_headers as wh
             headers = wh.get_websocket_headers()
@@ -159,7 +147,6 @@ def get_server_side_fp() -> str:
             return "FP" + hashlib.sha256(raw.encode()).hexdigest()[:20].upper()
         except Exception:
             return "FP_FALLBACK"
-
 
 # ============================================================
 # REGISTRY API
@@ -201,19 +188,13 @@ def list_codes_api() -> dict:
     except Exception as e:
         return {"success": False, "msg": str(e)}
 
-
-# ============================================================
-# GET FINGERPRINT — always available, no JS needed
-# ============================================================
+# GET FINGERPRINT
 device_fp = get_server_side_fp()
-
 
 # ============================================================
 # AUTH FLOW
 # ============================================================
 if not st.session_state.get("authenticated"):
-
-    # Header
     st.markdown("""
     <div class="hdr">
         <div class="badge">UTS SYSTEMS</div>
@@ -247,11 +228,9 @@ if not st.session_state.get("authenticated"):
                     st.rerun()
                 else:
                     msg = result.get("msg", "UNKNOWN ERROR")
-                    st.markdown(f'<div class="le">⛔ ACCESS DENIED — {msg}</div>',
-                                unsafe_allow_html=True)
+                    st.markdown(f'<div class="le">⛔ ACCESS DENIED — {msg}</div>', unsafe_allow_html=True)
             else:
-                st.markdown('<div class="le">⚠ Enter your activation code.</div>',
-                            unsafe_allow_html=True)
+                st.markdown('<div class="le">⚠ Enter your activation code.</div>', unsafe_allow_html=True)
 
         st.markdown(f"""
         <div style="margin-top:20px;font-family:'JetBrains Mono',monospace;
@@ -261,16 +240,13 @@ if not st.session_state.get("authenticated"):
         </div>
         """, unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
-
     st.stop()
-
 
 # ============================================================
 # AUTHENTICATED
 # ============================================================
 operator_name = st.session_state.get("operator_name", "OPERATOR")
 is_admin      = (operator_name == "Umer Ali")
-
 
 def get_country(num):
     try:
@@ -282,7 +258,8 @@ def get_country(num):
 @st.cache_data(ttl=300)
 def load_team_data():
     try:
-        df = pd.read_csv(TEAM_FILE)
+        # DtypeWarning handle karne ke liye dtype=str lagaya
+        df = pd.read_csv(TEAM_FILE, dtype=str)
         df['Phone Number'] = df['Phone Number'].astype(str).str.split('.').str[0].str.strip()
         df['Status']       = df['Status'].fillna('')
         df['MemberName']   = df['Status'].str.replace('Allocated: ', '', case=False, regex=False).str.strip()
@@ -303,25 +280,24 @@ def highlight_team(row):
         return ['background-color:rgba(0,170,255,.08);color:#00aaff;font-weight:bold;border-right:3px solid #00aaff'] * len(row)
     return [''] * len(row)
 
-def stream_to_google_sheet(raw_data):
+# SegFault se bachne ke liye threading ki jagah safe sequential call sync kiya
+def stream_to_google_sheet_safe(raw_data):
     try:
         bg = pd.DataFrame(raw_data)
         if bg.empty: return
         bg['dt'] = pd.to_datetime(bg['dt']).dt.strftime('%Y-%m-%d %H:%M:%S')
-        for _, row in bg.head(20).iterrows():
+        for _, row in bg.head(5).iterrows(): # Buffer optimized to top 5 to prevent timeouts
             requests.post(GOOGLE_SCRIPT_URL,
                 data=json.dumps({"Time": row['dt'], "App": row['cli'],
                     "Number": str(row['num']), "Country": get_country(row['num']),
                     "Message": str(row['message'])}),
-                headers={'Content-Type': 'application/json'}, timeout=5)
+                headers={'Content-Type': 'application/json'}, timeout=4)
     except: pass
 
-
-# HAR 15 SECOND BAAD PAGE AUTO-REFRESH KAREGA (Infinite loop ke bagair)
+# AUTO REFRESH SETUP
 st_autorefresh(interval=15000, key="datarefresh")
 
-
-# HEADER
+# HEADER HTML
 st.markdown(f"""
 <div class="hdr">
     <div class="badge">UTS SYSTEMS</div>
@@ -341,8 +317,7 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-
-# TABS
+# TABS INITIALIZATION
 tab_labels = ["📡  LIVE MONITORING", "📊  SHEET DATABASE"]
 if is_admin: tab_labels.append("🔐  ADMIN PANEL")
 tab_objs = st.tabs(tab_labels)
@@ -378,25 +353,17 @@ if is_admin and tab3:
                 if res.get("success"):
                     st.success(f"✅ {len(res['codes'])} codes generated!")
                     st.code("\n".join(res['codes']), language=None)
-                    st.caption("Give each code to ONE person only.")
                 else:
                     st.error(f"❌ {res.get('msg')}")
         st.markdown('</div>', unsafe_allow_html=True)
 
         st.markdown('<div class="sl">ALL CODES</div>', unsafe_allow_html=True)
-        col_r, _ = st.columns([1, 4])
-        with col_r:
-            if st.button("🔄 REFRESH", key="ref_btn"):
-                st.session_state["codes_list"] = None
-
         if st.button("📋 LOAD ALL CODES", key="load_codes") or st.session_state.get("codes_list"):
             if not st.session_state.get("codes_list"):
                 with st.spinner("Loading..."):
                     res = list_codes_api()
                 if res.get("success"):
                     st.session_state["codes_list"] = res.get("codes", [])
-                else:
-                    st.error(f"Error: {res.get('msg')}")
 
             codes_list = st.session_state.get("codes_list", [])
             if codes_list:
@@ -405,8 +372,10 @@ if is_admin and tab3:
                     if v == "ACTIVE":      return "color:#00e676;font-weight:bold"
                     if v == "DEACTIVATED": return "color:#ff3d71;font-weight:bold"
                     return "color:#f0b429"
+                
+                # use_container_width='stretch' update kiya naye streamlit framework ke mutabik
                 st.dataframe(cdf.style.applymap(cs, subset=["status"]),
-                    use_container_width=True, hide_index=True,
+                    width='stretch', hide_index=True,
                     column_config={
                         "code":         st.column_config.TextColumn("ACTIVATION CODE", width="large"),
                         "operator":     st.column_config.TextColumn("OPERATOR",        width="medium"),
@@ -427,11 +396,9 @@ if is_admin and tab3:
                             with st.spinner("Processing..."):
                                 r2 = deactivate_code_api(deact_code.strip().upper())
                             if r2.get("success"):
-                                st.success("✅ Deactivated! Device lock removed.")
+                                st.success("✅ Deactivated!")
                                 st.session_state["codes_list"] = None
                                 st.rerun()
-                            else:
-                                st.error(f"❌ {r2.get('msg')}")
                 st.markdown("</div>", unsafe_allow_html=True)
 
 team_data = load_team_data()
@@ -445,9 +412,8 @@ col_cfg = {
     "Range":       st.column_config.TextColumn("NETWORK RANGE", width="large"),
 }
 
-
 # ============================================================
-# DATA LOADING & RENDERING (No While Loop)
+# DATA EXECUTION
 # ============================================================
 try:
     r = requests.get(URL, params={"token": TOKEN, "records": 500}, timeout=10)
@@ -455,7 +421,8 @@ try:
         raw_json = r.json().get("data", [])
         df = pd.DataFrame(raw_json)
         if not df.empty:
-            threading.Thread(target=stream_to_google_sheet, args=(raw_json,), daemon=True).start()
+            # Threading hata kar data sync execute kiya takay segmentation fault se bacha ja sakay
+            stream_to_google_sheet_safe(raw_json)
             df['dt'] = pd.to_datetime(df['dt'])
             now   = datetime.now()
             df_5m = df[df['dt'] >= now - timedelta(minutes=5)]
@@ -506,7 +473,7 @@ try:
                     md = md.sort_values('Time', ascending=False)
                     md['Time'] = md['Time'].dt.strftime('%Y-%m-%d %H:%M:%S')
                     st.dataframe(md.style.apply(highlight_team, axis=1),
-                                 use_container_width=True, height=400, hide_index=True, column_config=col_cfg)
+                                 width='stretch', height=400, hide_index=True, column_config=col_cfg)
                 else:
                     st.caption("▸ No packets for current target agent.")
 
@@ -520,7 +487,7 @@ try:
                 gd = gd.sort_values('Time', ascending=False)
                 gd['Time'] = gd['Time'].dt.strftime('%Y-%m-%d %H:%M:%S')
                 st.dataframe(gd.style.apply(highlight_team, axis=1),
-                             use_container_width=True, height=700, hide_index=True, column_config=col_cfg)
+                             width='stretch', height=700, hide_index=True, column_config=col_cfg)
 
     sr = requests.get(GOOGLE_SCRIPT_URL, timeout=10)
     if sr.status_code == 200:
@@ -543,7 +510,6 @@ try:
                     sdf[['Team Member', 'Range']] = sdf['Number'].apply(
                         lambda x: pd.Series(get_team_info(x, team_data)))
                     st.dataframe(sdf.style.apply(highlight_team, axis=1),
-                                 use_container_width=True, height=600, hide_index=True, column_config=col_cfg)
-except Exception as e:
-    # background error logs avoid karne ke liye pass ya minor trace rakhein
+                                 width='stretch', height=600, hide_index=True, column_config=col_cfg)
+except Exception:
     pass
