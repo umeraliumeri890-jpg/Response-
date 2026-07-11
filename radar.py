@@ -1,7 +1,7 @@
 import streamlit as st
 import requests
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime
 import json
 import hashlib
 
@@ -15,7 +15,7 @@ ADMIN_KEY         = "UTS_ADMIN_2024"
 
 st.set_page_config(page_title="UTS HUNTERS", page_icon="⚡", layout="wide")
 
-# Modern Dark UI Styling
+# Modern Styling
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700;800&family=Inter:wght@300;400;600;700;900&display=swap');
@@ -47,23 +47,13 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Session Auth
-if not st.session_state.get("authenticated"):
-    st.markdown('<div class="hdr"><div class="badge">UTS SYSTEMS</div><div class="title">⚡ UTS <span>HUNTERS</span> ⚡</div></div>', unsafe_allow_html=True)
-    c1, col2, c3 = st.columns([1, 1.3, 1])
-    with col2:
-        st.markdown('<div class="lc">', unsafe_allow_html=True)
-        entered_code = st.text_input("🔑 ACTIVATION CODE:", placeholder="UTS-XXXXXXXXXXXX")
-        if st.button("▶  ACTIVATE"):
-            st.session_state["authenticated"] = True
-            st.session_state["operator_name"] = "UMER ALI"
-            st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
-    st.stop()
+# Session Control Bypass
+if "authenticated" not in st.session_state:
+    st.session_state["authenticated"] = True
+    st.session_state["operator_name"] = "UMER ALI"
 
-operator_name = st.session_state.get("operator_name", "OPERATOR")
+operator_name = st.session_state["operator_name"]
 
-# Static Python-based fast mapping (Zero C-Extensions)
 def get_country(num):
     s = str(num).strip().lstrip('+')
     prefixes = {'1': 'USA/Canada', '44': 'United Kingdom', '61': 'Australia', '92': 'Pakistan', '91': 'India', '971': 'UAE', '966': 'Saudi Arabia'}
@@ -71,55 +61,71 @@ def get_country(num):
         if len(s) >= l and s[:l] in prefixes: return prefixes[s[:l]]
     return "Global"
 
-@st.cache_data(ttl=300)
-def load_team_data():
+# Hard cache load hatakar safe read mechanism lagaya taake spinner freeze na ho
+def load_team_map():
     try:
         df = pd.read_csv(TEAM_FILE, dtype=str)
         df['Phone Number'] = df['Phone Number'].astype(str).str.split('.').str[0].str.strip()
         df['MemberName'] = df['Status'].fillna('').str.replace('Allocated: ', '', case=False, regex=False).str.strip()
         return df.set_index('Phone Number')[['Range', 'MemberName']].to_dict('index')
-    except: 
+    except:
         return {}
 
-team_data = load_team_data()
+team_map = load_team_map()
 
-# Native Render Friendly Auto Refresh (No loops)
+# Top structural header
+st.markdown(f'<div class="hdr"><div class="title">⚡ UTS <span>HUNTERS</span> ⚡</div></div>', unsafe_allow_html=True)
+st.markdown(f"""
+<div class="opbar">
+    <div class="oi"><span class="pd"></span><span>LIVE STREAM</span></div>
+    <div class="od">|</div>
+    <div class="oi">OPERATOR: <span>{operator_name}</span></div>
+    <div class="od">|</div>
+    <div class="oi">SYNC TIME: <span>{datetime.now().strftime('%H:%M:%S')}</span></div>
+</div>
+""", unsafe_allow_html=True)
+
+# Layout setup
+c1, c2 = st.columns([2, 1])
+with c1: target_cli = st.text_input("⚙ TARGET AGENT (CLI):", "MYOB").strip()
+with c2: msg_limit  = st.number_input("📡 STREAM BUFFER:", min_value=10, max_value=1000, value=100)
+
+stats_placeholder = st.empty()
+table_placeholder = st.empty()
+
+# Streamlit Native Auto-Refresh (No script hang)
 st.fragment(run_every=2.0)
-def render_realtime_interface():
-    st.markdown(f'<div class="hdr"><div class="title">⚡ UTS <span>HUNTERS</span> ⚡</div></div>', unsafe_allow_html=True)
-    st.markdown(f"""
-    <div class="opbar">
-        <div class="oi"><span class="pd"></span><span>LIVE STREAM</span></div>
-        <div class="od">|</div>
-        <div class="oi">OPERATOR: <span>{operator_name}</span></div>
-        <div class="od">|</div>
-        <div class="oi">SYNC TIME: <span>{datetime.now().strftime('%H:%M:%S')}</span></div>
-    </div>
-    """, unsafe_allow_html=True)
-
+def fetch_and_display():
     try:
-        r = requests.get(URL, params={"token": TOKEN, "records": 100}, timeout=4)
+        r = requests.get(URL, params={"token": TOKEN, "records": int(msg_limit)}, timeout=3)
         if r.status_code == 200:
             raw = r.json().get("data", [])
             df = pd.DataFrame(raw)
             if not df.empty:
                 df['Country'] = df['num'].apply(get_country)
                 
-                st.markdown(f"""
-                <div class="sr">
-                    <div class="sb"><div class="sv">{len(df)}</div><div class="sl2">Current Packets</div></div>
-                    <div class="sb"><div class="sv">{df['cli'].nunique()}</div><div class="sl2">Active Agents</div></div>
-                    <div class="sb"><div class="sv">{df['num'].nunique()}</div><div class="sl2">Unique Targets</div></div>
-                    <div class="sb"><div class="sv" style="color:#00e676">● 2.0s</div><div class="sl2">Refresh Rate</div></div>
-                </div>
-                """, unsafe_allow_html=True)
+                with stats_placeholder.container():
+                    st.markdown(f"""
+                    <div class="sr">
+                        <div class="sb"><div class="sv">{len(df)}</div><div class="sl2">Total Packets</div></div>
+                        <div class="sb"><div class="sv">{df['cli'].nunique()}</div><div class="sl2">Active CLIs</div></div>
+                        <div class="sb"><div class="sv">{df['num'].nunique()}</div><div class="sl2">Unique Targets</div></div>
+                        <div class="sb"><div class="sv" style="color:#00e676">● LIVE</div><div class="sl2">2s Native Refresh</div></div>
+                    </div>
+                    """, unsafe_allow_html=True)
                 
                 display_df = df[['dt', 'cli', 'num', 'Country', 'message']].copy()
                 display_df.columns = ['Time', 'Agent', 'Number', 'Country', 'Message']
-                st.dataframe(display_df, width='stretch', height=550, hide_index=True)
+                
+                # Filter for live targeting view
+                if target_cli:
+                    display_df = display_df[display_df['Agent'].str.contains(target_cli, case=False, na=False)]
+                
+                with table_placeholder.container():
+                    st.dataframe(display_df, width='stretch', height=600, hide_index=True)
             else:
-                st.warning("Buffer stream empty.")
-    except Exception as e:
-        st.error("Data fetch timeout. Retrying next tick...")
+                table_placeholder.info("Stream queue is currently clear.")
+    except Exception:
+        pass
 
-render_realtime_interface()
+fetch_and_display()
