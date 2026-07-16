@@ -7,6 +7,7 @@ import phonenumbers
 from phonenumbers import geocoder
 import json
 import hashlib
+from streamlit_geolocation import streamlit_geolocation
 
 # ============================================================
 # CONFIG
@@ -125,58 +126,35 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================================
-# HIGHLY SECURE URL-BASED GPS BYPASS FOR STREAMLIT CLOUD
+# REACT-BASED GEOLOCATION CAPTURE (100% WORKING ON CLOUD)
 # ============================================================
-# URL query parameters se fetch karenge (Streamlit app URL ke bad ?lat=xx&lon=yy automatically pass hoga)
-params = st.query_params
-
-if "lat" in params and "lon" in params:
-    st.session_state["latitude"] = params["lat"]
-    st.session_state["longitude"] = params["lon"]
-    st.session_state["gps_status"] = "granted"
-
-# Agar parameters abhi tak load nahi huye, toh prompt display karenge aur JS execute karenge
 if not st.session_state.get("latitude") or not st.session_state.get("longitude"):
     st.markdown("""
-    <div class="hdr" style="margin-top:10%">
+    <div class="hdr" style="margin-top:5%">
         <div class="badge">SECURITY REQUIREMENT</div>
         <div class="title" style="font-size:36px">🔒 <span>GPS LOCATION</span> REQUIRED</div>
         <p style="color:var(--t2); font-family:'JetBrains Mono',monospace; font-size:12px; margin-top:15px;">
-            This system is restricted. Please wait for the browser prompt, allow location access, and system will automatically forward you.
+            Please click the <b>"Get Location"</b> button below to authorize.
         </p>
         <div class="divider" style="margin-top:20px"></div>
     </div>
     """, unsafe_allow_html=True)
-
-    # Iframe cross-origin block ko bypass karne ke liye, parent window ke location parameter ko update karne ka script
-    components_js = """
-    <script>
-    function getLocation() {
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(showPosition, showError, {enableHighAccuracy: true, timeout: 5000, maximumAge: 0});
-        } else {
-            alert("Geolocation is not supported by this browser.");
-        }
-    }
-    function showPosition(position) {
-        const lat = position.coords.latitude;
-        const lon = position.coords.longitude;
-        const currentUrl = new URL(window.parent.location.href);
-        currentUrl.searchParams.set('lat', lat);
-        currentUrl.searchParams.set('lon', lon);
-        window.parent.location.href = currentUrl.toString();
-    }
-    function showError(error) {
-        console.log("GPS Error: " + error.message);
-    }
-    // Execute immediately on load
-    getLocation();
-    </script>
-    """
-    st.components.v1.html(components_js, height=0, width=0)
     
-    if st.button("🔄 RETRY / SYNC LOCATION"):
-        st.rerun()
+    col_l1, col_l2, col_l3 = st.columns([1, 1.2, 1])
+    with col_l2:
+        # React component for location request
+        location = streamlit_geolocation()
+        
+        if location and location.get("latitude") and location.get("longitude"):
+            st.session_state["latitude"] = str(location["latitude"])
+            st.session_state["longitude"] = str(location["longitude"])
+            st.session_state["gps_status"] = "granted"
+            st.success("🎯 Location verified! Proceeding...")
+            time.sleep(1)
+            st.rerun()
+        else:
+            st.info("Waiting for permission. Make sure to click 'Get Location' above.")
+            
     st.stop()
 
 # ============================================================
