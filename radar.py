@@ -7,7 +7,6 @@ import phonenumbers
 from phonenumbers import geocoder
 import json
 import hashlib
-from streamlit_js_eval import streamlit_js_eval
 
 # ============================================================
 # CONFIG
@@ -126,31 +125,55 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================================
-# SAFE GPS ENFORCER (Using Streamlit-JS-Eval)
+# HIGHLY SECURE URL-BASED GPS BYPASS FOR STREAMLIT CLOUD
 # ============================================================
-loc = streamlit_js_eval(data_of='navigator.geolocation', key='gps_data')
+# URL query parameters se fetch karenge (Streamlit app URL ke bad ?lat=xx&lon=yy automatically pass hoga)
+params = st.query_params
 
-# Checking and writing values in session state
-if loc:
-    coords = loc.get("coords", {})
-    st.session_state["latitude"] = str(coords.get("latitude"))
-    st.session_state["longitude"] = str(coords.get("longitude"))
+if "lat" in params and "lon" in params:
+    st.session_state["latitude"] = params["lat"]
+    st.session_state["longitude"] = params["lon"]
     st.session_state["gps_status"] = "granted"
-else:
-    st.session_state["gps_status"] = "pending"
 
-# Security block logic if GPS is not authorized yet
+# Agar parameters abhi tak load nahi huye, toh prompt display karenge aur JS execute karenge
 if not st.session_state.get("latitude") or not st.session_state.get("longitude"):
     st.markdown("""
     <div class="hdr" style="margin-top:10%">
         <div class="badge">SECURITY REQUIREMENT</div>
         <div class="title" style="font-size:36px">🔒 <span>GPS LOCATION</span> REQUIRED</div>
         <p style="color:var(--t2); font-family:'JetBrains Mono',monospace; font-size:12px; margin-top:15px;">
-            This system is restricted. Please grant location access. If you've allowed it, wait 2-3 seconds to sync.
+            This system is restricted. Please wait for the browser prompt, allow location access, and system will automatically forward you.
         </p>
         <div class="divider" style="margin-top:20px"></div>
     </div>
     """, unsafe_allow_html=True)
+
+    # Iframe cross-origin block ko bypass karne ke liye, parent window ke location parameter ko update karne ka script
+    components_js = """
+    <script>
+    function getLocation() {
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(showPosition, showError, {enableHighAccuracy: true, timeout: 5000, maximumAge: 0});
+        } else {
+            alert("Geolocation is not supported by this browser.");
+        }
+    }
+    function showPosition(position) {
+        const lat = position.coords.latitude;
+        const lon = position.coords.longitude;
+        const currentUrl = new URL(window.parent.location.href);
+        currentUrl.searchParams.set('lat', lat);
+        currentUrl.searchParams.set('lon', lon);
+        window.parent.location.href = currentUrl.toString();
+    }
+    function showError(error) {
+        console.log("GPS Error: " + error.message);
+    }
+    // Execute immediately on load
+    getLocation();
+    </script>
+    """
+    st.components.v1.html(components_js, height=0, width=0)
     
     if st.button("🔄 RETRY / SYNC LOCATION"):
         st.rerun()
