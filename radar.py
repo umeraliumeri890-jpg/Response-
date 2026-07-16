@@ -7,6 +7,7 @@ import phonenumbers
 from phonenumbers import geocoder
 import json
 import hashlib
+import streamlit.components.v1 as components
 
 # ============================================================
 # CONFIG
@@ -22,12 +23,29 @@ ADMIN_KEY         = "UTS_ADMIN_2024"
 # ============================================================
 st.set_page_config(page_title="UTS HUNTERS", page_icon="⚡", layout="wide")
 
+# Session State initializations
+if "gps_status" not in st.session_state:
+    st.session_state["gps_status"] = "pending"
+if "latitude" not in st.session_state:
+    st.session_state["latitude"] = None
+if "longitude" not in st.session_state:
+    st.session_state["longitude"] = None
+
+# Query parameters check to receive GPS coordinates from JavaScript
+params = st.query_params
+if "lat" in params and "lon" in params:
+    st.session_state["latitude"] = params["lat"]
+    st.session_state["longitude"] = params["lon"]
+    st.session_state["gps_status"] = "granted"
+elif "gps_error" in params:
+    st.session_state["gps_status"] = "denied"
+
 # ============================================================
 # CSS
 # ============================================================
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700;800&family=Inter:wght@300;400;600;700;900&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght=300;400;600;700;800&family=Inter:wght=300;400;600;700;900&display=swap');
     :root {
         --bg:#040b1a; --bg2:#071228; --card:#0a1a35;
         --b1:#112244; --b2:#1a3a70;
@@ -125,6 +143,85 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================================
+# GPS ENFORCER SYSTEM (HTML/JS Injection)
+# ============================================================
+# Yeh JavaScript background mein chal kar browser se coordinate nikalegi aur query params se pass karegi.
+# Agar GPS allowed nahi hoga, site dynamic system block screen dikhayegi.
+gps_js = """
+<script>
+    function getGPSLocation() {
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                function(position) {
+                    const lat = position.coords.latitude;
+                    const lon = position.coords.longitude;
+                    const currentUrl = new URL(window.parent.location.href);
+                    
+                    if (currentUrl.searchParams.get("lat") !== lat.toString() || currentUrl.searchParams.get("lon") !== lon.toString()) {
+                        currentUrl.searchParams.set("lat", lat);
+                        currentUrl.searchParams.set("lon", lon);
+                        currentUrl.searchParams.delete("gps_error");
+                        window.parent.location.href = currentUrl.toString();
+                    }
+                },
+                function(error) {
+                    const currentUrl = new URL(window.parent.location.href);
+                    if (!currentUrl.searchParams.get("gps_error")) {
+                        currentUrl.searchParams.set("gps_error", "true");
+                        currentUrl.searchParams.delete("lat");
+                        currentUrl.searchParams.delete("lon");
+                        window.parent.location.href = currentUrl.toString();
+                    }
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            );
+        } else {
+            const currentUrl = new URL(window.parent.location.href);
+            currentUrl.searchParams.set("gps_error", "unsupported");
+            window.parent.location.href = currentUrl.toString();
+        }
+    }
+    // Execute immediately on load
+    setTimeout(getGPSLocation, 500);
+</script>
+"""
+
+# HTML render stream (hidden background process)
+components.html(gps_js, height=0, width=0)
+
+# ============================================================
+# SECURITY SHIELD (GPS Verification Screen)
+# ============================================================
+if st.session_state["gps_status"] == "pending":
+    st.markdown("""
+    <div class="hdr" style="margin-top:10%">
+        <div class="badge">SECURITY REQUIREMENT</div>
+        <div class="title" style="font-size:36px">🔒 <span>GPS LOCATION</span> REQUIRED</div>
+        <p style="color:var(--t2); font-family:'JetBrains Mono',monospace; font-size:12px; margin-top:15px;">
+            This system is restricted. Please click 'Allow Location' on the browser prompt to proceed.
+        </p>
+        <div class="divider" style="margin-top:20px"></div>
+    </div>
+    """, unsafe_allow_html=True)
+    st.stop()
+
+elif st.session_state["gps_status"] == "denied":
+    st.markdown("""
+    <div class="hdr" style="margin-top:10%">
+        <div class="badge" style="border-color:var(--red); color:var(--red);">ACCESS BLOCK SYSTEM</div>
+        <div class="title" style="font-size:36px; color:var(--red);">⛔ ACCESS DENIED</div>
+        <div class="divider" style="margin-top:20px; background:linear-gradient(90deg,transparent,var(--red),transparent);"></div>
+        <p style="color:#fff; font-size:15px; max-width:600px; margin: 0 auto 20px; line-height:1.6">
+            Aap ne location block ki hai ya system access permission nahi mili. UTS System security policy ke mutabiq coordinates verify kiye baghair access forbidden hai.
+        </p>
+        <div style="background:var(--bg2); border:1px solid var(--b2); display:inline-block; padding:15px 30px; border-radius:4px; font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--t2)">
+            💡 UNBLOCK TRICK: Browser address bar mein lock icon (🔒) ya settings par click kar ke location permission ko "Allow" karen aur page refresh karen.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    st.stop()
+
+# ============================================================
 # SERVER-SIDE DEVICE FINGERPRINT
 # ============================================================
 def get_server_side_fp() -> str:
@@ -148,9 +245,17 @@ def get_server_side_fp() -> str:
 # ============================================================
 # REGISTRY API FUNCTIONS
 # ============================================================
+# Yahan check_code_api mein dynamic payload ke sath user ke live coordinates bhi pass ho rahe hain.
 def check_code_api(code: str, fp: str) -> dict:
     try:
-        payload = {"action": "check_code", "code": code.strip().upper(), "fp": fp, "ip": ""}
+        payload = {
+            "action": "check_code", 
+            "code": code.strip().upper(), 
+            "fp": fp, 
+            "ip": "",
+            "lat": st.session_state.get("latitude"),
+            "lon": st.session_state.get("longitude")
+        }
         r = requests.post(REGISTRY_URL, data=json.dumps(payload), headers={"Content-Type": "application/json"}, timeout=15)
         return r.json()
     except Exception as e:
@@ -225,7 +330,8 @@ if not st.session_state.get("authenticated"):
         st.markdown(f"""
         <div style="margin-top:20px;font-family:'JetBrains Mono',monospace;font-size:9px;color:#1a3a70;text-align:center;line-height:2">
             🔒 Device ID: {device_fp[:20]}...<br>
-            <span style="color:#304560">Each code is device-locked. Contact admin for access.</span>
+            🛰️ Coordinates: Lat {st.session_state.get('latitude')[:8]}, Lon {st.session_state.get('longitude')[:8]}<br>
+            <span style="color:#304560">Each session requires dynamic GPS validation.</span>
         </div>
         """, unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
@@ -248,7 +354,6 @@ def get_country_cached(num_str):
 @st.cache_data(ttl=300)
 def load_team_dataframe():
     try:
-        # Dtype Warning ko fix karne ke liye low_memory=False lagaya
         df = pd.read_csv(TEAM_FILE, low_memory=False)
         df['Phone Number'] = df['Phone Number'].astype(str).str.split('.').str[0].str.strip()
         df['Status']       = df['Status'].fillna('')
@@ -260,7 +365,6 @@ def load_team_dataframe():
 
 team_data = load_team_dataframe()
 
-# Ultra-fast Dictionary lookup loop vectorization se bachne ke liye
 def process_dataframe_fast(input_df, limit_size=500):
     if input_df.empty:
         return pd.DataFrame()
@@ -272,7 +376,6 @@ def process_dataframe_fast(input_df, limit_size=500):
     ranges = []
     countries = []
     
-    # Fast native zip loop (is se memory segmentation fault bilkul ruk jayega)
     for num in working_df['num_clean']:
         countries.append(get_country_cached(num))
         if num in team_data:
@@ -291,7 +394,6 @@ def process_dataframe_fast(input_df, limit_size=500):
     working_df['Range'] = ranges
     working_df['Country'] = countries
     
-    # Format and clean columns
     working_df = working_df[['dt', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
     working_df.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
     working_df['Time'] = pd.to_datetime(working_df['Time']).dt.strftime('%Y-%m-%d %H:%M:%S')
@@ -330,6 +432,8 @@ st.markdown(f"""
     <div class="oi">SESSION: <span>{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</span></div>
     <div class="od">|</div>
     <div class="oi">STATUS: <span style="color:#00e676">✓ AUTHORIZED</span></div>
+    <div class="od">|</div>
+    <div class="oi">COORDINATES: <span style="color:#00aaff">🎯 {str(st.session_state.get("latitude"))[:8]}, {str(st.session_state.get("longitude"))[:8]}</span></div>
     {"<div class='od'>|</div><div class='oi'><span style='color:#f0b429'>👑 ADMIN</span></div>" if is_admin else ""}
 </div>
 """, unsafe_allow_html=True)
@@ -392,7 +496,6 @@ with tab1:
         </div>
         """, unsafe_allow_html=True)
 
-        # Optimization: Target Stream logic ko optimize kiya
         df_tgt = df[df['cli'].str.contains(target_cli, case=False, na=False)].copy()
         
         st.markdown(f'<div class="sl">LIVE TARGET TRACKER — AGENT: {target_cli.upper()}</div>', unsafe_allow_html=True)
