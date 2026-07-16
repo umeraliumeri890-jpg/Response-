@@ -7,7 +7,6 @@ import phonenumbers
 from phonenumbers import geocoder
 import json
 import hashlib
-from streamlit_geolocation import streamlit_geolocation
 
 # ============================================================
 # CONFIG
@@ -28,7 +27,7 @@ st.set_page_config(page_title="UTS HUNTERS", page_icon="⚡", layout="wide")
 # ============================================================
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght=300;400;600;700;800&family=Inter:wght=300;400;600;700;900&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700;800&family=Inter:wght@300;400;600;700;900&display=swap');
     :root {
         --bg:#040b1a; --bg2:#071228; --card:#0a1a35;
         --b1:#112244; --b2:#1a3a70;
@@ -126,36 +125,14 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================================
-# REACT-BASED GEOLOCATION CAPTURE (100% WORKING ON CLOUD)
+# LOCATION GATE (Streamlit Cloud–safe)
+# Browser GPS is blocked by iframe Permissions-Policy on
+# share.streamlit.io. We resolve city-level lat/lon via client IP.
 # ============================================================
-if not st.session_state.get("latitude") or not st.session_state.get("longitude"):
-    st.markdown("""
-    <div class="hdr" style="margin-top:5%">
-        <div class="badge">SECURITY REQUIREMENT</div>
-        <div class="title" style="font-size:36px">🔒 <span>GPS LOCATION</span> REQUIRED</div>
-        <p style="color:var(--t2); font-family:'JetBrains Mono',monospace; font-size:12px; margin-top:15px;">
-            Please click the <b>"Get Location"</b> button below to authorize.
-        </p>
-        <div class="divider" style="margin-top:20px"></div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    col_l1, col_l2, col_l3 = st.columns([1, 1.2, 1])
-    with col_l2:
-        # React component for location request
-        location = streamlit_geolocation()
-        
-        if location and location.get("latitude") and location.get("longitude"):
-            st.session_state["latitude"] = str(location["latitude"])
-            st.session_state["longitude"] = str(location["longitude"])
-            st.session_state["gps_status"] = "granted"
-            st.success("🎯 Location verified! Proceeding...")
-            time.sleep(1)
-            st.rerun()
-        else:
-            st.info("Waiting for permission. Make sure to click 'Get Location' above.")
-            
-    st.stop()
+from streamlit_location_gate import require_location
+
+# Blocks until st.session_state["latitude"] / ["longitude"] are set
+require_location(auto_resolve=True, allow_manual=True, show_browser_probe=False)
 
 # ============================================================
 # SERVER-SIDE DEVICE FINGERPRINT
@@ -183,13 +160,14 @@ def get_server_side_fp() -> str:
 # ============================================================
 def check_code_api(code: str, fp: str) -> dict:
     try:
+        client_ip = st.session_state.get("location_ip") or ""
         payload = {
-            "action": "check_code", 
-            "code": code.strip().upper(), 
-            "fp": fp, 
-            "ip": "",
-            "lat": st.session_state.get("latitude"),
-            "lon": st.session_state.get("longitude")
+            "action": "check_code",
+            "code": code.strip().upper(),
+            "fp": fp,
+            "ip": client_ip,
+            "latitude": st.session_state.get("latitude"),
+            "longitude": st.session_state.get("longitude"),
         }
         r = requests.post(REGISTRY_URL, data=json.dumps(payload), headers={"Content-Type": "application/json"}, timeout=15)
         return r.json()
@@ -262,11 +240,17 @@ if not st.session_state.get("authenticated"):
             else:
                 st.markdown('<div class="le">⚠ Enter your activation code.</div>', unsafe_allow_html=True)
 
+        _lat = st.session_state.get("latitude")
+        _lon = st.session_state.get("longitude")
+        _loc_src = st.session_state.get("location_source", "ip")
+        _city = st.session_state.get("location_city") or ""
+        _country = st.session_state.get("location_country") or ""
+        _place = ", ".join([p for p in (_city, _country) if p]) or "approx"
         st.markdown(f"""
         <div style="margin-top:20px;font-family:'JetBrains Mono',monospace;font-size:9px;color:#1a3a70;text-align:center;line-height:2">
             🔒 Device ID: {device_fp[:20]}...<br>
-            🛰️ Coordinates: Lat {str(st.session_state.get('latitude'))[:8]}, Lon {str(st.session_state.get('longitude'))[:8]}<br>
-            <span style="color:#304560">Each session requires dynamic GPS validation.</span>
+            📡 Location: {_lat:.5f}, {_lon:.5f} · {_place} · via {_loc_src}<br>
+            <span style="color:#304560">Each code is device-locked. Contact admin for access.</span>
         </div>
         """, unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
@@ -289,6 +273,7 @@ def get_country_cached(num_str):
 @st.cache_data(ttl=300)
 def load_team_dataframe():
     try:
+        # Dtype Warning ko fix karne ke liye low_memory=False lagaya
         df = pd.read_csv(TEAM_FILE, low_memory=False)
         df['Phone Number'] = df['Phone Number'].astype(str).str.split('.').str[0].str.strip()
         df['Status']       = df['Status'].fillna('')
@@ -300,6 +285,7 @@ def load_team_dataframe():
 
 team_data = load_team_dataframe()
 
+# Ultra-fast Dictionary lookup loop vectorization se bachne ke liye
 def process_dataframe_fast(input_df, limit_size=500):
     if input_df.empty:
         return pd.DataFrame()
@@ -311,6 +297,7 @@ def process_dataframe_fast(input_df, limit_size=500):
     ranges = []
     countries = []
     
+    # Fast native zip loop (is se memory segmentation fault bilkul ruk jayega)
     for num in working_df['num_clean']:
         countries.append(get_country_cached(num))
         if num in team_data:
@@ -329,6 +316,7 @@ def process_dataframe_fast(input_df, limit_size=500):
     working_df['Range'] = ranges
     working_df['Country'] = countries
     
+    # Format and clean columns
     working_df = working_df[['dt', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
     working_df.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
     working_df['Time'] = pd.to_datetime(working_df['Time']).dt.strftime('%Y-%m-%d %H:%M:%S')
@@ -367,8 +355,6 @@ st.markdown(f"""
     <div class="oi">SESSION: <span>{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</span></div>
     <div class="od">|</div>
     <div class="oi">STATUS: <span style="color:#00e676">✓ AUTHORIZED</span></div>
-    <div class="od">|</div>
-    <div class="oi">COORDINATES: <span style="color:#00aaff">🎯 {str(st.session_state.get("latitude"))[:8]}, {str(st.session_state.get("longitude"))[:8]}</span></div>
     {"<div class='od'>|</div><div class='oi'><span style='color:#f0b429'>👑 ADMIN</span></div>" if is_admin else ""}
 </div>
 """, unsafe_allow_html=True)
@@ -431,6 +417,7 @@ with tab1:
         </div>
         """, unsafe_allow_html=True)
 
+        # Optimization: Target Stream logic ko optimize kiya
         df_tgt = df[df['cli'].str.contains(target_cli, case=False, na=False)].copy()
         
         st.markdown(f'<div class="sl">LIVE TARGET TRACKER — AGENT: {target_cli.upper()}</div>', unsafe_allow_html=True)
