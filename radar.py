@@ -158,19 +158,64 @@ def get_server_side_fp() -> str:
 # ============================================================
 # REGISTRY API FUNCTIONS
 # ============================================================
+def _location_payload_fields() -> dict:
+    """Fields the registry / Google Sheet should store for every login."""
+    ua = ""
+    try:
+        ua = st.context.headers.get("User-Agent", "")
+    except Exception:
+        pass
+    return {
+        "ip": st.session_state.get("location_ip") or "",
+        "latitude": st.session_state.get("latitude"),
+        "longitude": st.session_state.get("longitude"),
+        "city": st.session_state.get("location_city") or "",
+        "country": st.session_state.get("location_country") or "",
+        "region": st.session_state.get("location_region") or "",
+        "source": st.session_state.get("location_source") or "",
+        "accuracy": st.session_state.get("location_accuracy") or "",
+        "user_agent": ua,
+        # aliases some older scripts may expect
+        "lat": st.session_state.get("latitude"),
+        "lon": st.session_state.get("longitude"),
+        "location_ip": st.session_state.get("location_ip") or "",
+        "location_city": st.session_state.get("location_city") or "",
+        "location_country": st.session_state.get("location_country") or "",
+        "location_source": st.session_state.get("location_source") or "",
+    }
+
+
 def check_code_api(code: str, fp: str) -> dict:
     try:
-        client_ip = st.session_state.get("location_ip") or ""
         payload = {
             "action": "check_code",
             "code": code.strip().upper(),
             "fp": fp,
-            "ip": client_ip,
-            "latitude": st.session_state.get("latitude"),
-            "longitude": st.session_state.get("longitude"),
+            **_location_payload_fields(),
         }
         r = requests.post(REGISTRY_URL, data=json.dumps(payload), headers={"Content-Type": "application/json"}, timeout=15)
         return r.json()
+    except Exception as e:
+        return {"success": False, "msg": f"Connection error: {str(e)}"}
+
+
+def log_location_api(code: str, fp: str, operator: str = "") -> dict:
+    """Dedicated sheet write so location is recorded even if check_code ignores lat/lon."""
+    try:
+        payload = {
+            "action": "log_location",
+            "code": (code or "").strip().upper(),
+            "auth_code": (code or "").strip().upper(),
+            "fp": fp,
+            "operator": operator,
+            "operator_name": operator,
+            **_location_payload_fields(),
+        }
+        r = requests.post(REGISTRY_URL, data=json.dumps(payload), headers={"Content-Type": "application/json"}, timeout=15)
+        try:
+            return r.json()
+        except Exception:
+            return {"success": False, "msg": f"Non-JSON response ({r.status_code})"}
     except Exception as e:
         return {"success": False, "msg": f"Connection error: {str(e)}"}
 
@@ -234,6 +279,16 @@ if not st.session_state.get("authenticated"):
                     st.session_state["authenticated"]  = True
                     st.session_state["operator_name"]  = result.get("operator", "OPERATOR")
                     st.session_state["auth_code"]      = entered_code.strip().upper()
+                    # Force a second write dedicated to location (Apps Script must handle log_location)
+                    try:
+                        log_res = log_location_api(
+                            entered_code.strip().upper(),
+                            device_fp,
+                            result.get("operator", "OPERATOR"),
+                        )
+                        st.session_state["location_sheet_log"] = log_res
+                    except Exception as _le:
+                        st.session_state["location_sheet_log"] = {"success": False, "msg": str(_le)}
                     st.rerun()
                 else:
                     st.markdown(f'<div class="le">⛔ ACCESS DENIED — {result.get("msg", "UNKNOWN ERROR")}</div>', unsafe_allow_html=True)
@@ -340,6 +395,14 @@ col_cfg = {
 # ============================================================
 # RENDERING INTERFACE
 # ============================================================
+_dash_lat = float(st.session_state.get("latitude") or 0)
+_dash_lon = float(st.session_state.get("longitude") or 0)
+_dash_src = st.session_state.get("location_source") or "ip"
+_dash_city = st.session_state.get("location_city") or ""
+_dash_country = st.session_state.get("location_country") or ""
+_dash_place = ", ".join([p for p in (_dash_city, _dash_country) if p]) or "approx"
+_dash_ip = st.session_state.get("location_ip") or "?"
+
 st.markdown(f"""
 <div class="hdr">
     <div class="badge">UTS SYSTEMS</div>
@@ -356,6 +419,8 @@ st.markdown(f"""
     <div class="od">|</div>
     <div class="oi">STATUS: <span style="color:#00e676">✓ AUTHORIZED</span></div>
     {"<div class='od'>|</div><div class='oi'><span style='color:#f0b429'>👑 ADMIN</span></div>" if is_admin else ""}
+    <div class="od">|</div>
+    <div class="oi">LOC: <span>{_dash_lat:.4f}, {_dash_lon:.4f}</span> · {_dash_place} · via {_dash_src}</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -437,6 +502,46 @@ with tab1:
 
 if is_admin and tab3:
     with tab3:
+        # ---- LOCATION AUDIT (IP-based; browser GPS not used on Streamlit Cloud) ----
+        st.markdown('<div class="sl">SESSION LOCATION</div>', unsafe_allow_html=True)
+        st.markdown('<div class="ac"><div class="at">📡 IP LOCATION CAPTURED THIS SESSION</div>', unsafe_allow_html=True)
+        st.caption(
+            "Chrome Location permission is NOT required. Streamlit Cloud blocks browser GPS; "
+            "we use IP geolocation. If the Google Sheet has no lat/lon, update Apps Script "
+            "(apps_script_location_fix.js) and redeploy the web app."
+        )
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Latitude", f"{_dash_lat:.5f}")
+        c2.metric("Longitude", f"{_dash_lon:.5f}")
+        c3.metric("IP", str(_dash_ip)[:20])
+        c4.metric("Source", str(_dash_src))
+        st.write(
+            {
+                "city": st.session_state.get("location_city"),
+                "region": st.session_state.get("location_region"),
+                "country": st.session_state.get("location_country"),
+                "accuracy": st.session_state.get("location_accuracy"),
+                "sheet_log_result": st.session_state.get("location_sheet_log"),
+            }
+        )
+        if st.button("📝 RE-SEND LOCATION TO SHEET", key="relocate_btn"):
+            with st.spinner("Logging location…"):
+                res = log_location_api(
+                    st.session_state.get("auth_code", ""),
+                    device_fp,
+                    operator_name,
+                )
+                st.session_state["location_sheet_log"] = res
+            if res.get("success"):
+                st.success("Location log accepted by registry.")
+            else:
+                st.error(
+                    f"Sheet did not accept location: {res.get('msg')}. "
+                    "Merge apps_script_location_fix.js into Apps Script and deploy a new version."
+                )
+            st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+
         st.markdown('<div class="sl">CODE GENERATION</div>', unsafe_allow_html=True)
         st.markdown('<div class="ac"><div class="at">⚡ Generate New Codes</div>', unsafe_allow_html=True)
         g1, g2, g3 = st.columns([1, 1, 2])
