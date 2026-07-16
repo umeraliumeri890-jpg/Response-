@@ -2,4 +2,4 @@ streamlit
 requests
 pandas
 phonenumbers
-streamlit-js-eval
+streamlit-geolocation
