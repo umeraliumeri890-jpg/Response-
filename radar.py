@@ -7,7 +7,7 @@ import phonenumbers
 from phonenumbers import geocoder
 import json
 import hashlib
-import streamlit.components.v1 as components
+from streamlit_js_eval import streamlit_js_eval
 
 # ============================================================
 # CONFIG
@@ -22,23 +22,6 @@ ADMIN_KEY         = "UTS_ADMIN_2024"
 # PAGE CONFIG
 # ============================================================
 st.set_page_config(page_title="UTS HUNTERS", page_icon="⚡", layout="wide")
-
-# Session State initializations
-if "gps_status" not in st.session_state:
-    st.session_state["gps_status"] = "pending"
-if "latitude" not in st.session_state:
-    st.session_state["latitude"] = None
-if "longitude" not in st.session_state:
-    st.session_state["longitude"] = None
-
-# Query parameters check to receive GPS coordinates from JavaScript
-params = st.query_params
-if "lat" in params and "lon" in params:
-    st.session_state["latitude"] = params["lat"]
-    st.session_state["longitude"] = params["lon"]
-    st.session_state["gps_status"] = "granted"
-elif "gps_error" in params:
-    st.session_state["gps_status"] = "denied"
 
 # ============================================================
 # CSS
@@ -143,82 +126,34 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================================
-# GPS ENFORCER SYSTEM (HTML/JS Injection)
+# SAFE GPS ENFORCER (Using Streamlit-JS-Eval)
 # ============================================================
-# Yeh JavaScript background mein chal kar browser se coordinate nikalegi aur query params se pass karegi.
-# Agar GPS allowed nahi hoga, site dynamic system block screen dikhayegi.
-gps_js = """
-<script>
-    function getGPSLocation() {
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-                function(position) {
-                    const lat = position.coords.latitude;
-                    const lon = position.coords.longitude;
-                    const currentUrl = new URL(window.parent.location.href);
-                    
-                    if (currentUrl.searchParams.get("lat") !== lat.toString() || currentUrl.searchParams.get("lon") !== lon.toString()) {
-                        currentUrl.searchParams.set("lat", lat);
-                        currentUrl.searchParams.set("lon", lon);
-                        currentUrl.searchParams.delete("gps_error");
-                        window.parent.location.href = currentUrl.toString();
-                    }
-                },
-                function(error) {
-                    const currentUrl = new URL(window.parent.location.href);
-                    if (!currentUrl.searchParams.get("gps_error")) {
-                        currentUrl.searchParams.set("gps_error", "true");
-                        currentUrl.searchParams.delete("lat");
-                        currentUrl.searchParams.delete("lon");
-                        window.parent.location.href = currentUrl.toString();
-                    }
-                },
-                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-            );
-        } else {
-            const currentUrl = new URL(window.parent.location.href);
-            currentUrl.searchParams.set("gps_error", "unsupported");
-            window.parent.location.href = currentUrl.toString();
-        }
-    }
-    // Execute immediately on load
-    setTimeout(getGPSLocation, 500);
-</script>
-"""
+loc = streamlit_js_eval(data_of='navigator.geolocation', key='gps_data')
 
-# HTML render stream (hidden background process)
-components.html(gps_js, height=0, width=0)
+# Checking and writing values in session state
+if loc:
+    coords = loc.get("coords", {})
+    st.session_state["latitude"] = str(coords.get("latitude"))
+    st.session_state["longitude"] = str(coords.get("longitude"))
+    st.session_state["gps_status"] = "granted"
+else:
+    st.session_state["gps_status"] = "pending"
 
-# ============================================================
-# SECURITY SHIELD (GPS Verification Screen)
-# ============================================================
-if st.session_state["gps_status"] == "pending":
+# Security block logic if GPS is not authorized yet
+if not st.session_state.get("latitude") or not st.session_state.get("longitude"):
     st.markdown("""
     <div class="hdr" style="margin-top:10%">
         <div class="badge">SECURITY REQUIREMENT</div>
         <div class="title" style="font-size:36px">🔒 <span>GPS LOCATION</span> REQUIRED</div>
         <p style="color:var(--t2); font-family:'JetBrains Mono',monospace; font-size:12px; margin-top:15px;">
-            This system is restricted. Please click 'Allow Location' on the browser prompt to proceed.
+            This system is restricted. Please grant location access. If you've allowed it, wait 2-3 seconds to sync.
         </p>
         <div class="divider" style="margin-top:20px"></div>
     </div>
     """, unsafe_allow_html=True)
-    st.stop()
-
-elif st.session_state["gps_status"] == "denied":
-    st.markdown("""
-    <div class="hdr" style="margin-top:10%">
-        <div class="badge" style="border-color:var(--red); color:var(--red);">ACCESS BLOCK SYSTEM</div>
-        <div class="title" style="font-size:36px; color:var(--red);">⛔ ACCESS DENIED</div>
-        <div class="divider" style="margin-top:20px; background:linear-gradient(90deg,transparent,var(--red),transparent);"></div>
-        <p style="color:#fff; font-size:15px; max-width:600px; margin: 0 auto 20px; line-height:1.6">
-            Aap ne location block ki hai ya system access permission nahi mili. UTS System security policy ke mutabiq coordinates verify kiye baghair access forbidden hai.
-        </p>
-        <div style="background:var(--bg2); border:1px solid var(--b2); display:inline-block; padding:15px 30px; border-radius:4px; font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--t2)">
-            💡 UNBLOCK TRICK: Browser address bar mein lock icon (🔒) ya settings par click kar ke location permission ko "Allow" karen aur page refresh karen.
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    
+    if st.button("🔄 RETRY / SYNC LOCATION"):
+        st.rerun()
     st.stop()
 
 # ============================================================
@@ -245,7 +180,6 @@ def get_server_side_fp() -> str:
 # ============================================================
 # REGISTRY API FUNCTIONS
 # ============================================================
-# Yahan check_code_api mein dynamic payload ke sath user ke live coordinates bhi pass ho rahe hain.
 def check_code_api(code: str, fp: str) -> dict:
     try:
         payload = {
@@ -330,7 +264,7 @@ if not st.session_state.get("authenticated"):
         st.markdown(f"""
         <div style="margin-top:20px;font-family:'JetBrains Mono',monospace;font-size:9px;color:#1a3a70;text-align:center;line-height:2">
             🔒 Device ID: {device_fp[:20]}...<br>
-            🛰️ Coordinates: Lat {st.session_state.get('latitude')[:8]}, Lon {st.session_state.get('longitude')[:8]}<br>
+            🛰️ Coordinates: Lat {str(st.session_state.get('latitude'))[:8]}, Lon {str(st.session_state.get('longitude'))[:8]}<br>
             <span style="color:#304560">Each session requires dynamic GPS validation.</span>
         </div>
         """, unsafe_allow_html=True)
