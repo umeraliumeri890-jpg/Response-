@@ -292,7 +292,6 @@ def process_dataframe_fast(input_df, limit_size=500):
     working_df['Range'] = ranges
     working_df['Country'] = countries
     
-    # Keeping panel info in columns
     working_df = working_df[['dt', 'panel', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
     working_df.columns = ['Time', 'Panel', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
     working_df['Time'] = pd.to_datetime(working_df['Time']).dt.strftime('%Y-%m-%d %H:%M:%S')
@@ -350,31 +349,36 @@ try:
     if r.status_code == 200:
         data1 = r.json().get("data", [])
         for item in data1:
-            item["panel"] = "LAMIX"  # Assign panel tag
+            item["panel"] = "LAMIX"
         combined_list.extend(data1)
 except: pass
 
-# Fetch API 2 Data (Purple Panel)
+# Fetch API 2 Data (Purple Panel) - Expanded range to last 7 days to ensure catch
 try:
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    from_str = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S")
+    from_str = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
     params2 = {
         "token": TOKEN2,
         "fromdate": from_str,
         "todate": now_str,
-        "records": 200,
+        "records": 400,
         "searchnumber": "",
         "searchcli": ""
     }
     r2 = requests.get(URL2, params=params2, timeout=6)
     if r2.status_code == 200:
-        data2 = r2.json().get("data", [])[cite: 1]
+        res_json = r2.json()
+        # Direct array check or object data array lookups
+        data2 = res_json.get("data", []) if isinstance(res_json, dict) else []
+        if isinstance(res_json, list):
+            data2 = res_json
+            
         for item in data2:
-            item["panel"] = "PURPLE"  # Assign panel tag
+            item["panel"] = "PURPLE"
             if "datetime" in item:
-                item["dt"] = item["datetime"][cite: 1]
+                item["dt"] = item["datetime"]
             if "number" in item:
-                item["num"] = item["number"][cite: 1]
+                item["num"] = item["number"]
         combined_list.extend(data2)
 except: pass
 
