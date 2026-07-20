@@ -14,8 +14,12 @@ import hashlib
 URL               = "http://51.77.216.195/crapi/lamix/viewstats"
 TOKEN             = "aXZ0gVZXgoCAc2loX4iFSl9mVWB8hVdgdFVhW3SVZXM="
 TEAM_FILE         = "Numbers_Export.csv"
-REGISTRY_URL      = "https://script.google.com/macros/s/AKfycbzY2KCz7PzeFgVN6tepYKTQjkR8dfd1ksraE4pHDVTBoX-Padoc5Puy7jR84Il2hCPt/exec"
+REGISTRY_URL      = "https://script.google.com/macros/s/AKfycbzo_Z_7CEVEeKA9fL-M3WXtznKrd19MyiXTksRlbSd1E8bNXh8nZF5HsLdedOjG2iVF/exec"
 ADMIN_KEY         = "UTS_ADMIN_2024"
+
+# NEW API CONFIG
+URL2              = "http://137.74.1.203/crapi/reseller/mdr.php"
+TOKEN2            = "QlZTR0FOfkJET1dI"
 
 # ============================================================
 # PAGE CONFIG
@@ -248,7 +252,6 @@ def get_country_cached(num_str):
 @st.cache_data(ttl=300)
 def load_team_dataframe():
     try:
-        # Dtype Warning ko fix karne ke liye low_memory=False lagaya
         df = pd.read_csv(TEAM_FILE, low_memory=False)
         df['Phone Number'] = df['Phone Number'].astype(str).str.split('.').str[0].str.strip()
         df['Status']       = df['Status'].fillna('')
@@ -260,7 +263,6 @@ def load_team_dataframe():
 
 team_data = load_team_dataframe()
 
-# Ultra-fast Dictionary lookup loop vectorization se bachne ke liye
 def process_dataframe_fast(input_df, limit_size=500):
     if input_df.empty:
         return pd.DataFrame()
@@ -272,7 +274,6 @@ def process_dataframe_fast(input_df, limit_size=500):
     ranges = []
     countries = []
     
-    # Fast native zip loop (is se memory segmentation fault bilkul ruk jayega)
     for num in working_df['num_clean']:
         countries.append(get_country_cached(num))
         if num in team_data:
@@ -291,7 +292,6 @@ def process_dataframe_fast(input_df, limit_size=500):
     working_df['Range'] = ranges
     working_df['Country'] = countries
     
-    # Format and clean columns
     working_df = working_df[['dt', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
     working_df.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
     working_df['Time'] = pd.to_datetime(working_df['Time']).dt.strftime('%Y-%m-%d %H:%M:%S')
@@ -341,13 +341,44 @@ tab1 = tab_objs[0]
 tab3 = tab_objs[1] if is_admin else None
 
 raw_json = []
+
+# Fetch API 1 Data
 try:
     r = requests.get(URL, params={"token": TOKEN, "records": 400}, timeout=6)
     if r.status_code == 200:
         raw_json = r.json().get("data", [])
 except: pass
 
+# Fetch API 2 Data (Integrated)
+try:
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    from_str = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S")
+    params2 = {
+        "token": TOKEN2,
+        "fromdate": from_str,
+        "todate": now_str,
+        "records": 200,
+        "searchnumber": "",
+        "searchcli": ""
+    }
+    r2 = requests.get(URL2, params=params2, timeout=6)
+    if r2.status_code == 200:
+        data2 = r2.json().get("data", [])
+        # Normalizing keys to fit existing schema
+        for item in data2:
+            if "datetime" in item:
+                item["dt"] = item["datetime"]
+            if "number" in item:
+                item["num"] = item["number"]
+        raw_json.extend(data2)
+except: pass
+
 df = pd.DataFrame(raw_json)
+
+# Sorting merged data chronologically
+if not df.empty and 'dt' in df.columns:
+    df['dt'] = pd.to_datetime(df['dt'])
+    df = df.sort_values(by='dt', ascending=False).reset_index(drop=True)
 
 with tab1:
     c1, c2 = st.columns([2, 1])
@@ -355,7 +386,6 @@ with tab1:
     with c2: msg_limit  = st.number_input("📡 STREAM BUFFER:", min_value=1, max_value=1000, value=300, key="buffer_input")
     
     if not df.empty:
-        df['dt'] = pd.to_datetime(df['dt'])
         now   = datetime.now()
         df_5m = df[df['dt'] >= now - timedelta(minutes=5)]
 
@@ -392,7 +422,6 @@ with tab1:
         </div>
         """, unsafe_allow_html=True)
 
-        # Optimization: Target Stream logic ko optimize kiya
         df_tgt = df[df['cli'].str.contains(target_cli, case=False, na=False)].copy()
         
         st.markdown(f'<div class="sl">LIVE TARGET TRACKER — AGENT: {target_cli.upper()}</div>', unsafe_allow_html=True)
