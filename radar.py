@@ -292,8 +292,9 @@ def process_dataframe_fast(input_df, limit_size=500):
     working_df['Range'] = ranges
     working_df['Country'] = countries
     
-    working_df = working_df[['dt', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
-    working_df.columns = ['Time', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
+    # Keeping panel info in columns
+    working_df = working_df[['dt', 'panel', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
+    working_df.columns = ['Time', 'Panel', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
     working_df['Time'] = pd.to_datetime(working_df['Time']).dt.strftime('%Y-%m-%d %H:%M:%S')
     return working_df
 
@@ -304,6 +305,7 @@ def highlight_team(row):
 
 col_cfg = {
     "Time":        st.column_config.TextColumn("TIMESTAMP",     width="medium"),
+    "Panel":       st.column_config.TextColumn("PANEL",         width="small"),
     "App":         st.column_config.TextColumn("IDENT/CLI",     width="small"),
     "Number":      st.column_config.TextColumn("DATA STREAM",   width="medium"),
     "Country":     st.column_config.TextColumn("LOCATION",      width="small"),
@@ -340,16 +342,19 @@ tab_objs = st.tabs(tab_labels)
 tab1 = tab_objs[0]
 tab3 = tab_objs[1] if is_admin else None
 
-raw_json = []
+combined_list = []
 
-# Fetch API 1 Data
+# Fetch API 1 Data (Lamix Panel)
 try:
     r = requests.get(URL, params={"token": TOKEN, "records": 400}, timeout=6)
     if r.status_code == 200:
-        raw_json = r.json().get("data", [])
+        data1 = r.json().get("data", [])
+        for item in data1:
+            item["panel"] = "LAMIX"  # Assign panel tag
+        combined_list.extend(data1)
 except: pass
 
-# Fetch API 2 Data (Integrated)
+# Fetch API 2 Data (Purple Panel)
 try:
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     from_str = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S")
@@ -363,17 +368,17 @@ try:
     }
     r2 = requests.get(URL2, params=params2, timeout=6)
     if r2.status_code == 200:
-        data2 = r2.json().get("data", [])
-        # Normalizing keys to fit existing schema
+        data2 = r2.json().get("data", [])[cite: 1]
         for item in data2:
+            item["panel"] = "PURPLE"  # Assign panel tag
             if "datetime" in item:
-                item["dt"] = item["datetime"]
+                item["dt"] = item["datetime"][cite: 1]
             if "number" in item:
-                item["num"] = item["number"]
-        raw_json.extend(data2)
+                item["num"] = item["number"][cite: 1]
+        combined_list.extend(data2)
 except: pass
 
-df = pd.DataFrame(raw_json)
+df = pd.DataFrame(combined_list)
 
 # Sorting merged data chronologically
 if not df.empty and 'dt' in df.columns:
