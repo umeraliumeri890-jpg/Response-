@@ -28,7 +28,7 @@ TOKEN2            = "QlZTR0FOfkJET1dI"
 st.set_page_config(page_title="UTS HUNTERS", page_icon="⚡", layout="wide")
 
 # ============================================================
-# ADSTERRA ADS RENDER FUNCTIONS
+# ADSTERRA ADS RENDER FUNCTION (BOTTOM ONLY)
 # ============================================================
 def render_ad_728x90():
     ad_code = """
@@ -46,23 +46,6 @@ def render_ad_728x90():
     </div>
     """
     components.html(ad_code, height=105)
-
-def render_ad_300x250():
-    ad_code = """
-    <div style="display:flex; justify-content:center; align-items:center; margin: 10px 0;">
-        <script type="text/javascript">
-            atOptions = {
-                'key' : 'c75a88ca9401e5e239f570acf207b4a3',
-                'format' : 'iframe',
-                'height' : 250,
-                'width' : 300,
-                'params' : {}
-            };
-        </script>
-        <script type="text/javascript" src="https://www.highperformanceformat.com/c75a88ca9401e5e239f570acf207b4a3/invoke.js"></script>
-    </div>
-    """
-    components.html(ad_code, height=265)
 
 # ============================================================
 # CSS
@@ -279,11 +262,6 @@ if not st.session_state.get("authenticated"):
 operator_name = st.session_state.get("operator_name", "OPERATOR")
 is_admin      = (operator_name == "Umer Ali")
 
-# SIDEBAR ADS DISPLAY
-with st.sidebar:
-    st.markdown("### 📢 SPONSORED")
-    render_ad_300x250()
-
 @st.cache_data(ttl=60)
 def get_country_cached(num_str):
     try:
@@ -311,6 +289,12 @@ def process_dataframe_fast(input_df, limit_size=500):
         return pd.DataFrame()
     
     working_df = input_df.head(limit_size).copy()
+
+    # Safely ensure all required columns exist to avoid KeyErrors
+    for col in ['num', 'panel', 'cli', 'message']:
+        if col not in working_df.columns:
+            working_df[col] = ""
+
     working_df['num_clean'] = working_df['num'].astype(str).str.split('.').str[0].str.strip()
     
     team_members = []
@@ -335,9 +319,13 @@ def process_dataframe_fast(input_df, limit_size=500):
     working_df['Range'] = ranges
     working_df['Country'] = countries
     
-    working_df['Time'] = working_df['dt'].dt.strftime('%Y-%m-%d %H:%M:%S')
+    if 'dt' in working_df.columns:
+        working_df['Time'] = working_df['dt'].dt.strftime('%Y-%m-%d %H:%M:%S')
+    else:
+        working_df['Time'] = ""
     
-    working_df = working_df[['Time', 'panel', 'cli', 'num', 'Country', 'Message', 'Team Member', 'Range']]
+    # Safe Column Selection
+    working_df = working_df[['Time', 'panel', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
     working_df.columns = ['Time', 'Panel', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
     return working_df
 
