@@ -28,7 +28,7 @@ TOKEN2            = "QlZTR0FOfkJET1dI"
 st.set_page_config(page_title="UTS HUNTERS", page_icon="⚡", layout="wide")
 
 # ============================================================
-# ADSTERRA ADS RENDER FUNCTION (BOTTOM ONLY)
+# ADSTERRA ADS RENDER FUNCTION (BOTTOM AD)
 # ============================================================
 def render_ad_728x90():
     ad_code = """
@@ -254,6 +254,10 @@ if not st.session_state.get("authenticated"):
         </div>
         """, unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
+
+    # LOGIN PAGE PAR BHI BOTTOM AD SHOW KARNA
+    st.markdown("<br><hr style='border:1px solid #112244;'>", unsafe_allow_html=True)
+    render_ad_728x90()
     st.stop()
 
 # ============================================================
@@ -290,7 +294,6 @@ def process_dataframe_fast(input_df, limit_size=500):
     
     working_df = input_df.head(limit_size).copy()
 
-    # Safely ensure all required columns exist to avoid KeyErrors
     for col in ['num', 'panel', 'cli', 'message']:
         if col not in working_df.columns:
             working_df[col] = ""
@@ -324,7 +327,6 @@ def process_dataframe_fast(input_df, limit_size=500):
     else:
         working_df['Time'] = ""
     
-    # Safe Column Selection
     working_df = working_df[['Time', 'panel', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
     working_df.columns = ['Time', 'Panel', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
     return working_df
@@ -552,7 +554,7 @@ if is_admin and tab3:
         st.markdown("</div>", unsafe_allow_html=True)
 
 # ============================================================
-# FOOTER BANNER AD DISPLAY (BILKUL NICHE)
+# FOOTER BANNER AD DISPLAY (MAIN DASHBOARD BOTTOM)
 # ============================================================
 st.markdown("<br><hr style='border:1px solid #112244;'>", unsafe_allow_html=True)
 render_ad_728x90()
