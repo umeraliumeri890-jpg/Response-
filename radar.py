@@ -236,7 +236,7 @@ if not st.session_state.get("authenticated"):
     st.stop()
 
 # ============================================================
-# CACHED HIGH-PERFORMANCE DATA LOADING
+# CACHED DATA LOADING & TEAM LOOKUP
 # ============================================================
 operator_name = st.session_state.get("operator_name", "OPERATOR")
 is_admin      = (operator_name == "Umer Ali")
@@ -244,7 +244,7 @@ is_admin      = (operator_name == "Umer Ali")
 @st.cache_data(ttl=60)
 def get_country_cached(num_str):
     try:
-        parsed = phonenumbers.parse("+" + num_str)
+        parsed = phonenumbers.parse("+" + str(num_str))
         return geocoder.description_for_number(parsed, "en")
     except:
         return "Global"
@@ -292,9 +292,11 @@ def process_dataframe_fast(input_df, limit_size=500):
     working_df['Range'] = ranges
     working_df['Country'] = countries
     
-    working_df = working_df[['dt', 'panel', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
+    # Formatted output time display
+    working_df['Time'] = working_df['dt'].dt.strftime('%Y-%m-%d %H:%M:%S')
+    
+    working_df = working_df[['Time', 'panel', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
     working_df.columns = ['Time', 'Panel', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
-    working_df['Time'] = pd.to_datetime(working_df['Time']).dt.strftime('%Y-%m-%d %H:%M:%S')
     return working_df
 
 def highlight_team(row):
@@ -350,10 +352,14 @@ try:
         data1 = r.json().get("data", [])
         for item in data1:
             item["panel"] = "LAMIX"
+            item["dt_raw"] = item.get("dt") or item.get("datetime") or item.get("time")
+            item["num"] = item.get("num") or item.get("number")
+            item["cli"] = item.get("cli") or "UNKNOWN"
+            item["message"] = item.get("message") or item.get("msg") or ""
         combined_list.extend(data1)
-except: pass
+except Exception: pass
 
-# Fetch API 2 Data (Purple Panel) - Max Records & Dynamic Mapping
+# Fetch API 2 Data (Purple Panel)
 try:
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     from_str = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
@@ -376,7 +382,7 @@ try:
             
         for item in data2:
             item["panel"] = "PURPLE"
-            item["dt"] = item.get("datetime") or item.get("dt") or item.get("time")
+            item["dt_raw"] = item.get("datetime") or item.get("dt") or item.get("time")
             item["num"] = item.get("number") or item.get("num") or item.get("phone")
             item["cli"] = item.get("cli") or item.get("ident") or "UNKNOWN"
             item["message"] = item.get("message") or item.get("msg") or ""
@@ -386,9 +392,10 @@ except Exception: pass
 
 df = pd.DataFrame(combined_list)
 
-# Sorting merged data chronologically
-if not df.empty and 'dt' in df.columns:
-    df['dt'] = pd.to_datetime(df['dt'])
+# FIX: Uniform datetime parsing taake Purple aur Lamix ek sath sort hon
+if not df.empty and 'dt_raw' in df.columns:
+    df['dt'] = pd.to_datetime(df['dt_raw'], errors='coerce')
+    df = df.dropna(subset=['dt'])
     df = df.sort_values(by='dt', ascending=False).reset_index(drop=True)
 
 with tab1:
