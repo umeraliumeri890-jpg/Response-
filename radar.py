@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import requests
 import pandas as pd
 import time
@@ -25,6 +26,43 @@ TOKEN2            = "QlZTR0FOfkJET1dI"
 # PAGE CONFIG
 # ============================================================
 st.set_page_config(page_title="UTS HUNTERS", page_icon="⚡", layout="wide")
+
+# ============================================================
+# ADSTERRA ADS RENDER FUNCTIONS
+# ============================================================
+def render_ad_728x90():
+    ad_code = """
+    <div style="display:flex; justify-content:center; align-items:center; margin: 10px 0;">
+        <script type="text/javascript">
+            atOptions = {
+                'key' : 'a0246e02756d5826f6570550fc3b2c1d',
+                'format' : 'iframe',
+                'height' : 90,
+                'width' : 728,
+                'params' : {}
+            };
+        </script>
+        <script type="text/javascript" src="https://www.highperformanceformat.com/a0246e02756d5826f6570550fc3b2c1d/invoke.js"></script>
+    </div>
+    """
+    components.html(ad_code, height=105)
+
+def render_ad_300x250():
+    ad_code = """
+    <div style="display:flex; justify-content:center; align-items:center; margin: 10px 0;">
+        <script type="text/javascript">
+            atOptions = {
+                'key' : 'c75a88ca9401e5e239f570acf207b4a3',
+                'format' : 'iframe',
+                'height' : 250,
+                'width' : 300,
+                'params' : {}
+            };
+        </script>
+        <script type="text/javascript" src="https://www.highperformanceformat.com/c75a88ca9401e5e239f570acf207b4a3/invoke.js"></script>
+    </div>
+    """
+    components.html(ad_code, height=265)
 
 # ============================================================
 # CSS
@@ -241,6 +279,11 @@ if not st.session_state.get("authenticated"):
 operator_name = st.session_state.get("operator_name", "OPERATOR")
 is_admin      = (operator_name == "Umer Ali")
 
+# SIDEBAR ADS DISPLAY
+with st.sidebar:
+    st.markdown("### 📢 SPONSORED")
+    render_ad_300x250()
+
 @st.cache_data(ttl=60)
 def get_country_cached(num_str):
     try:
@@ -292,7 +335,6 @@ def process_dataframe_fast(input_df, limit_size=500):
     working_df['Range'] = ranges
     working_df['Country'] = countries
     
-    # Formatted output time display
     working_df['Time'] = working_df['dt'].dt.strftime('%Y-%m-%d %H:%M:%S')
     
     working_df = working_df[['Time', 'panel', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
@@ -325,6 +367,12 @@ st.markdown(f"""
     <div class="sub">> Live Network Monitor</div>
     <div class="divider"></div>
 </div>
+""", unsafe_allow_html=True)
+
+# TOP LEADERBOARD AD DISPLAY
+render_ad_728x90()
+
+st.markdown(f"""
 <div class="opbar">
     <div class="oi"><span class="pd"></span><span>LIVE</span></div>
     <div class="od">|</div>
@@ -392,7 +440,6 @@ except Exception: pass
 
 df = pd.DataFrame(combined_list)
 
-# FIX: Uniform datetime parsing taake Purple aur Lamix ek sath sort hon
 if not df.empty and 'dt_raw' in df.columns:
     df['dt'] = pd.to_datetime(df['dt_raw'], errors='coerce')
     df = df.dropna(subset=['dt'])
