@@ -32,7 +32,7 @@ st.set_page_config(page_title="UTS HUNTERS", page_icon="⚡", layout="wide")
 # ============================================================
 def render_ad_728x90():
     ad_code = """
-    <div style="display:flex; justify-content:center; align-items:center; margin: 10px 0;">
+    <div style="display:flex; justify-content:center; align-items:center; margin: 20px 0;">
         <script type="text/javascript">
             atOptions = {
                 'key' : 'a0246e02756d5826f6570550fc3b2c1d',
@@ -337,7 +337,7 @@ def process_dataframe_fast(input_df, limit_size=500):
     
     working_df['Time'] = working_df['dt'].dt.strftime('%Y-%m-%d %H:%M:%S')
     
-    working_df = working_df[['Time', 'panel', 'cli', 'num', 'Country', 'message', 'Team Member', 'Range']]
+    working_df = working_df[['Time', 'panel', 'cli', 'num', 'Country', 'Message', 'Team Member', 'Range']]
     working_df.columns = ['Time', 'Panel', 'App', 'Number', 'Country', 'Message', 'Team Member', 'Range']
     return working_df
 
@@ -368,9 +368,6 @@ st.markdown(f"""
     <div class="divider"></div>
 </div>
 """, unsafe_allow_html=True)
-
-# TOP LEADERBOARD AD DISPLAY
-render_ad_728x90()
 
 st.markdown(f"""
 <div class="opbar">
@@ -565,6 +562,12 @@ if is_admin and tab3:
                     else:
                         st.error(f"❌ {r2.get('msg')}")
         st.markdown("</div>", unsafe_allow_html=True)
+
+# ============================================================
+# FOOTER BANNER AD DISPLAY (BILKUL NICHE)
+# ============================================================
+st.markdown("<br><hr style='border:1px solid #112244;'>", unsafe_allow_html=True)
+render_ad_728x90()
 
 # ============================================================
 # AUTOMATIC REFRESH CYCLE
