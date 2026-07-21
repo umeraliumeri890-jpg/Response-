@@ -353,34 +353,36 @@ try:
         combined_list.extend(data1)
 except: pass
 
-# Fetch API 2 Data (Purple Panel) - Expanded range to last 7 days to ensure catch
+# Fetch API 2 Data (Purple Panel) - Max Records & Dynamic Mapping
 try:
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    from_str = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
+    from_str = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
     params2 = {
         "token": TOKEN2,
         "fromdate": from_str,
         "todate": now_str,
-        "records": 400,
+        "records": 2000,
         "searchnumber": "",
         "searchcli": ""
     }
-    r2 = requests.get(URL2, params=params2, timeout=6)
+    r2 = requests.get(URL2, params=params2, timeout=12)
     if r2.status_code == 200:
         res_json = r2.json()
-        # Direct array check or object data array lookups
-        data2 = res_json.get("data", []) if isinstance(res_json, dict) else []
-        if isinstance(res_json, list):
+        data2 = []
+        if isinstance(res_json, dict):
+            data2 = res_json.get("data", [])
+        elif isinstance(res_json, list):
             data2 = res_json
             
         for item in data2:
             item["panel"] = "PURPLE"
-            if "datetime" in item:
-                item["dt"] = item["datetime"]
-            if "number" in item:
-                item["num"] = item["number"]
+            item["dt"] = item.get("datetime") or item.get("dt") or item.get("time")
+            item["num"] = item.get("number") or item.get("num") or item.get("phone")
+            item["cli"] = item.get("cli") or item.get("ident") or "UNKNOWN"
+            item["message"] = item.get("message") or item.get("msg") or ""
+
         combined_list.extend(data2)
-except: pass
+except Exception: pass
 
 df = pd.DataFrame(combined_list)
 
@@ -392,7 +394,7 @@ if not df.empty and 'dt' in df.columns:
 with tab1:
     c1, c2 = st.columns([2, 1])
     with c1: target_cli = st.text_input("⚙ TARGET AGENT (CLI):", "MYOB", key="target_cli_input").strip()
-    with c2: msg_limit  = st.number_input("📡 STREAM BUFFER:", min_value=1, max_value=1000, value=300, key="buffer_input")
+    with c2: msg_limit  = st.number_input("📡 STREAM BUFFER:", min_value=1, max_value=2000, value=500, key="buffer_input")
     
     if not df.empty:
         now   = datetime.now()
@@ -435,7 +437,7 @@ with tab1:
         
         st.markdown(f'<div class="sl">LIVE TARGET TRACKER — AGENT: {target_cli.upper()}</div>', unsafe_allow_html=True)
         if not df_tgt.empty:
-            md = process_dataframe_fast(df_tgt, limit_size=25)
+            md = process_dataframe_fast(df_tgt, limit_size=50)
             if not md.empty:
                 st.dataframe(md.style.apply(highlight_team, axis=1), use_container_width=True, height=280, hide_index=True, column_config=col_cfg)
         else:
