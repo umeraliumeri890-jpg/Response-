@@ -1,0 +1,39 @@
+# Secrets & env
+.streamlit/secrets.toml
+.env
+.env.*
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Logs & runtime
+logs/*.log
+logs/*.log.*
+!logs/.gitkeep
+data/*
+!data/.gitkeep
+*.csv.bak
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Build / export
+dist/
+build/
+*.zip
+.coverage
+htmlcov/
