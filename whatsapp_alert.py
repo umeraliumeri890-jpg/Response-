@@ -1,3 +1,4 @@
+```python
 """
 SMART WHATSAPP OTP ALERT ENGINE
 ================================
@@ -17,7 +18,10 @@ CallMeBot / webhook can be plugged later without touching the engine.
 """
 from __future__ import annotations
 
+import hashlib
 import html
+import json
+import os
 import re
 import threading
 import time
@@ -32,6 +36,47 @@ import streamlit as st
 
 from config import get_settings
 from utils import log_event
+
+# ---------------------------------------------------------------------------
+# Persistent state file
+# ---------------------------------------------------------------------------
+ALERT_STATE_FILE = "alert_state.json"
+
+def _load_alert_state() -> dict[str, Any]:
+    """Load persistent alert state from JSON file."""
+    default_state = {
+        "last_hash": "",
+        "last_sent": 0,
+        "cooldowns": {}
+    }
+    if os.path.exists(ALERT_STATE_FILE):
+        try:
+            with open(ALERT_STATE_FILE, "r") as f:
+                data = json.load(f)
+                # Ensure all keys exist
+                for key in default_state:
+                    if key not in data:
+                        data[key] = default_state[key]
+                return data
+        except Exception:
+            return default_state
+    return default_state
+
+def _save_alert_state(state: dict[str, Any]) -> None:
+    """Save persistent alert state to JSON file."""
+    try:
+        with open(ALERT_STATE_FILE, "w") as f:
+            json.dump(state, f, indent=2)
+    except Exception:
+        pass
+
+# Global alert state
+_alert_state = _load_alert_state()
+
+# ---------------------------------------------------------------------------
+# Global lock for thread-safe alert processing
+# ---------------------------------------------------------------------------
+_ALERT_PROCESS_LOCK = threading.Lock()
 
 # ---------------------------------------------------------------------------
 # Tunables (overridable via secrets / session)
@@ -398,19 +443,30 @@ def send_whatsapp_alert_async(message: str, meta: dict[str, Any] | None = None) 
 
 
 # ---------------------------------------------------------------------------
-# Cooldown state (session + lightweight process cache)
+# Cooldown state (persistent + session)
 # ---------------------------------------------------------------------------
 def _cooldown_map() -> dict[str, float]:
-    return st.session_state.setdefault("wa_cli_cooldown_until", {})
+    # Merge persistent cooldowns with session cooldowns
+    persistent = _alert_state.get("cooldowns", {})
+    session_cooldowns = st.session_state.setdefault("wa_cli_cooldown_until", {})
+    # Session overrides persistent (for current run)
+    merged = {**persistent, **session_cooldowns}
+    return merged
 
 
 def _is_cooling(cli: str, now_ts: float) -> bool:
-    until = float(_cooldown_map().get(cli, 0) or 0)
+    cooldowns = _cooldown_map()
+    until = float(cooldowns.get(cli, 0) or 0)
     return now_ts < until
 
 
 def _arm_cooldown(cli: str, seconds: float, now_ts: float) -> None:
-    _cooldown_map()[cli] = now_ts + seconds
+    expiry = now_ts + seconds
+    # Update session
+    st.session_state.setdefault("wa_cli_cooldown_until", {})[cli] = expiry
+    # Update persistent
+    _alert_state.setdefault("cooldowns", {})[cli] = expiry
+    _save_alert_state(_alert_state)
 
 
 # ---------------------------------------------------------------------------
@@ -495,57 +551,93 @@ def process_otp_alerts(df: pd.DataFrame, *, force: bool = False) -> list[dict[st
     Safe to call every Streamlit rerun / autorefresh.
     Returns list of alerts fired this tick.
     """
-    cfg = _alert_config()
-    if not cfg["enabled"] and not force:
+    # Use global lock to prevent concurrent processing
+    if not _ALERT_PROCESS_LOCK.acquire(blocking=False):
+        # Another thread is already processing alerts
         return []
-
-    # Throttle full scans to ~ once per 10s even if UI reruns faster
-    now_ts = time.time()
-    last = float(st.session_state.get("wa_last_scan_ts", 0) or 0)
-    if not force and (now_ts - last) < 10:
-        return []
-    st.session_state["wa_last_scan_ts"] = now_ts
 
     try:
-        hits = evaluate_cli_windows(df, window_min=cfg["window_min"], threshold=cfg["threshold"])
-    except Exception as exc:
-        log_event("wa_eval_error", str(exc))
-        return []
+        cfg = _alert_config()
+        if not cfg["enabled"] and not force:
+            return []
 
-    fired: list[dict[str, Any]] = []
-    cooldown_sec = max(30, int(cfg["cooldown_min"]) * 60)
+        # Throttle full scans to ~ once per 10s even if UI reruns faster
+        now_ts = time.time()
+        last = float(st.session_state.get("wa_last_scan_ts", 0) or 0)
+        if not force and (now_ts - last) < 10:
+            return []
+        st.session_state["wa_last_scan_ts"] = now_ts
 
-    for hit in hits[:MAX_ALERTS_PER_TICK]:
-        cli = hit["cli"]
-        if _is_cooling(cli, now_ts):
-            continue
-
-        msg = build_alert_message(
-            cli=cli,
-            panel=hit["panel"],
-            total=hit["total"],
-            main_country=hit["main_country"],
-            templates=hit["templates"],
-            countries=hit["countries"],
-        )
-        meta = {"cli": cli, "panel": hit["panel"], "total": hit["total"], "country": hit["main_country"]}
-
-        # Arm cooldown BEFORE send to avoid double-fire on overlapping threads
-        _arm_cooldown(cli, cooldown_sec, now_ts)
-        send_whatsapp_alert_async(msg, meta=meta)
-
-        fired.append({**meta, "message": msg})
-        log_event("wa_alert_triggered", "high traffic", **meta)
-
-        # Toast for operator (non-blocking UX)
         try:
-            st.toast(f"🚨 WA alert armed · {cli} · {hit['total']} OTPs / {cfg['window_min']}m", icon="📱")
-        except Exception:
-            pass
+            hits = evaluate_cli_windows(df, window_min=cfg["window_min"], threshold=cfg["threshold"])
+        except Exception as exc:
+            log_event("wa_eval_error", str(exc))
+            return []
 
-    if fired:
-        st.session_state["wa_last_fired"] = fired
-    return fired
+        fired: list[dict[str, Any]] = []
+
+        for hit in hits[:MAX_ALERTS_PER_TICK]:
+            cli = hit["cli"]
+            total = hit["total"]
+
+            # Determine cooldown based on OTP count
+            if total >= 50:
+                cooldown_sec = 300  # 5 minutes
+            else:
+                cooldown_sec = 600  # 10 minutes
+
+            if _is_cooling(cli, now_ts):
+                continue
+
+            msg = build_alert_message(
+                cli=cli,
+                panel=hit["panel"],
+                total=hit["total"],
+                main_country=hit["main_country"],
+                templates=hit["templates"],
+                countries=hit["countries"],
+            )
+
+            # Compute message hash for duplicate detection
+            msg_hash = hashlib.sha256(msg.encode("utf-8")).hexdigest()
+
+            # Check for duplicate message (same hash within 30 seconds)
+            last_hash = _alert_state.get("last_hash", "")
+            last_sent = _alert_state.get("last_sent", 0)
+
+            if msg_hash == last_hash and (now_ts - last_sent) < 30:
+                # Skip duplicate
+                log_event("wa_alert_skipped", "duplicate message", cli=cli, hash=msg_hash[:8])
+                continue
+
+            meta = {"cli": cli, "panel": hit["panel"], "total": hit["total"], "country": hit["main_country"]}
+
+            # Arm cooldown BEFORE send to avoid double-fire on overlapping threads
+            _arm_cooldown(cli, cooldown_sec, now_ts)
+
+            # Update persistent state for duplicate detection
+            _alert_state["last_hash"] = msg_hash
+            _alert_state["last_sent"] = now_ts
+            _save_alert_state(_alert_state)
+
+            # Send alert
+            send_whatsapp_alert_async(msg, meta=meta)
+
+            fired.append({**meta, "message": msg})
+            log_event("wa_alert_triggered", "high traffic", **meta)
+
+            # Toast for operator (non-blocking UX)
+            try:
+                st.toast(f"🚨 WA alert armed · {cli} · {hit['total']} OTPs / {cfg['window_min']}m", icon="📱")
+            except Exception:
+                pass
+
+        if fired:
+            st.session_state["wa_last_fired"] = fired
+        return fired
+
+    finally:
+        _ALERT_PROCESS_LOCK.release()
 
 
 def _greenapi_base(settings: dict[str, Any] | None = None) -> tuple[str, str, str] | dict[str, Any]:
@@ -722,3 +814,4 @@ def preview_alert_for_cli(df: pd.DataFrame, cli: str) -> str | None:
         templates=h["templates"],
         countries=h["countries"],
     )
+```
