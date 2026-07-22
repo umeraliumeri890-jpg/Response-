@@ -35,10 +35,15 @@ _DEFAULTS: dict[str, Any] = {
     "WHATSAPP_THRESHOLD": 50,
     "WHATSAPP_WINDOW_MIN": 5,
     "WHATSAPP_COOLDOWN_MIN": 5,
-    "WHATSAPP_PROVIDER": "log",  # log | callmebot | webhook | meta | twilio
+    "WHATSAPP_PROVIDER": "log",  # log | greenapi | callmebot | webhook | meta | twilio
     "WHATSAPP_WEBHOOK_URL": "",
     "CALLMEBOT_PHONE": "",
     "CALLMEBOT_APIKEY": "",
+    # GREEN-API (personal WhatsApp → group) https://console.green-api.com/
+    "GREENAPI_ID_INSTANCE": "",
+    "GREENAPI_API_TOKEN": "",
+    "GREENAPI_API_URL": "https://api.green-api.com",
+    "GREENAPI_GROUP_ID": "",  # e.g. 1203630xxxxxxxxx@g.us
     "META_WA_TOKEN": "",
     "META_WA_PHONE_ID": "",
     "META_WA_TO": "",
@@ -204,6 +209,10 @@ def get_settings() -> dict[str, Any]:
         "whatsapp_webhook_url": str(_secret("WHATSAPP_WEBHOOK_URL", _DEFAULTS["WHATSAPP_WEBHOOK_URL"])),
         "callmebot_phone": str(_secret("CALLMEBOT_PHONE", _DEFAULTS["CALLMEBOT_PHONE"])),
         "callmebot_apikey": str(_secret("CALLMEBOT_APIKEY", _DEFAULTS["CALLMEBOT_APIKEY"])),
+        "greenapi_id_instance": str(_secret("GREENAPI_ID_INSTANCE", _DEFAULTS["GREENAPI_ID_INSTANCE"])),
+        "greenapi_api_token": str(_secret("GREENAPI_API_TOKEN", _DEFAULTS["GREENAPI_API_TOKEN"])),
+        "greenapi_api_url": str(_secret("GREENAPI_API_URL", _DEFAULTS["GREENAPI_API_URL"])),
+        "greenapi_group_id": str(_secret("GREENAPI_GROUP_ID", _DEFAULTS["GREENAPI_GROUP_ID"])),
         "meta_wa_token": str(_secret("META_WA_TOKEN", _DEFAULTS["META_WA_TOKEN"])),
         "meta_wa_phone_id": str(_secret("META_WA_PHONE_ID", _DEFAULTS["META_WA_PHONE_ID"])),
         "meta_wa_to": str(_secret("META_WA_TO", _DEFAULTS["META_WA_TO"])),
