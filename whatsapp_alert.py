@@ -10,7 +10,7 @@ Trigger (per CLI):
   - one alert, then cooldown (default 5 minutes)
 
 Message templates:
-  - strip OTP digits (4–8) → ******
+  - strip OTP digits (4-8) → ******
   - unique templates only
 
 Delivery is isolated in send_whatsapp_alert() so Meta / Twilio /
@@ -88,7 +88,7 @@ MAX_TEMPLATES = 8
 MAX_COUNTRIES = 8
 MAX_ALERTS_PER_TICK = 5  # safety: never spam more than N CLIs per refresh
 
-# OTP digit runs 4–8 long (word-ish boundaries; keep Arabic/Unicode text intact)
+# OTP digit runs 4-8 long (word-ish boundaries; keep Arabic/Unicode text intact)
 _OTP_RE = re.compile(r"(?<!\d)\d{4,8}(?!\d)")
 # HTML entities sometimes appear in messages
 _ENTITY_RE = re.compile(r"&(?:#\d+|#x[0-9a-fA-F]+|\w+);")
@@ -166,7 +166,7 @@ def _flag(country: str) -> str:
 
 
 def _circled(n: int) -> str:
-    # ①–⑳ then fallback
+    # ①-⑳ then fallback
     if 1 <= n <= 20:
         return chr(0x2460 + n - 1)
     return f"{n}."
@@ -665,7 +665,7 @@ def list_greenapi_groups(count: int = 200) -> dict[str, Any]:
 
     IMPORTANT: Green-API only sees chats that had activity AFTER the phone was linked.
     If empty: open WhatsApp on the linked phone → open target group → send any message
-    (e.g. "test") → wait 10–20s → run this again.
+    (e.g. "test") → wait 10-20s → run this again.
     """
     base = _greenapi_base()
     if isinstance(base, dict):
@@ -740,7 +740,7 @@ def list_greenapi_groups(count: int = 200) -> dict[str, Any]:
     groups = sorted(found.values(), key=lambda g: (g.get("name") or g["chatId"]).lower())
     tip = (
         "Phone se target group OPEN karke koi message bhejo (e.g. 'id test'), "
-        "10–20 sec wait, phir dubara Fetch dabao. "
+        "10-20 sec wait, phir dubara Fetch dabao. "
         "Green-API purane silent groups nahi dikhata jab tak unme linked number se activity na ho."
     )
     return {
