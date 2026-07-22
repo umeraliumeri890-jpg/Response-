@@ -648,7 +648,10 @@ def page_settings() -> None:
         )
     with wa3:
         st.caption(f"Provider (secrets): **{settings.get('whatsapp_provider', 'log')}**")
-        st.caption("log · callmebot · webhook · meta · twilio")
+        st.caption("log · greenapi · callmebot · webhook · meta · twilio")
+        if str(settings.get("whatsapp_provider", "")).lower() == "greenapi":
+            gid = str(settings.get("greenapi_group_id") or "")
+            st.caption(f"Group: `{gid[:28]}…`" if len(gid) > 28 else f"Group: `{gid or 'NOT SET'}`")
         preview_cli = st.text_input("Preview CLI", value=st.session_state.get("target_cli", "MYOB"), key="wa_preview_cli")
         if st.button("Preview alert message", use_container_width=True):
             try:
@@ -663,21 +666,133 @@ def page_settings() -> None:
             except Exception as exc:
                 st.error(str(exc))
 
+    # GREEN-API helpers: why Chats is empty + how to get @g.us
+    if str(settings.get("whatsapp_provider", "")).lower() == "greenapi" or settings.get("greenapi_id_instance"):
+        st.markdown('<div class="sl">GREEN-API GROUP ID FINDER</div>', unsafe_allow_html=True)
+        st.warning(
+            "Console me **Chats empty** normal hai jab tak linked phone se group me "
+            "**naya message** na jaye. Purane groups auto list nahi hote."
+        )
+        g1, g2, g3 = st.columns(3)
+        with g1:
+            if st.button("1) Check WA link status", use_container_width=True, key="ga_state_btn"):
+                try:
+                    from whatsapp_alert import check_greenapi_state
+
+                    st.session_state["ga_state"] = check_greenapi_state()
+                except Exception as exc:
+                    st.session_state["ga_state"] = {"ok": False, "detail": str(exc)}
+        with g2:
+            if st.button("2) Fetch groups (@g.us)", use_container_width=True, key="ga_fetch_btn"):
+                try:
+                    from whatsapp_alert import list_greenapi_groups
+
+                    with st.spinner("Green-API se groups pull ho rahe hain..."):
+                        st.session_state["ga_groups"] = list_greenapi_groups()
+                except Exception as exc:
+                    st.session_state["ga_groups"] = {"ok": False, "groups": [], "detail": str(exc)}
+        with g3:
+            if st.button("3) Send TEST to secrets group", use_container_width=True, key="ga_test_btn"):
+                try:
+                    from whatsapp_alert import send_whatsapp_alert
+
+                    test_msg = (
+                        "🧪 UTS HUNTERS TEST\n\n"
+                        "Green-API group link OK.\n"
+                        f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                    )
+                    # temporarily force greenapi path via current secrets provider
+                    res = send_whatsapp_alert(test_msg, meta={"cli": "TEST", "total": 0})
+                    st.session_state["ga_test_result"] = res
+                except Exception as exc:
+                    st.session_state["ga_test_result"] = {"ok": False, "detail": str(exc)}
+
+        state = st.session_state.get("ga_state")
+        if state:
+            if state.get("authorized") or str(state.get("state", "")).lower() == "authorized":
+                st.success(f"Instance state: **{state.get('state', 'authorized')}** — phone linked ✅")
+            else:
+                st.error(
+                    f"Instance state: **{state.get('state', 'unknown')}** — "
+                    "console me QR dubara scan karo / phone internet on rakho."
+                )
+                with st.expander("State detail"):
+                    st.json(state)
+
+        ga = st.session_state.get("ga_groups")
+        if ga:
+            groups = ga.get("groups") or []
+            if groups:
+                st.success(f"{len(groups)} group milay — apna group select/copy karo:")
+                gdf = pd.DataFrame(groups)[["name", "chatId", "source"]]
+                st.dataframe(gdf, use_container_width=True, hide_index=True)
+                pick = st.selectbox(
+                    "Group choose karo",
+                    options=[f"{g.get('name')}  |  {g.get('chatId')}" for g in groups],
+                    key="ga_pick",
+                )
+                if pick and "|" in pick:
+                    chosen = pick.split("|")[-1].strip()
+                    st.code(chosen, language=None)
+                    st.info(
+                        "Is ID ko secrets me paste karo:\n\n"
+                        f'`GREENAPI_GROUP_ID = "{chosen}"`\n\n'
+                        '`WHATSAPP_PROVIDER = "greenapi"`'
+                    )
+            else:
+                st.error("Abhi koi group nahi mila.")
+                if ga.get("tip"):
+                    st.markdown(f"**Fix:** {ga['tip']}")
+                if ga.get("errors"):
+                    with st.expander("API notes"):
+                        st.write(ga.get("errors"))
+
+        if st.session_state.get("ga_test_result"):
+            tr = st.session_state["ga_test_result"]
+            if tr.get("ok"):
+                st.success(f"TEST send OK · {tr.get('provider')} · {tr.get('detail')}")
+            else:
+                st.error(f"TEST failed · {tr.get('detail')}")
+
+        st.markdown(
+            """
+**Group ID empty kyun hoti hai + exact fix**
+
+1. Green-API console → instance **authorized** (QR scanned with YOUR number)
+2. Phone pe WhatsApp kholo → **wahi number** jo QR se link hai
+3. Target group open karo
+4. Group me **naya message** bhejo: `uts id test`
+5. 15 second wait
+6. Yahan **Fetch groups** dabao  
+   — ab row aayegi: `GroupName | 1203630....@g.us`
+7. Woh `@g.us` secrets me `GREENAPI_GROUP_ID` pe daalo
+8. **Send TEST** se group me test message verify karo
+
+Console ka “Chats” panel aksar blank rehta hai — is liye app ke andar Fetch use karo.
+            """
+        )
+    else:
+        st.markdown(
+            """
+**Apna number → apna WhatsApp group (recommended free path):**
+
+### GREEN-API
+1. [console.green-api.com](https://console.green-api.com/) → instance → QR scan  
+2. Secrets:
+   - `WHATSAPP_PROVIDER = "greenapi"`
+   - `GREENAPI_ID_INSTANCE`
+   - `GREENAPI_API_TOKEN`
+   - `GREENAPI_GROUP_ID` = `....@g.us`
+3. Phone se group me koi msg bhejo, phir Settings → **Fetch groups**
+
+CallMeBot groups support nahi karta.
+            """
+        )
+
     hist = st.session_state.get("wa_alert_history") or []
     if hist:
         with st.expander(f"Recent WA alerts ({len(hist)})", expanded=False):
             st.dataframe(pd.DataFrame(hist), use_container_width=True, hide_index=True)
-
-    st.markdown(
-        """
-**Free group delivery options** (no paid Meta Business required for basic ops):
-
-1. **CallMeBot** (free, personal chat only) — secrets `CALLMEBOT_PHONE` + `CALLMEBOT_APIKEY`, provider=`callmebot`
-2. **Make.com / n8n free webhook → WhatsApp** — provider=`webhook` + `WHATSAPP_WEBHOOK_URL`
-   - Easiest free **group** path: Make.com scenario → WhatsApp Business / Green-API / Baileys self-bot
-3. Later: Meta Cloud API or Twilio (`meta` / `twilio` providers already wired)
-        """
-    )
 
     st.markdown('<div class="sl">SYSTEM INFORMATION</div>', unsafe_allow_html=True)
     info = system_info()
