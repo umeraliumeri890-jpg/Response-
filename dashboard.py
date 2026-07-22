@@ -152,11 +152,103 @@ def api_health_cards(health: dict) -> None:
             )
 
 
-def aggrid_table(df: pd.DataFrame, height: int = 420, key: str = "grid") -> pd.DataFrame:
+def _live_display_frame(df: pd.DataFrame) -> pd.DataFrame:
+    """Full readable columns for live monitoring (no Team/Range clutter)."""
+    if df is None or df.empty:
+        return pd.DataFrame(columns=["Time", "Panel", "CLI", "Number", "Country", "Message"])
+    show = df.drop(columns=["dt", "Team Member", "Range"], errors="ignore").copy()
+    keep = [c for c in ["Time", "Panel", "CLI", "Number", "Country", "Message"] if c in show.columns]
+    # Keep any remaining useful cols after core set
+    extra = [c for c in show.columns if c not in keep]
+    show = show[keep + extra]
+    # Force plain strings so nothing truncates oddly
+    for c in show.columns:
+        show[c] = show[c].fillna("").astype(str)
+        if c == "Message":
+            show[c] = show[c].map(lambda x: html.unescape(x) if x else "")
+    return show
+
+
+def _render_mobile_otp_cards(df: pd.DataFrame, limit: int = 80) -> None:
+    """Card list — every field fully visible on phone screens."""
+    if df is None or df.empty:
+        st.caption("No rows to display.")
+        return
+    rows = df.head(int(limit))
+    cards: list[str] = ['<div class="otp-feed">']
+    for _, r in rows.iterrows():
+        time_v = html.escape(str(r.get("Time", "")))
+        panel_v = html.escape(str(r.get("Panel", "")))
+        cli_v = html.escape(str(r.get("CLI", "")))
+        num_v = html.escape(str(r.get("Number", "")))
+        country_v = html.escape(str(r.get("Country", "")))
+        msg_v = html.escape(str(r.get("Message", "")))
+        cards.append(
+            '<div class="otp-card glass">'
+            f'<div class="otp-top"><span class="otp-time">{time_v}</span>'
+            f'<span class="otp-panel">{panel_v}</span></div>'
+            f'<div class="otp-cli">{cli_v}</div>'
+            f'<div class="otp-row"><span class="otp-k">Number</span><span class="otp-v otp-num">{num_v}</span></div>'
+            f'<div class="otp-row"><span class="otp-k">Country</span><span class="otp-v">{country_v}</span></div>'
+            f'<div class="otp-msg">{msg_v}</div>'
+            "</div>"
+        )
+    cards.append("</div>")
+    st.markdown("".join(cards), unsafe_allow_html=True)
+
+
+def aggrid_table(
+    df: pd.DataFrame,
+    height: int = 420,
+    key: str = "grid",
+    *,
+    live_mode: bool = False,
+    hide_team_range: bool = False,
+) -> pd.DataFrame:
+    """
+    Table renderer.
+    - live_mode=True → mobile-first full-text cards (no truncation, no Team/Range)
+    - otherwise AgGrid / dataframe fallback
+    """
     if df is None or df.empty:
         st.caption("No rows to display.")
         return df
-    show = df.drop(columns=["dt"], errors="ignore").copy()
+
+    if live_mode or hide_team_range:
+        show = _live_display_frame(df)
+    else:
+        show = df.drop(columns=["dt"], errors="ignore").copy()
+
+    # Live monitor: always full text — cards on all viewports (mobile-first)
+    if live_mode:
+        # Desktop also gets a full non-truncated table under the cards toggle
+        view = st.radio(
+            "View",
+            ["Cards (full text)", "Table (full text)"],
+            horizontal=True,
+            key=f"{key}_view",
+            label_visibility="collapsed",
+        )
+        st.caption(f"Showing **{len(show)}** rows · full text · Team/Range hidden")
+        if view.startswith("Cards"):
+            _render_mobile_otp_cards(show, limit=min(len(show), 120))
+            return show
+        # Full-text dataframe — wrap enabled, no column ellipsis
+        st.dataframe(
+            show,
+            use_container_width=True,
+            height=height,
+            hide_index=True,
+            column_config={
+                "Time": st.column_config.TextColumn("Time", width="medium"),
+                "Panel": st.column_config.TextColumn("Panel", width="small"),
+                "CLI": st.column_config.TextColumn("CLI", width="medium"),
+                "Number": st.column_config.TextColumn("Number", width="medium"),
+                "Country": st.column_config.TextColumn("Country", width="medium"),
+                "Message": st.column_config.TextColumn("Message", width="large"),
+            },
+        )
+        return show
 
     if not HAS_AGGRID:
         st.dataframe(show, use_container_width=True, height=height, hide_index=True)
@@ -169,6 +261,9 @@ def aggrid_table(df: pd.DataFrame, height: int = 420, key: str = "grid") -> pd.D
         resizable=True,
         editable=False,
         groupable=False,
+        wrapText=True,
+        autoHeight=True,
+        floatingFilter=False,
     )
     gb.configure_pagination(
         enabled=True,
@@ -176,9 +271,17 @@ def aggrid_table(df: pd.DataFrame, height: int = 420, key: str = "grid") -> pd.D
         paginationPageSize=int(st.session_state.get("page_size", 50)),
     )
     gb.configure_side_bar()
-    gb.configure_selection(selection_mode="multiple", use_checkbox=True)
+    gb.configure_selection(selection_mode="multiple", use_checkbox=False)
     if "Time" in show.columns:
-        gb.configure_column("Time", pinned="left")
+        gb.configure_column("Time", pinned="left", minWidth=150)
+    if "Message" in show.columns:
+        gb.configure_column("Message", minWidth=280, flex=2, wrapText=True, autoHeight=True)
+    if "Number" in show.columns:
+        gb.configure_column("Number", minWidth=140)
+    if "CLI" in show.columns:
+        gb.configure_column("CLI", minWidth=120)
+    if "Country" in show.columns:
+        gb.configure_column("Country", minWidth=120)
     if "Team Member" in show.columns:
         gb.configure_column(
             "Team Member",
@@ -193,7 +296,15 @@ def aggrid_table(df: pd.DataFrame, height: int = 420, key: str = "grid") -> pd.D
                 """
             ),
         )
+    # Never clip cell content with ellipsis
     grid_options = gb.build()
+    grid_options["defaultColDef"] = {
+        **grid_options.get("defaultColDef", {}),
+        "wrapText": True,
+        "autoHeight": True,
+        "resizable": True,
+        "suppressSizeToFit": False,
+    }
     t = theme_colors()
     custom_css = {
         ".ag-root-wrapper": {
@@ -204,6 +315,12 @@ def aggrid_table(df: pd.DataFrame, height: int = 420, key: str = "grid") -> pd.D
         ".ag-header": {"background-color": t["bg2"], "color": t["accent"]},
         ".ag-row": {"background-color": t["card"], "color": t["text"]},
         ".ag-row-odd": {"background-color": t["bg2"]},
+        ".ag-cell": {
+            "white-space": "normal !important",
+            "line-height": "1.35",
+            "overflow": "visible",
+            "text-overflow": "clip",
+        },
     }
     resp = AgGrid(
         show,
@@ -216,6 +333,7 @@ def aggrid_table(df: pd.DataFrame, height: int = 420, key: str = "grid") -> pd.D
         custom_css=custom_css,
         key=key,
         reload_data=False,
+        fit_columns_on_grid_load=False,
     )
     try:
         return pd.DataFrame(resp["data"])
@@ -275,7 +393,13 @@ def page_live_monitor(df: pd.DataFrame) -> None:
     with c1:
         target = st.text_input("🎯 Target CLI", value=st.session_state.get("target_cli", "MYOB"), key="target_cli")
     with c2:
-        limit = st.number_input("Stream buffer", min_value=25, max_value=5000, value=int(st.session_state.get("stream_buffer", 500)), step=25)
+        limit = st.number_input(
+            "Stream buffer",
+            min_value=25,
+            max_value=5000,
+            value=int(st.session_state.get("stream_buffer", 500)),
+            step=25,
+        )
         st.session_state["stream_buffer"] = int(limit)
     with c3:
         only_matched = st.toggle("Matched only", value=False)
@@ -289,14 +413,18 @@ def page_live_monitor(df: pd.DataFrame) -> None:
     else:
         tgt = work.iloc[0:0]
 
-    st.markdown(f'<div class="sl">TARGET TRACKER — {target.upper() or "ALL"}</div>', unsafe_allow_html=True)
-    aggrid_table(tgt.head(80), height=280, key="tgt_grid")
+    st.markdown(
+        f'<div class="sl">TARGET TRACKER — {html.escape(target.upper() or "ALL")}</div>',
+        unsafe_allow_html=True,
+    )
+    # Mobile-first full text — Team/Range removed, no ellipsis
+    aggrid_table(tgt.head(80), height=360, key="tgt_grid", live_mode=True)
 
     stream = work.head(int(limit))
     if only_matched and "Team Member" in stream.columns:
         stream = stream[stream["Team Member"].astype(str).str.strip() != ""]
     st.markdown('<div class="sl">GLOBAL LIVE STREAM</div>', unsafe_allow_html=True)
-    aggrid_table(stream, height=520, key="live_grid")
+    aggrid_table(stream, height=640, key="live_grid", live_mode=True)
 
 
 def page_analytics(df: pd.DataFrame) -> None:
@@ -488,6 +616,68 @@ def page_settings() -> None:
             load_live_data(force=True)
             st.success("Cache cleared — next load is fresh.")
             st.rerun()
+
+    # ---- WhatsApp OTP Alert Engine (additive panel) ----
+    st.markdown('<div class="sl">WHATSAPP OTP ALERT ENGINE</div>', unsafe_allow_html=True)
+    settings = get_settings()
+    wa1, wa2, wa3 = st.columns(3)
+    with wa1:
+        st.session_state["wa_alerts_enabled"] = st.toggle(
+            "Enable WA alerts",
+            value=bool(st.session_state.get("wa_alerts_enabled", settings.get("whatsapp_alerts_enabled", True))),
+        )
+        st.session_state["wa_threshold"] = st.number_input(
+            "CLI threshold / 5 min",
+            min_value=5,
+            max_value=5000,
+            value=int(st.session_state.get("wa_threshold", settings.get("whatsapp_threshold", 50))),
+            step=5,
+        )
+    with wa2:
+        st.session_state["wa_window_min"] = st.number_input(
+            "Window (minutes)",
+            min_value=1,
+            max_value=60,
+            value=int(st.session_state.get("wa_window_min", settings.get("whatsapp_window_min", 5))),
+        )
+        st.session_state["wa_cooldown_min"] = st.number_input(
+            "Cooldown (minutes)",
+            min_value=1,
+            max_value=120,
+            value=int(st.session_state.get("wa_cooldown_min", settings.get("whatsapp_cooldown_min", 5))),
+        )
+    with wa3:
+        st.caption(f"Provider (secrets): **{settings.get('whatsapp_provider', 'log')}**")
+        st.caption("log · callmebot · webhook · meta · twilio")
+        preview_cli = st.text_input("Preview CLI", value=st.session_state.get("target_cli", "MYOB"), key="wa_preview_cli")
+        if st.button("Preview alert message", use_container_width=True):
+            try:
+                from whatsapp_alert import preview_alert_for_cli
+
+                df_live, _ = load_live_data(force=False)
+                msg = preview_alert_for_cli(df_live, preview_cli)
+                if msg:
+                    st.code(msg, language=None)
+                else:
+                    st.info("No rows for that CLI yet.")
+            except Exception as exc:
+                st.error(str(exc))
+
+    hist = st.session_state.get("wa_alert_history") or []
+    if hist:
+        with st.expander(f"Recent WA alerts ({len(hist)})", expanded=False):
+            st.dataframe(pd.DataFrame(hist), use_container_width=True, hide_index=True)
+
+    st.markdown(
+        """
+**Free group delivery options** (no paid Meta Business required for basic ops):
+
+1. **CallMeBot** (free, personal chat only) — secrets `CALLMEBOT_PHONE` + `CALLMEBOT_APIKEY`, provider=`callmebot`
+2. **Make.com / n8n free webhook → WhatsApp** — provider=`webhook` + `WHATSAPP_WEBHOOK_URL`
+   - Easiest free **group** path: Make.com scenario → WhatsApp Business / Green-API / Baileys self-bot
+3. Later: Meta Cloud API or Twilio (`meta` / `twilio` providers already wired)
+        """
+    )
 
     st.markdown('<div class="sl">SYSTEM INFORMATION</div>', unsafe_allow_html=True)
     info = system_info()
