@@ -5,11 +5,11 @@ Monitors the already-merged live dataframe (no extra API calls).
 
 Trigger (per CLI):
   - rolling 5-minute window
-  - >= threshold OTPs (default 50)
-  - one alert, then cooldown (default 5 minutes)
+  - ALWAYS sends alert every 5 minutes if any OTP exists
+  - one alert, then cooldown 5 minutes
 
 Message templates:
-  - strip OTP digits (4-8) → ******
+  - strip OTP digits (4–8) → ******
   - unique templates only
 
 Delivery is isolated in send_whatsapp_alert() so Meta / Twilio /
@@ -72,7 +72,7 @@ _alert_state = _load_alert_state()
 _ALERT_PROCESS_LOCK = threading.Lock()
 
 # ---------------------------------------------------------------------------
-# Tunables
+# Tunables (overridable via secrets / session)
 # ---------------------------------------------------------------------------
 DEFAULT_THRESHOLD = 50
 DEFAULT_WINDOW_MIN = 5
@@ -81,10 +81,13 @@ MAX_TEMPLATES = 8
 MAX_COUNTRIES = 8
 MAX_ALERTS_PER_TICK = 5
 
+# OTP digit runs 4–8 long (word-ish boundaries; keep Arabic/Unicode text intact)
 _OTP_RE = re.compile(r"(?<!\d)\d{4,8}(?!\d)")
+# HTML entities sometimes appear in messages
 _ENTITY_RE = re.compile(r"&(?:#\d+|#x[0-9a-fA-F]+|\w+);")
 _WS_RE = re.compile(r"\s+")
 
+# Country → flag (fallback 🌍)
 _FLAGS: dict[str, str] = {
     "Malaysia": "🇲🇾",
     "Singapore": "🇸🇬",
@@ -112,7 +115,11 @@ _FLAGS: dict[str, str] = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Template helpers
+# ---------------------------------------------------------------------------
 def normalize_template(message: str) -> str:
+    """Replace OTP digit groups with ****** and collapse whitespace."""
     if message is None:
         return ""
     text = str(message)
@@ -156,6 +163,9 @@ def _circled(n: int) -> str:
     return f"{n}."
 
 
+# ---------------------------------------------------------------------------
+# Message builder
+# ---------------------------------------------------------------------------
 def build_alert_message(
     *,
     cli: str,
@@ -170,7 +180,7 @@ def build_alert_message(
     time_str = ts.strftime("%I:%M %p").lstrip("0")
 
     lines = [
-        "🚨 HIGH OTP TRAFFIC ALERT",
+        "🚨 OTP TRAFFIC ALERT",
         "",
         f"⚠ CLI : {cli}",
         f"📡 Panel : {panel}",
@@ -213,6 +223,9 @@ def build_alert_message(
     return "\n".join(lines)
 
 
+# ---------------------------------------------------------------------------
+# Delivery (isolated — swap provider without touching engine)
+# ---------------------------------------------------------------------------
 def send_whatsapp_alert(message: str, *, meta: dict[str, Any] | None = None) -> dict[str, Any]:
     settings = get_settings()
     provider = str(settings.get("whatsapp_provider") or "log").strip().lower()
@@ -389,6 +402,10 @@ def _alert_config() -> dict[str, Any]:
 
 
 def evaluate_cli_windows(df: pd.DataFrame, *, window_min: int, threshold: int) -> list[dict[str, Any]]:
+    """
+    Pure function: find CLIs with ANY OTP in the last window_min minutes.
+    Minimum threshold is 1 (send alert for any OTP activity).
+    """
     if df is None or df.empty or "CLI" not in df.columns:
         return []
     if "dt" not in df.columns:
@@ -413,7 +430,8 @@ def evaluate_cli_windows(df: pd.DataFrame, *, window_min: int, threshold: int) -
     hits: list[dict[str, Any]] = []
     for cli, grp in recent.groupby(recent["CLI"].astype(str), sort=False):
         total = int(len(grp))
-        if total < int(threshold):
+        # ALWAYS trigger if ANY OTP exists (total >= 1)
+        if total < 1:
             continue
         panel = "MIXED"
         if "Panel" in grp.columns:
@@ -440,6 +458,10 @@ def evaluate_cli_windows(df: pd.DataFrame, *, window_min: int, threshold: int) -
 
 
 def process_otp_alerts(df: pd.DataFrame, *, force: bool = False) -> list[dict[str, Any]]:
+    """
+    Run one evaluation tick against the live merged frame.
+    Sends alerts EVERY 5 MINUTES for ANY CLI with OTP activity.
+    """
     if not _ALERT_PROCESS_LOCK.acquire(blocking=False):
         return []
 
@@ -454,8 +476,9 @@ def process_otp_alerts(df: pd.DataFrame, *, force: bool = False) -> list[dict[st
             return []
         st.session_state["wa_last_scan_ts"] = now_ts
 
+        # Use threshold = 1 to catch ANY OTP activity
         try:
-            hits = evaluate_cli_windows(df, window_min=cfg["window_min"], threshold=cfg["threshold"])
+            hits = evaluate_cli_windows(df, window_min=cfg["window_min"], threshold=1)
         except Exception as exc:
             log_event("wa_eval_error", str(exc))
             return []
@@ -466,10 +489,8 @@ def process_otp_alerts(df: pd.DataFrame, *, force: bool = False) -> list[dict[st
             cli = hit["cli"]
             total = hit["total"]
 
-            if total >= 50:
-                cooldown_sec = 300
-            else:
-                cooldown_sec = 600
+            # ALWAYS 5 MINUTES COOLDOWN regardless of OTP count
+            cooldown_sec = 300  # 5 minutes fixed
 
             if _is_cooling(cli, now_ts):
                 continue
@@ -501,10 +522,10 @@ def process_otp_alerts(df: pd.DataFrame, *, force: bool = False) -> list[dict[st
             send_whatsapp_alert_async(msg, meta=meta)
 
             fired.append({**meta, "message": msg})
-            log_event("wa_alert_triggered", "high traffic", **meta)
+            log_event("wa_alert_triggered", "OTP traffic", **meta)
 
             try:
-                st.toast(f"🚨 WA alert armed · {cli} · {hit['total']} OTPs / {cfg['window_min']}m", icon="📱")
+                st.toast(f"🚨 WA alert · {cli} · {hit['total']} OTPs", icon="📱")
             except Exception:
                 pass
 
