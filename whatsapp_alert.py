@@ -1,4 +1,3 @@
-```python
 """
 SMART WHATSAPP OTP ALERT ENGINE
 ================================
@@ -53,7 +52,6 @@ def _load_alert_state() -> dict[str, Any]:
         try:
             with open(ALERT_STATE_FILE, "r") as f:
                 data = json.load(f)
-                # Ensure all keys exist
                 for key in default_state:
                     if key not in data:
                         data[key] = default_state[key]
@@ -70,31 +68,23 @@ def _save_alert_state(state: dict[str, Any]) -> None:
     except Exception:
         pass
 
-# Global alert state
 _alert_state = _load_alert_state()
-
-# ---------------------------------------------------------------------------
-# Global lock for thread-safe alert processing
-# ---------------------------------------------------------------------------
 _ALERT_PROCESS_LOCK = threading.Lock()
 
 # ---------------------------------------------------------------------------
-# Tunables (overridable via secrets / session)
+# Tunables
 # ---------------------------------------------------------------------------
 DEFAULT_THRESHOLD = 50
 DEFAULT_WINDOW_MIN = 5
 DEFAULT_COOLDOWN_MIN = 5
 MAX_TEMPLATES = 8
 MAX_COUNTRIES = 8
-MAX_ALERTS_PER_TICK = 5  # safety: never spam more than N CLIs per refresh
+MAX_ALERTS_PER_TICK = 5
 
-# OTP digit runs 4-8 long (word-ish boundaries; keep Arabic/Unicode text intact)
 _OTP_RE = re.compile(r"(?<!\d)\d{4,8}(?!\d)")
-# HTML entities sometimes appear in messages
 _ENTITY_RE = re.compile(r"&(?:#\d+|#x[0-9a-fA-F]+|\w+);")
 _WS_RE = re.compile(r"\s+")
 
-# Country → flag (fallback 🌍)
 _FLAGS: dict[str, str] = {
     "Malaysia": "🇲🇾",
     "Singapore": "🇸🇬",
@@ -122,15 +112,10 @@ _FLAGS: dict[str, str] = {
 }
 
 
-# ---------------------------------------------------------------------------
-# Template helpers
-# ---------------------------------------------------------------------------
 def normalize_template(message: str) -> str:
-    """Replace OTP digit groups with ****** and collapse whitespace."""
     if message is None:
         return ""
     text = str(message)
-    # Decode common HTML entities so "<#>" becomes readable-ish
     try:
         text = html.unescape(text)
     except Exception:
@@ -166,15 +151,11 @@ def _flag(country: str) -> str:
 
 
 def _circled(n: int) -> str:
-    # ①-⑳ then fallback
     if 1 <= n <= 20:
         return chr(0x2460 + n - 1)
     return f"{n}."
 
 
-# ---------------------------------------------------------------------------
-# Message builder
-# ---------------------------------------------------------------------------
 def build_alert_message(
     *,
     cli: str,
@@ -210,64 +191,41 @@ def build_alert_message(
         lines.append("① (no message body)")
         lines.append("")
 
-    lines.extend(
-        [
-            "━━━━━━━━━━━━━━━━━━",
-            "",
-            "🌍 Top Countries",
-            "",
-        ]
-    )
+    lines.extend([
+        "━━━━━━━━━━━━━━━━━━",
+        "",
+        "🌍 Top Countries",
+        "",
+    ])
     if countries:
         for name, cnt in countries:
             lines.append(f"{_flag(name)} {name} : {cnt}")
     else:
         lines.append("🌍 Unknown : 0")
 
-    lines.extend(
-        [
-            "",
-            "━━━━━━━━━━━━━━━━━━",
-            "",
-            "Status:",
-            "LIVE",
-        ]
-    )
+    lines.extend([
+        "",
+        "━━━━━━━━━━━━━━━━━━",
+        "",
+        "Status:",
+        "LIVE",
+    ])
     return "\n".join(lines)
 
 
-# ---------------------------------------------------------------------------
-# Delivery (isolated — swap provider without touching engine)
-# ---------------------------------------------------------------------------
 def send_whatsapp_alert(message: str, *, meta: dict[str, Any] | None = None) -> dict[str, Any]:
-    """
-    Send (or stage) a WhatsApp alert.
-
-    Providers (secret WHATSAPP_PROVIDER):
-      - log        : only log + session history (default, always safe)
-      - callmebot  : free personal WA via api.callmebot.com
-      - webhook    : POST JSON to WHATSAPP_WEBHOOK_URL (Make/n8n/etc.)
-      - meta       : Meta WhatsApp Cloud API (future-ready)
-      - twilio     : Twilio WhatsApp (future-ready)
-
-    Returns {ok, provider, detail}
-    """
     settings = get_settings()
     provider = str(settings.get("whatsapp_provider") or "log").strip().lower()
     meta = meta or {}
 
-    # Always keep a short in-session history for the Settings/debug panel
     hist = st.session_state.setdefault("wa_alert_history", [])
-    hist.insert(
-        0,
-        {
-            "ts": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds"),
-            "provider": provider,
-            "cli": meta.get("cli"),
-            "total": meta.get("total"),
-            "preview": message[:180],
-        },
-    )
+    hist.insert(0, {
+        "ts": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds"),
+        "provider": provider,
+        "cli": meta.get("cli"),
+        "total": meta.get("total"),
+        "preview": message[:180],
+    })
     st.session_state["wa_alert_history"] = hist[:30]
 
     try:
@@ -277,16 +235,12 @@ def send_whatsapp_alert(message: str, *, meta: dict[str, Any] | None = None) -> 
 
         if provider == "callmebot":
             return _send_callmebot(message, settings)
-
         if provider == "greenapi":
             return _send_greenapi(message, settings)
-
         if provider == "webhook":
             return _send_webhook(message, settings, meta)
-
         if provider == "meta":
             return _send_meta(message, settings)
-
         if provider == "twilio":
             return _send_twilio(message, settings)
 
@@ -298,45 +252,17 @@ def send_whatsapp_alert(message: str, *, meta: dict[str, Any] | None = None) -> 
 
 
 def _send_callmebot(message: str, settings: dict[str, Any]) -> dict[str, Any]:
-    """
-    Free personal WhatsApp (not a group):
-      https://www.callmebot.com/blog/free-api-whatsapp-messages/
-    Secrets:
-      CALLMEBOT_PHONE = 92300...
-      CALLMEBOT_APIKEY = ...
-    """
     phone = str(settings.get("callmebot_phone") or "").strip().lstrip("+")
     apikey = str(settings.get("callmebot_apikey") or "").strip()
     if not phone or not apikey:
         return {"ok": False, "provider": "callmebot", "detail": "CALLMEBOT_PHONE / CALLMEBOT_APIKEY missing"}
-    url = (
-        "https://api.callmebot.com/whatsapp.php"
-        f"?phone={quote(phone)}&text={quote(message)}&apikey={quote(apikey)}"
-    )
+    url = f"https://api.callmebot.com/whatsapp.php?phone={quote(phone)}&text={quote(message)}&apikey={quote(apikey)}"
     r = requests.get(url, timeout=20)
     ok = r.status_code == 200
     return {"ok": ok, "provider": "callmebot", "detail": f"HTTP {r.status_code} {r.text[:200]}"}
 
 
 def _send_greenapi(message: str, settings: dict[str, Any]) -> dict[str, Any]:
-    """
-    GREEN-API — send from YOUR personal WhatsApp into a GROUP.
-
-    Console: https://console.green-api.com/
-    Docs:    POST {apiUrl}/waInstance{idInstance}/sendMessage/{apiTokenInstance}
-
-    Secrets:
-      GREENAPI_ID_INSTANCE   = 1101xxxxxxxx
-      GREENAPI_API_TOKEN     = xxxxxxxx...
-      GREENAPI_API_URL       = https://api.green-api.com   (or your instance host)
-      GREENAPI_GROUP_ID      = 1203630xxxxxxxxx@g.us
-
-    How to get group id:
-      1) Link phone via QR in Green-API console
-      2) Send any message in the target group from that phone
-      3) Console → journals / lastIncomingMessages OR getChats
-      4) Copy chatId ending with @g.us
-    """
     instance = str(settings.get("greenapi_id_instance") or "").strip()
     token = str(settings.get("greenapi_api_token") or "").strip()
     api_url = str(settings.get("greenapi_api_url") or "https://api.green-api.com").strip().rstrip("/")
@@ -349,7 +275,6 @@ def _send_greenapi(message: str, settings: dict[str, Any]) -> dict[str, Any]:
             "detail": "GREENAPI_ID_INSTANCE / GREENAPI_API_TOKEN / GREENAPI_GROUP_ID missing",
         }
 
-    # Accept bare group ids and normalize
     if chat_id.isdigit():
         chat_id = f"{chat_id}@g.us"
     if not (chat_id.endswith("@g.us") or chat_id.endswith("@c.us")):
@@ -371,7 +296,6 @@ def _send_greenapi(message: str, settings: dict[str, Any]) -> dict[str, Any]:
     try:
         body = r.json()
         detail = f"{detail} {body}"
-        # Green-API success usually returns idMessage
         if ok and not body.get("idMessage") and body.get("message"):
             ok = False
     except Exception:
@@ -380,10 +304,6 @@ def _send_greenapi(message: str, settings: dict[str, Any]) -> dict[str, Any]:
 
 
 def _send_webhook(message: str, settings: dict[str, Any], meta: dict[str, Any]) -> dict[str, Any]:
-    """
-    Generic webhook — point to Make.com / n8n / Zapier free tier that posts into a WA group bot.
-    Secret: WHATSAPP_WEBHOOK_URL
-    """
     url = str(settings.get("whatsapp_webhook_url") or "").strip()
     if not url:
         return {"ok": False, "provider": "webhook", "detail": "WHATSAPP_WEBHOOK_URL missing"}
@@ -394,7 +314,6 @@ def _send_webhook(message: str, settings: dict[str, Any], meta: dict[str, Any]) 
 
 
 def _send_meta(message: str, settings: dict[str, Any]) -> dict[str, Any]:
-    """Meta WhatsApp Cloud API (user must have opted-in recipient)."""
     token = str(settings.get("meta_wa_token") or "").strip()
     phone_id = str(settings.get("meta_wa_phone_id") or "").strip()
     to = str(settings.get("meta_wa_to") or "").strip()
@@ -420,7 +339,7 @@ def _send_meta(message: str, settings: dict[str, Any]) -> dict[str, Any]:
 def _send_twilio(message: str, settings: dict[str, Any]) -> dict[str, Any]:
     sid = str(settings.get("twilio_sid") or "").strip()
     token = str(settings.get("twilio_token") or "").strip()
-    frm = str(settings.get("twilio_wa_from") or "").strip()  # whatsapp:+1415...
+    frm = str(settings.get("twilio_wa_from") or "").strip()
     to = str(settings.get("twilio_wa_to") or "").strip()
     if not sid or not token or not frm or not to:
         return {"ok": False, "provider": "twilio", "detail": "Twilio WA secrets missing"}
@@ -432,26 +351,18 @@ def _send_twilio(message: str, settings: dict[str, Any]) -> dict[str, Any]:
 
 
 def send_whatsapp_alert_async(message: str, meta: dict[str, Any] | None = None) -> None:
-    """Fire-and-forget so UI never blocks on network."""
     def _run() -> None:
         try:
             send_whatsapp_alert(message, meta=meta)
-        except Exception as exc:  # pragma: no cover
+        except Exception as exc:
             log_event("wa_alert_async_error", str(exc))
-
     threading.Thread(target=_run, name="wa-alert", daemon=True).start()
 
 
-# ---------------------------------------------------------------------------
-# Cooldown state (persistent + session)
-# ---------------------------------------------------------------------------
 def _cooldown_map() -> dict[str, float]:
-    # Merge persistent cooldowns with session cooldowns
     persistent = _alert_state.get("cooldowns", {})
     session_cooldowns = st.session_state.setdefault("wa_cli_cooldown_until", {})
-    # Session overrides persistent (for current run)
-    merged = {**persistent, **session_cooldowns}
-    return merged
+    return {**persistent, **session_cooldowns}
 
 
 def _is_cooling(cli: str, now_ts: float) -> bool:
@@ -462,34 +373,22 @@ def _is_cooling(cli: str, now_ts: float) -> bool:
 
 def _arm_cooldown(cli: str, seconds: float, now_ts: float) -> None:
     expiry = now_ts + seconds
-    # Update session
     st.session_state.setdefault("wa_cli_cooldown_until", {})[cli] = expiry
-    # Update persistent
     _alert_state.setdefault("cooldowns", {})[cli] = expiry
     _save_alert_state(_alert_state)
 
 
-# ---------------------------------------------------------------------------
-# Core engine
-# ---------------------------------------------------------------------------
 def _alert_config() -> dict[str, Any]:
     settings = get_settings()
-    # session overrides (Settings page) win over secrets defaults
     return {
         "enabled": bool(st.session_state.get("wa_alerts_enabled", settings.get("whatsapp_alerts_enabled", True))),
         "threshold": int(st.session_state.get("wa_threshold", settings.get("whatsapp_threshold", DEFAULT_THRESHOLD))),
         "window_min": int(st.session_state.get("wa_window_min", settings.get("whatsapp_window_min", DEFAULT_WINDOW_MIN))),
-        "cooldown_min": int(
-            st.session_state.get("wa_cooldown_min", settings.get("whatsapp_cooldown_min", DEFAULT_COOLDOWN_MIN))
-        ),
+        "cooldown_min": int(st.session_state.get("wa_cooldown_min", settings.get("whatsapp_cooldown_min", DEFAULT_COOLDOWN_MIN))),
     }
 
 
 def evaluate_cli_windows(df: pd.DataFrame, *, window_min: int, threshold: int) -> list[dict[str, Any]]:
-    """
-    Pure function: find CLIs over threshold in the last window_min minutes.
-    Uses the existing merged dataframe only.
-    """
     if df is None or df.empty or "CLI" not in df.columns:
         return []
     if "dt" not in df.columns:
@@ -504,7 +403,6 @@ def evaluate_cli_windows(df: pd.DataFrame, *, window_min: int, threshold: int) -
     now = work["dt"].max()
     if pd.isna(now):
         return []
-    # Prefer wall clock if data is live; still clamp window to max(dt)
     wall = datetime.now()
     anchor = max(now.to_pydatetime() if hasattr(now, "to_pydatetime") else now, wall - timedelta(minutes=1))
     start = anchor - timedelta(minutes=int(window_min))
@@ -517,7 +415,6 @@ def evaluate_cli_windows(df: pd.DataFrame, *, window_min: int, threshold: int) -
         total = int(len(grp))
         if total < int(threshold):
             continue
-        # Dominant panel
         panel = "MIXED"
         if "Panel" in grp.columns:
             try:
@@ -527,33 +424,23 @@ def evaluate_cli_windows(df: pd.DataFrame, *, window_min: int, threshold: int) -
         countries = top_countries(grp["Country"] if "Country" in grp.columns else pd.Series(dtype=str))
         main_country = countries[0][0] if countries else "Unknown"
         templates = unique_templates(grp["Message"] if "Message" in grp.columns else pd.Series(dtype=str))
-        hits.append(
-            {
-                "cli": str(cli),
-                "panel": panel,
-                "total": total,
-                "main_country": main_country,
-                "templates": templates,
-                "countries": countries,
-                "window_start": start,
-                "window_end": anchor,
-            }
-        )
+        hits.append({
+            "cli": str(cli),
+            "panel": panel,
+            "total": total,
+            "main_country": main_country,
+            "templates": templates,
+            "countries": countries,
+            "window_start": start,
+            "window_end": anchor,
+        })
 
-    # Loudest first
     hits.sort(key=lambda h: h["total"], reverse=True)
     return hits
 
 
 def process_otp_alerts(df: pd.DataFrame, *, force: bool = False) -> list[dict[str, Any]]:
-    """
-    Run one evaluation tick against the live merged frame.
-    Safe to call every Streamlit rerun / autorefresh.
-    Returns list of alerts fired this tick.
-    """
-    # Use global lock to prevent concurrent processing
     if not _ALERT_PROCESS_LOCK.acquire(blocking=False):
-        # Another thread is already processing alerts
         return []
 
     try:
@@ -561,7 +448,6 @@ def process_otp_alerts(df: pd.DataFrame, *, force: bool = False) -> list[dict[st
         if not cfg["enabled"] and not force:
             return []
 
-        # Throttle full scans to ~ once per 10s even if UI reruns faster
         now_ts = time.time()
         last = float(st.session_state.get("wa_last_scan_ts", 0) or 0)
         if not force and (now_ts - last) < 10:
@@ -580,11 +466,10 @@ def process_otp_alerts(df: pd.DataFrame, *, force: bool = False) -> list[dict[st
             cli = hit["cli"]
             total = hit["total"]
 
-            # Determine cooldown based on OTP count
             if total >= 50:
-                cooldown_sec = 300  # 5 minutes
+                cooldown_sec = 300
             else:
-                cooldown_sec = 600  # 10 minutes
+                cooldown_sec = 600
 
             if _is_cooling(cli, now_ts):
                 continue
@@ -598,35 +483,26 @@ def process_otp_alerts(df: pd.DataFrame, *, force: bool = False) -> list[dict[st
                 countries=hit["countries"],
             )
 
-            # Compute message hash for duplicate detection
             msg_hash = hashlib.sha256(msg.encode("utf-8")).hexdigest()
-
-            # Check for duplicate message (same hash within 30 seconds)
             last_hash = _alert_state.get("last_hash", "")
             last_sent = _alert_state.get("last_sent", 0)
 
             if msg_hash == last_hash and (now_ts - last_sent) < 30:
-                # Skip duplicate
                 log_event("wa_alert_skipped", "duplicate message", cli=cli, hash=msg_hash[:8])
                 continue
 
             meta = {"cli": cli, "panel": hit["panel"], "total": hit["total"], "country": hit["main_country"]}
 
-            # Arm cooldown BEFORE send to avoid double-fire on overlapping threads
             _arm_cooldown(cli, cooldown_sec, now_ts)
-
-            # Update persistent state for duplicate detection
             _alert_state["last_hash"] = msg_hash
             _alert_state["last_sent"] = now_ts
             _save_alert_state(_alert_state)
 
-            # Send alert
             send_whatsapp_alert_async(msg, meta=meta)
 
             fired.append({**meta, "message": msg})
             log_event("wa_alert_triggered", "high traffic", **meta)
 
-            # Toast for operator (non-blocking UX)
             try:
                 st.toast(f"🚨 WA alert armed · {cli} · {hit['total']} OTPs / {cfg['window_min']}m", icon="📱")
             except Exception:
@@ -641,7 +517,6 @@ def process_otp_alerts(df: pd.DataFrame, *, force: bool = False) -> list[dict[st
 
 
 def _greenapi_base(settings: dict[str, Any] | None = None) -> tuple[str, str, str] | dict[str, Any]:
-    """Return (api_url, instance, token) or error dict."""
     settings = settings or get_settings()
     instance = str(settings.get("greenapi_id_instance") or "").strip()
     token = str(settings.get("greenapi_api_token") or "").strip()
@@ -656,17 +531,6 @@ def _greenapi_base(settings: dict[str, Any] | None = None) -> tuple[str, str, st
 
 
 def list_greenapi_groups(count: int = 200) -> dict[str, Any]:
-    """
-    Discover WhatsApp GROUP chat IDs from the linked Green-API instance.
-
-    Tries:
-      1) getChats  → type == group / id endswith @g.us
-      2) lastOutgoingMessages + lastIncomingMessages → chatId @g.us
-
-    IMPORTANT: Green-API only sees chats that had activity AFTER the phone was linked.
-    If empty: open WhatsApp on the linked phone → open target group → send any message
-    (e.g. "test") → wait 10-20s → run this again.
-    """
     base = _greenapi_base()
     if isinstance(base, dict):
         return base
@@ -674,7 +538,6 @@ def list_greenapi_groups(count: int = 200) -> dict[str, Any]:
     found: dict[str, dict[str, Any]] = {}
     errors: list[str] = []
 
-    # 1) getChats
     try:
         url = f"{api_url}/waInstance{instance}/getChats/{token}"
         r = requests.get(url, params={"count": int(count)}, timeout=30)
@@ -704,7 +567,6 @@ def list_greenapi_groups(count: int = 200) -> dict[str, Any]:
     except Exception as exc:
         errors.append(f"getChats error: {exc}")
 
-    # 2) journals (often fill faster right after you send a group msg)
     for journal in ("lastOutgoingMessages", "lastIncomingMessages"):
         try:
             url = f"{api_url}/waInstance{instance}/{journal}/{token}"
@@ -722,7 +584,6 @@ def list_greenapi_groups(count: int = 200) -> dict[str, Any]:
                 if not cid.endswith("@g.us"):
                     continue
                 name = ""
-                # some payloads nest group info
                 for key in ("chatName", "senderName", "name"):
                     if item.get(key):
                         name = str(item.get(key))
@@ -754,7 +615,6 @@ def list_greenapi_groups(count: int = 200) -> dict[str, Any]:
 
 
 def check_greenapi_state() -> dict[str, Any]:
-    """Quick health: instance authorized?"""
     base = _greenapi_base()
     if isinstance(base, dict):
         return base
@@ -779,14 +639,12 @@ def check_greenapi_state() -> dict[str, Any]:
 
 
 def preview_alert_for_cli(df: pd.DataFrame, cli: str) -> str | None:
-    """Build a dry-run message for Settings UI."""
     if df is None or df.empty or not cli:
         return None
     cfg = _alert_config()
     sub = df[df["CLI"].astype(str).str.contains(str(cli), case=False, na=False)] if "CLI" in df.columns else df
     hits = evaluate_cli_windows(sub, window_min=cfg["window_min"], threshold=1)
     if not hits:
-        # still show template sample from whatever rows exist
         if sub.empty:
             return None
         templates = unique_templates(sub["Message"] if "Message" in sub.columns else pd.Series(dtype=str))
@@ -814,4 +672,3 @@ def preview_alert_for_cli(df: pd.DataFrame, cli: str) -> str | None:
         templates=h["templates"],
         countries=h["countries"],
     )
-```
