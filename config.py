@@ -30,6 +30,22 @@ _DEFAULTS: dict[str, Any] = {
     "LAMIX_RECORDS": 400,
     "PURPLE_RECORDS": 2000,
     "PURPLE_LOOKBACK_DAYS": 30,
+    # WhatsApp alert engine (optional)
+    "WHATSAPP_ALERTS_ENABLED": True,
+    "WHATSAPP_THRESHOLD": 50,
+    "WHATSAPP_WINDOW_MIN": 5,
+    "WHATSAPP_COOLDOWN_MIN": 5,
+    "WHATSAPP_PROVIDER": "log",  # log | callmebot | webhook | meta | twilio
+    "WHATSAPP_WEBHOOK_URL": "",
+    "CALLMEBOT_PHONE": "",
+    "CALLMEBOT_APIKEY": "",
+    "META_WA_TOKEN": "",
+    "META_WA_PHONE_ID": "",
+    "META_WA_TO": "",
+    "TWILIO_SID": "",
+    "TWILIO_TOKEN": "",
+    "TWILIO_WA_FROM": "",
+    "TWILIO_WA_TO": "",
 }
 
 IGNORE_TEAM_MEMBERS = {"UTS_Umer1", "UTS_Khadija"}
@@ -179,6 +195,22 @@ def get_settings() -> dict[str, Any]:
         "purple_records": int(_secret("PURPLE_RECORDS", _DEFAULTS["PURPLE_RECORDS"])),
         "purple_lookback_days": int(_secret("PURPLE_LOOKBACK_DAYS", _DEFAULTS["PURPLE_LOOKBACK_DAYS"])),
         "team_file": str(_secret("TEAM_FILE", str(TEAM_FILE))),
+        # WhatsApp OTP alert engine
+        "whatsapp_alerts_enabled": bool(_secret("WHATSAPP_ALERTS_ENABLED", _DEFAULTS["WHATSAPP_ALERTS_ENABLED"])),
+        "whatsapp_threshold": int(_secret("WHATSAPP_THRESHOLD", _DEFAULTS["WHATSAPP_THRESHOLD"])),
+        "whatsapp_window_min": int(_secret("WHATSAPP_WINDOW_MIN", _DEFAULTS["WHATSAPP_WINDOW_MIN"])),
+        "whatsapp_cooldown_min": int(_secret("WHATSAPP_COOLDOWN_MIN", _DEFAULTS["WHATSAPP_COOLDOWN_MIN"])),
+        "whatsapp_provider": str(_secret("WHATSAPP_PROVIDER", _DEFAULTS["WHATSAPP_PROVIDER"])),
+        "whatsapp_webhook_url": str(_secret("WHATSAPP_WEBHOOK_URL", _DEFAULTS["WHATSAPP_WEBHOOK_URL"])),
+        "callmebot_phone": str(_secret("CALLMEBOT_PHONE", _DEFAULTS["CALLMEBOT_PHONE"])),
+        "callmebot_apikey": str(_secret("CALLMEBOT_APIKEY", _DEFAULTS["CALLMEBOT_APIKEY"])),
+        "meta_wa_token": str(_secret("META_WA_TOKEN", _DEFAULTS["META_WA_TOKEN"])),
+        "meta_wa_phone_id": str(_secret("META_WA_PHONE_ID", _DEFAULTS["META_WA_PHONE_ID"])),
+        "meta_wa_to": str(_secret("META_WA_TO", _DEFAULTS["META_WA_TO"])),
+        "twilio_sid": str(_secret("TWILIO_SID", _DEFAULTS["TWILIO_SID"])),
+        "twilio_token": str(_secret("TWILIO_TOKEN", _DEFAULTS["TWILIO_TOKEN"])),
+        "twilio_wa_from": str(_secret("TWILIO_WA_FROM", _DEFAULTS["TWILIO_WA_FROM"])),
+        "twilio_wa_to": str(_secret("TWILIO_WA_TO", _DEFAULTS["TWILIO_WA_TO"])),
     }
 
 
