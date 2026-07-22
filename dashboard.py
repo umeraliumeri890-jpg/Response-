@@ -1,6 +1,7 @@
 """Dashboard pages: KPIs, live monitor, search, exports, settings."""
 from __future__ import annotations
 
+import html
 from datetime import date, datetime, timezone
 from typing import Any
 
@@ -99,33 +100,32 @@ def kpi_cards(kpis: dict[str, Any], health: dict) -> None:
     for i, (label, value, icon) in enumerate(cards):
         with cols[i % 3]:
             st.markdown(
-                f"""
-                <div class="kpi glass">
-                  <div class="kpi-icon">{icon}</div>
-                  <div class="kpi-val">{value}</div>
-                  <div class="kpi-label">{label}</div>
-                </div>
-                """,
+                f'<div class="kpi glass"><div class="kpi-icon">{icon}</div>'
+                f'<div class="kpi-val">{value}</div><div class="kpi-label">{label}</div></div>',
                 unsafe_allow_html=True,
             )
 
 
 def live_cli_cards(top_cli: list[dict]) -> None:
+    """Render top-3 CLI cards. Use single-line HTML (no indented markdown code fences)."""
     slots = (top_cli + [{"name": "—", "count": 0}] * 3)[:3]
     ranks = ["r1", "r2", "r3"]
     medals = ["🥇 Top 1 — Last 5 Min", "🥈 Top 2 — Last 5 Min", "🥉 Top 3 — Last 5 Min"]
-    html = '<div class="lg">'
+    cols = st.columns(3)
     for i, item in enumerate(slots):
-        html += f"""
-        <div class="rc {ranks[i]} glass">
-          <div class="rwm">{i+1}</div>
-          <div class="rb">{medals[i]}</div>
-          <div class="rn">{item['name']}</div>
-          <div class="rc_">⚡ {item['count']} OTPs</div>
-        </div>
-        """
-    html += "</div>"
-    st.markdown(html, unsafe_allow_html=True)
+        name = html.escape(str(item.get("name", "—")))
+        count = int(item.get("count", 0) or 0)
+        # Keep HTML on one line — Streamlit treats indented multi-line blocks as code
+        card = (
+            f'<div class="rc {ranks[i]} glass">'
+            f'<div class="rwm">{i + 1}</div>'
+            f'<div class="rb">{medals[i]}</div>'
+            f'<div class="rn">{name}</div>'
+            f'<div class="rc_">⚡ {count} OTPs</div>'
+            f"</div>"
+        )
+        with cols[i]:
+            st.markdown(card, unsafe_allow_html=True)
 
 
 def api_health_cards(health: dict) -> None:
@@ -136,18 +136,18 @@ def api_health_cards(health: dict) -> None:
     for i, (name, h) in enumerate(health.items()):
         status = h.get("status", "DOWN")
         color = "#00E676" if h.get("ok") else "#FF3D71"
+        err = html.escape(str(h.get("error") or "None"))
+        sync = html.escape(str(h.get("last_sync", "—")))
         with cols[i]:
             st.markdown(
-                f"""
-                <div class="health glass">
-                  <div class="health-name">{name}</div>
-                  <div class="health-status" style="color:{color}">{status}</div>
-                  <div class="health-row"><span>Latency</span><b>{h.get('latency_ms', 0)} ms</b></div>
-                  <div class="health-row"><span>Records</span><b>{h.get('records', 0)}</b></div>
-                  <div class="health-row"><span>Last Sync</span><b>{h.get('last_sync', '—')}</b></div>
-                  <div class="health-row"><span>Errors</span><b>{h.get('error') or 'None'}</b></div>
-                </div>
-                """,
+                f'<div class="health glass">'
+                f'<div class="health-name">{html.escape(str(name))}</div>'
+                f'<div class="health-status" style="color:{color}">{html.escape(str(status))}</div>'
+                f'<div class="health-row"><span>Latency</span><b>{h.get("latency_ms", 0)} ms</b></div>'
+                f'<div class="health-row"><span>Records</span><b>{h.get("records", 0)}</b></div>'
+                f'<div class="health-row"><span>Last Sync</span><b>{sync}</b></div>'
+                f'<div class="health-row"><span>Errors</span><b>{err}</b></div>'
+                f"</div>",
                 unsafe_allow_html=True,
             )
 
