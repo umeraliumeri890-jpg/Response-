@@ -47,6 +47,11 @@ from dashboard import (
 )
 from utils import inject_css, log_event, touch_activity
 
+try:
+    from whatsapp_alert import process_otp_alerts
+except Exception:  # pragma: no cover
+    process_otp_alerts = None  # type: ignore
+
 
 def _init_state() -> None:
     defaults = {
@@ -64,6 +69,12 @@ def _init_state() -> None:
         "search_history": [],
         "favorite_filters": [],
         "page": "Dashboard",
+        "wa_alerts_enabled": True,
+        "wa_threshold": 50,
+        "wa_window_min": 5,
+        "wa_cooldown_min": 5,
+        "wa_alert_history": [],
+        "wa_cli_cooldown_until": {},
     }
     for k, v in defaults.items():
         st.session_state.setdefault(k, v)
@@ -177,6 +188,13 @@ def main() -> None:
         _notify_events(df, health or {})
     except Exception:
         pass
+
+    # Smart WhatsApp OTP Alert Engine — uses already-merged df only (non-blocking)
+    if process_otp_alerts is not None:
+        try:
+            process_otp_alerts(df)
+        except Exception as exc:
+            log_event("wa_engine_error", str(exc))
 
     try:
         if page == "Dashboard":
