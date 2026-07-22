@@ -220,6 +220,48 @@ Uses **`streamlit-autorefresh`** only — no blocking `time.sleep()` rerun loops
 
 ---
 
+## Live Monitor (mobile)
+
+Live tables use **full-text cards** (and optional full-text table):
+
+- Team Member / Range hidden on Live Monitor
+- No ellipsis truncation — Number, CLI, Message fully visible
+- HTML entities in messages are decoded
+
+---
+
+## Smart WhatsApp OTP Alert Engine
+
+Module: `whatsapp_alert.py`
+
+- Watches the **already-merged** live dataframe (no extra API calls)
+- Per-CLI rolling window (default **5 min**)
+- Fires when a CLI hits **≥ 50** OTPs
+- **5 min cooldown** per CLI after one alert
+- OTP digits (4–8) → `******` template detection
+- Unique templates + top countries in the message
+- Delivery isolated in `send_whatsapp_alert()`
+
+### Free delivery for a WhatsApp group
+
+| Method | Cost | Group? | Secrets |
+|--------|------|--------|---------|
+| `log` (default) | Free | n/a | none — history in Settings |
+| **CallMeBot** | Free | Personal only | `CALLMEBOT_PHONE`, `CALLMEBOT_APIKEY`, `WHATSAPP_PROVIDER="callmebot"` |
+| **Webhook → Make/n8n** | Free tier | **Yes** | `WHATSAPP_WEBHOOK_URL`, `WHATSAPP_PROVIDER="webhook"` |
+| Meta Cloud API | Paid / business | Yes | `meta` provider |
+| Twilio WA | Paid | Yes | `twilio` provider |
+
+**Recommended free group path:**
+
+1. Create a free [Make.com](https://www.make.com) scenario: Webhooks → custom WhatsApp module / Green-API / Baileys
+2. Put the webhook URL in secrets as `WHATSAPP_WEBHOOK_URL`
+3. Set `WHATSAPP_PROVIDER = "webhook"`
+
+Engine settings also appear under **Settings → WhatsApp OTP Alert Engine**.
+
+---
+
 ## Performance notes
 
 - `requests.Session()` + `HTTPAdapter` connection pool
