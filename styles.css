@@ -444,3 +444,120 @@ div[data-testid="stMetricValue"] {
   background: rgba(11, 18, 36, 0.45);
   backdrop-filter: blur(8px);
 }
+
+/* -------- Mobile-first OTP feed (Live Monitor) -------- */
+.otp-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 100%;
+}
+
+.otp-card {
+  border-radius: 12px;
+  padding: 12px 14px;
+  width: 100%;
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.otp-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.otp-time {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.otp-panel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--accent);
+  border: 1px solid rgba(0, 212, 255, 0.35);
+  border-radius: 999px;
+  padding: 2px 8px;
+  text-transform: uppercase;
+}
+
+.otp-cli {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 18px;
+  font-weight: 800;
+  color: #fff;
+  margin-bottom: 8px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
+}
+
+.otp-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 3px 0;
+  font-size: 13px;
+}
+
+.otp-k {
+  min-width: 64px;
+  color: var(--muted);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding-top: 2px;
+}
+
+.otp-v {
+  color: var(--text);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
+}
+
+.otp-num {
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--accent);
+  font-size: 13px;
+}
+
+.otp-msg {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(90, 122, 160, 0.35);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Streamlit dataframe: stop aggressive ellipsis on narrow panels */
+[data-testid="stDataFrame"] {
+  width: 100% !important;
+}
+[data-testid="stDataFrame"] div[data-testid="stDataFrameResizable"] {
+  max-width: 100%;
+}
+
+@media (max-width: 768px) {
+  .otp-cli { font-size: 16px; }
+  .otp-card { padding: 12px; }
+  /* Collapse leftover sidebar chrome on phone */
+  section[data-testid="stSidebar"] {
+    min-width: 0 !important;
+  }
+}
