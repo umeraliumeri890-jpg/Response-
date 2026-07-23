@@ -590,6 +590,14 @@ def page_exports(df: pd.DataFrame) -> None:
 
 
 def page_settings() -> None:
+    """Settings page - only accessible to admin."""
+    from auth import is_admin
+    
+    # Admin check - only Umer Ali can access settings
+    if not is_admin():
+        st.warning("⚠️ Settings page is only accessible to admin (Umer Ali).")
+        st.stop()
+    
     st.markdown('<div class="sl">SETTINGS</div>', unsafe_allow_html=True)
     c1, c2 = st.columns(2)
     with c1:
@@ -617,8 +625,10 @@ def page_settings() -> None:
             st.success("Cache cleared — next load is fresh.")
             st.rerun()
 
-    # ---- WhatsApp OTP Alert Engine (additive panel) ----
+    # ---- WhatsApp OTP Alert Engine (Admin Only) ----
     st.markdown('<div class="sl">WHATSAPP OTP ALERT ENGINE</div>', unsafe_allow_html=True)
+    st.info("🔒 Admin only: WhatsApp alert engine configuration")
+    
     settings = get_settings()
     wa1, wa2, wa3 = st.columns(3)
     with wa1:
@@ -626,26 +636,10 @@ def page_settings() -> None:
             "Enable WA alerts",
             value=bool(st.session_state.get("wa_alerts_enabled", settings.get("whatsapp_alerts_enabled", True))),
         )
-        st.session_state["wa_threshold"] = st.number_input(
-            "CLI threshold / 5 min",
-            min_value=5,
-            max_value=5000,
-            value=int(st.session_state.get("wa_threshold", settings.get("whatsapp_threshold", 50))),
-            step=5,
-        )
+        st.caption("Alert triggers on ANY OTP activity (no threshold)")
     with wa2:
-        st.session_state["wa_window_min"] = st.number_input(
-            "Window (minutes)",
-            min_value=1,
-            max_value=60,
-            value=int(st.session_state.get("wa_window_min", settings.get("whatsapp_window_min", 5))),
-        )
-        st.session_state["wa_cooldown_min"] = st.number_input(
-            "Cooldown (minutes)",
-            min_value=1,
-            max_value=120,
-            value=int(st.session_state.get("wa_cooldown_min", settings.get("whatsapp_cooldown_min", 5))),
-        )
+        st.caption("Window: **5 minutes** (fixed)")
+        st.caption("Cooldown: **5 minutes** (fixed)")
     with wa3:
         st.caption(f"Provider (secrets): **{settings.get('whatsapp_provider', 'log')}**")
         st.caption("log · greenapi · callmebot · webhook · meta · twilio")
@@ -666,7 +660,7 @@ def page_settings() -> None:
             except Exception as exc:
                 st.error(str(exc))
 
-    # GREEN-API helpers: why Chats is empty + how to get @g.us
+    # GREEN-API helpers (Admin Only)
     if str(settings.get("whatsapp_provider", "")).lower() == "greenapi" or settings.get("greenapi_id_instance"):
         st.markdown('<div class="sl">GREEN-API GROUP ID FINDER</div>', unsafe_allow_html=True)
         st.warning(
@@ -701,7 +695,6 @@ def page_settings() -> None:
                         "Green-API group link OK.\n"
                         f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
                     )
-                    # temporarily force greenapi path via current secrets provider
                     res = send_whatsapp_alert(test_msg, meta={"cli": "TEST", "total": 0})
                     st.session_state["ga_test_result"] = res
                 except Exception as exc:
@@ -768,7 +761,7 @@ def page_settings() -> None:
 7. Woh `@g.us` secrets me `GREENAPI_GROUP_ID` pe daalo
 8. **Send TEST** se group me test message verify karo
 
-Console ka “Chats” panel aksar blank rehta hai — is liye app ke andar Fetch use karo.
+Console ka "Chats" panel aksar blank rehta hai — is liye app ke andar Fetch use karo.
             """
         )
     else:
