@@ -1,19 +1,19 @@
 """UTS Hunters Enterprise — central configuration."""
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
-
-import streamlit as st
 
 ROOT = Path(__file__).resolve().parent
 TEAM_FILE = ROOT / "Numbers_Export.csv"
 LOG_DIR = ROOT / "logs"
 ASSETS_DIR = ROOT / "assets"
 DATA_DIR = ROOT / "data"
+ALERT_STATE_FILE = DATA_DIR / "alert_state.json"
 
 APP_NAME = "UTS HUNTERS ENTERPRISE"
-APP_VERSION = "2.0.0"
+APP_VERSION = "2.0.1"
 ADMIN_OPERATOR = "Umer Ali"
 
 _DEFAULTS: dict[str, Any] = {
@@ -48,6 +48,8 @@ _DEFAULTS: dict[str, Any] = {
     "TWILIO_TOKEN": "",
     "TWILIO_WA_FROM": "",
     "TWILIO_WA_TO": "",
+    # Auth: set AUTH_DISABLED=true (default) for auto-login / headless worker
+    "AUTH_DISABLED": True,
 }
 
 IGNORE_TEAM_MEMBERS = {"UTS_Umer1", "UTS_Khadija"}
@@ -158,8 +160,31 @@ COLUMN_MAP = {
 }
 
 
+def _as_bool(val: Any, default: bool = False) -> bool:
+    if isinstance(val, bool):
+        return val
+    if val is None:
+        return default
+    return str(val).strip().lower() in {"1", "true", "yes", "on", "y"}
+
+
 def _secret(key: str, default: Any = None) -> Any:
+    """Resolve config from env first, then Streamlit secrets, then defaults.
+
+    Env-first makes the same keys work in GitHub Actions / headless workers
+    without importing a live Streamlit runtime.
+    """
+    # 1) Process environment (GitHub Actions secrets, local .env, etc.)
+    if key in os.environ and str(os.environ.get(key, "")).strip() != "":
+        return os.environ.get(key)
+    low = key.lower()
+    if low in os.environ and str(os.environ.get(low, "")).strip() != "":
+        return os.environ.get(low)
+
+    # 2) Streamlit secrets (only when a ScriptRunContext exists)
     try:
+        import streamlit as st
+
         if key in st.secrets:
             return st.secrets[key]
         for section in ("api", "auth", "app", "whatsapp"):
@@ -167,13 +192,13 @@ def _secret(key: str, default: Any = None) -> Any:
                 sec = st.secrets[section]
                 if key in sec:
                     return sec[key]
-                low = key.lower()
                 if low in sec:
                     return sec[low]
             except Exception:
                 continue
     except Exception:
         pass
+
     if default is not None:
         return default
     return _DEFAULTS.get(key, "")
@@ -194,7 +219,9 @@ def get_settings() -> dict[str, Any]:
         "purple_records": int(_secret("PURPLE_RECORDS", _DEFAULTS["PURPLE_RECORDS"])),
         "purple_lookback_days": int(_secret("PURPLE_LOOKBACK_DAYS", _DEFAULTS["PURPLE_LOOKBACK_DAYS"])),
         "team_file": str(_secret("TEAM_FILE", str(TEAM_FILE))),
-        "whatsapp_alerts_enabled": bool(_secret("WHATSAPP_ALERTS_ENABLED", _DEFAULTS["WHATSAPP_ALERTS_ENABLED"])),
+        "whatsapp_alerts_enabled": _as_bool(
+            _secret("WHATSAPP_ALERTS_ENABLED", _DEFAULTS["WHATSAPP_ALERTS_ENABLED"]), True
+        ),
         "whatsapp_threshold": int(_secret("WHATSAPP_THRESHOLD", _DEFAULTS["WHATSAPP_THRESHOLD"])),
         "whatsapp_window_min": int(_secret("WHATSAPP_WINDOW_MIN", _DEFAULTS["WHATSAPP_WINDOW_MIN"])),
         "whatsapp_cooldown_min": int(_secret("WHATSAPP_COOLDOWN_MIN", _DEFAULTS["WHATSAPP_COOLDOWN_MIN"])),
@@ -213,9 +240,15 @@ def get_settings() -> dict[str, Any]:
         "twilio_token": str(_secret("TWILIO_TOKEN", _DEFAULTS["TWILIO_TOKEN"])),
         "twilio_wa_from": str(_secret("TWILIO_WA_FROM", _DEFAULTS["TWILIO_WA_FROM"])),
         "twilio_wa_to": str(_secret("TWILIO_WA_TO", _DEFAULTS["TWILIO_WA_TO"])),
+        "auth_disabled": _as_bool(_secret("AUTH_DISABLED", _DEFAULTS["AUTH_DISABLED"]), True),
     }
 
 
 def theme_colors(name: str | None = None) -> dict[str, str]:
-    key = name or st.session_state.get("theme", "Cyber")
+    try:
+        import streamlit as st
+
+        key = name or st.session_state.get("theme", "Cyber")
+    except Exception:
+        key = name or "Cyber"
     return THEMES.get(key, THEMES["Cyber"])
