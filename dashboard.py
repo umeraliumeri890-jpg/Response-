@@ -702,4 +702,4 @@ def page_settings() -> None:
 
         state = st.session_state.get("ga_state")
         if state:
-            if state.get("authorized") or str(state.get("state", "")).lower() == "author
+            if state.get("authorized") or str(state.get("state", "")).lower() == "
