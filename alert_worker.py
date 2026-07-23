@@ -522,7 +522,14 @@ def run_once(force: bool = False) -> int:
     now_ts = time.time()
     cooldown_until = float(state.get("cooldown_until", 0) or 0)
     if not force and now_ts < cooldown_until:
-        log("cooldown_active", seconds_left=int(cooldown_until - now_ts), last_cli=state.get("last_cli"))
+        left = int(cooldown_until - now_ts)
+        log(
+            "cooldown_active",
+            seconds_left=left,
+            minutes_left=round(left / 60, 1),
+            last_cli=state.get("last_cli"),
+            hint="Normal after an alert. Wait for cooldown, then next OTP window can alert again.",
+        )
         return 0
 
     session = build_session(retries=cfg["api_retries"])

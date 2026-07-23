@@ -148,13 +148,47 @@ Only GitHub Actions worker sends production alerts.
 Settings → Send TEST still works (manual).
 Keep the dashboard toggle **OFF**.
 
+## Why only ONE WhatsApp then silence?
+
+Two separate things:
+
+### A) Cooldown (by design)
+After `alert_sent`, worker waits `WHATSAPP_COOLDOWN_MIN` (default **5 minutes**).
+Next runs log `cooldown_active` and send **nothing**. This prevents spam.
+After cooldown ends, a **new** OTP window can alert again.
+
+### B) GitHub schedule not firing (common on free tier)
+If Actions list only shows **Manually run** / `workflow_dispatch` and never
+**scheduled** / `schedule`, GitHub cron has not started (or is delayed hours).
+
+**Fix — free external cron (recommended backup):**
+
+1. GitHub → Settings → Developer settings → Personal access tokens →
+   Fine-grained token (or classic `repo` + `workflow` scope)
+2. Create token with access to this repo + Actions read/write
+3. Go to https://cron-job.org (free) → Create cronjob:
+   - URL: `https://api.github.com/repos/umeraliumeri890-jpg/Response-/dispatches`
+   - Schedule: every 5 minutes
+   - Request method: **POST**
+   - Headers:
+     - `Accept: application/vnd.github+json`
+     - `Authorization: Bearer YOUR_GITHUB_TOKEN`
+     - `X-GitHub-Api-Version: 2022-11-28`
+   - Body (JSON):
+     ```json
+     {"event_type":"otp_alert_tick"}
+     ```
+4. Save. Actions should show runs with event **`repository_dispatch`** every ~5 min.
+
+Workflow already listens for `repository_dispatch` type `otp_alert_tick`.
+
 ## What NOT to expect
 
 - Pinging the Streamlit URL will **never** reliably fire alerts.
 - Leaving a phone browser tab open is fragile (sleep, network).
 - Streamlit free tier has **no always-on background thread** for your script.
-- GitHub `schedule` is **UTC** and often delayed 5–20 min on free tier.
-- First scheduled run after enabling can take up to ~1 hour to appear.
-- Look for Event = **`schedule`** (not only `workflow_dispatch`).
+- GitHub `schedule` is **UTC** and often delayed 5–60+ min on free / new repos.
+- Look for Event = **`schedule`** or **`repository_dispatch`** (not only manual).
+- Green checkmark ≠ WhatsApp every time (`no_hits` / `cooldown_active` are success).
 
 The headless worker is the correct architecture.
