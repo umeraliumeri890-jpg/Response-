@@ -11,4 +11,6 @@ jobs:
     steps:
       - name: Ping App
         run: |
+          echo "⏰ $(date): Pinging app..."
           curl -s -L --max-redirs 20 "https://leveluts.streamlit.app/?auto_login=true&code=UTS-ADMIN001"
+          echo "✅ $(date): Done!"
