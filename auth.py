@@ -95,7 +95,6 @@ def logout() -> None:
 
 
 def enforce_session() -> None:
-    """Drop session after inactivity timeout."""
     if not is_authenticated():
         return
     settings = get_settings()
@@ -108,7 +107,6 @@ def enforce_session() -> None:
 
 
 def render_login() -> None:
-    """Full-page activation gate."""
     fp = get_server_side_fp()
     st.session_state["device_fp"] = fp
 
