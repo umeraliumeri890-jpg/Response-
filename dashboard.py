@@ -702,4 +702,116 @@ def page_settings() -> None:
 
         state = st.session_state.get("ga_state")
         if state:
-            if state.get("authorized") or str(state.get("state", "")).lower() == "
+            if state.get("authorized") or str(state.get("state", "")).lower() == "authorized":
+                st.success(f"Instance state: **{state.get('state', 'authorized')}** — phone linked ✅")
+            else:
+                st.error(
+                    f"Instance state: **{state.get('state', 'unknown')}** — "
+                    "console me QR dubara scan karo / phone internet on rakho."
+                )
+                with st.expander("State detail"):
+                    st.json(state)
+
+        ga = st.session_state.get("ga_groups")
+        if ga:
+            groups = ga.get("groups") or []
+            if groups:
+                st.success(f"{len(groups)} group milay — apna group select/copy karo:")
+                gdf = pd.DataFrame(groups)[["name", "chatId", "source"]]
+                st.dataframe(gdf, use_container_width=True, hide_index=True)
+                pick = st.selectbox(
+                    "Group choose karo",
+                    options=[f"{g.get('name')}  |  {g.get('chatId')}" for g in groups],
+                    key="ga_pick",
+                )
+                if pick and "|" in pick:
+                    chosen = pick.split("|")[-1].strip()
+                    st.code(chosen, language=None)
+                    st.info(
+                        "Is ID ko secrets me paste karo:\n\n"
+                        f'`GREENAPI_GROUP_ID = "{chosen}"`\n\n'
+                        '`WHATSAPP_PROVIDER = "greenapi"`'
+                    )
+            else:
+                st.error("Abhi koi group nahi mila.")
+                if ga.get("tip"):
+                    st.markdown(f"**Fix:** {ga['tip']}")
+                if ga.get("errors"):
+                    with st.expander("API notes"):
+                        st.write(ga.get("errors"))
+
+        if st.session_state.get("ga_test_result"):
+            tr = st.session_state["ga_test_result"]
+            if tr.get("ok"):
+                st.success(f"TEST send OK · {tr.get('provider')} · {tr.get('detail')}")
+            else:
+                st.error(f"TEST failed · {tr.get('detail')}")
+
+        st.markdown(
+            """
+**Group ID empty kyun hoti hai + exact fix**
+
+1. Green-API console → instance **authorized** (QR scanned with YOUR number)
+2. Phone pe WhatsApp kholo → **wahi number** jo QR se link hai
+3. Target group open karo
+4. Group me **naya message** bhejo: `uts id test`
+5. 15 second wait
+6. Yahan **Fetch groups** dabao  
+   — ab row aayegi: `GroupName | 1203630....@g.us`
+7. Woh `@g.us` secrets me `GREENAPI_GROUP_ID` pe daalo
+8. **Send TEST** se group me test message verify karo
+
+Console ka "Chats" panel aksar blank rehta hai — is liye app ke andar Fetch use karo.
+            """
+        )
+    else:
+        st.markdown(
+            """
+**Apna number → apna WhatsApp group (recommended free path):**
+
+### GREEN-API
+1. [console.green-api.com](https://console.green-api.com/) → instance → QR scan  
+2. Secrets:
+   - `WHATSAPP_PROVIDER = "greenapi"`
+   - `GREENAPI_ID_INSTANCE`
+   - `GREENAPI_API_TOKEN`
+   - `GREENAPI_GROUP_ID` = `....@g.us`
+3. Phone se group me koi msg bhejo, phir Settings → **Fetch groups**
+
+CallMeBot groups support nahi karta.
+            """
+        )
+
+    hist = st.session_state.get("wa_alert_history") or []
+    if hist:
+        with st.expander(f"Recent WA alerts ({len(hist)})", expanded=False):
+            st.dataframe(pd.DataFrame(hist), use_container_width=True, hide_index=True)
+
+    st.markdown('<div class="sl">SYSTEM INFORMATION</div>', unsafe_allow_html=True)
+    info = system_info()
+    st.json(info)
+
+    if st.session_state.get("desktop_notify"):
+        st.markdown(
+            """
+            <script>
+            if (window.Notification && Notification.permission !== 'granted') {
+              Notification.requestPermission();
+            }
+            </script>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    st.caption("Keyboard: use sidebar to jump pages · R to rerun (Streamlit) · settings persist in session.")
+
+
+def error_boundary(exc: Exception) -> None:
+    st.markdown('<div class="error-box glass">', unsafe_allow_html=True)
+    st.error("Something went wrong while loading the dashboard.")
+    st.exception(exc)
+    if st.button("🔄 Retry", key="err_retry"):
+        load_live_data(force=True)
+        touch_activity()
+        st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
