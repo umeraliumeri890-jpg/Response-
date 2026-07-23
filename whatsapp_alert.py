@@ -7,21 +7,13 @@ Trigger (per CLI):
   - rolling 5-minute window
   - ANY OTP activity (no threshold)
   - ONLY TOP 1 CLI
-  - GLOBAL COOLDOWN: only 1 alert every 5 minutes (not per CLI)
-
-Message templates:
-  - strip OTP digits (4–8) → ******
-  - unique templates only
-
-Delivery is isolated in send_whatsapp_alert() so Meta / Twilio /
-CallMeBot / webhook can be plugged later without touching the engine.
+  - GLOBAL COOLDOWN: only 1 alert every 5 minutes
+  - SESSION-BASED cooldown
 """
 from __future__ import annotations
 
 import hashlib
 import html
-import json
-import os
 import re
 import threading
 import time
@@ -38,39 +30,8 @@ from config import get_settings
 from utils import log_event
 
 # ---------------------------------------------------------------------------
-# Persistent state file - GLOBAL COOLDOWN + DUPLICATE DETECTION
+# Global lock for thread-safe alert processing
 # ---------------------------------------------------------------------------
-ALERT_STATE_FILE = "alert_state.json"
-
-def _load_alert_state() -> dict[str, Any]:
-    """Load persistent alert state from JSON file."""
-    default_state = {
-        "last_hash": "",
-        "last_sent": 0,
-        "last_cli": "",           # Last CLI that triggered alert
-        "global_cooldown_until": 0  # Global cooldown expiry timestamp
-    }
-    if os.path.exists(ALERT_STATE_FILE):
-        try:
-            with open(ALERT_STATE_FILE, "r") as f:
-                data = json.load(f)
-                for key in default_state:
-                    if key not in data:
-                        data[key] = default_state[key]
-                return data
-        except Exception:
-            return default_state
-    return default_state
-
-def _save_alert_state(state: dict[str, Any]) -> None:
-    """Save persistent alert state to JSON file."""
-    try:
-        with open(ALERT_STATE_FILE, "w") as f:
-            json.dump(state, f, indent=2)
-    except Exception:
-        pass
-
-_alert_state = _load_alert_state()
 _ALERT_PROCESS_LOCK = threading.Lock()
 
 # ---------------------------------------------------------------------------
@@ -83,13 +44,12 @@ MAX_TEMPLATES = 8
 MAX_COUNTRIES = 8
 MAX_ALERTS_PER_TICK = 5
 
-# OTP digit runs 4–8 long (word-ish boundaries; keep Arabic/Unicode text intact)
+# OTP digit runs 4–8 long
 _OTP_RE = re.compile(r"(?<!\d)\d{4,8}(?!\d)")
-# HTML entities sometimes appear in messages
 _ENTITY_RE = re.compile(r"&(?:#\d+|#x[0-9a-fA-F]+|\w+);")
 _WS_RE = re.compile(r"\s+")
 
-# Country → flag (fallback 🌍)
+# Country flags
 _FLAGS: dict[str, str] = {
     "Malaysia": "🇲🇾",
     "Singapore": "🇸🇬",
@@ -121,7 +81,6 @@ _FLAGS: dict[str, str] = {
 # Template helpers
 # ---------------------------------------------------------------------------
 def normalize_template(message: str) -> str:
-    """Replace OTP digit groups with ****** and collapse whitespace."""
     if message is None:
         return ""
     text = str(message)
@@ -226,7 +185,7 @@ def build_alert_message(
 
 
 # ---------------------------------------------------------------------------
-# Delivery (isolated — swap provider without touching engine)
+# Delivery
 # ---------------------------------------------------------------------------
 def send_whatsapp_alert(message: str, *, meta: dict[str, Any] | None = None) -> dict[str, Any]:
     settings = get_settings()
@@ -375,36 +334,43 @@ def send_whatsapp_alert_async(message: str, meta: dict[str, Any] | None = None) 
 
 
 # ---------------------------------------------------------------------------
-# GLOBAL COOLDOWN (not per CLI)
+# GLOBAL COOLDOWN - SESSION BASED
 # ---------------------------------------------------------------------------
+def _get_cooldown_state() -> dict[str, Any]:
+    return st.session_state.setdefault("wa_global_cooldown", {
+        "cooldown_until": 0,
+        "last_cli": "",
+        "last_hash": "",
+        "last_sent": 0
+    })
+
+
 def _is_global_cooling(now_ts: float) -> bool:
-    """Check if global cooldown is active."""
-    until = float(_alert_state.get("global_cooldown_until", 0) or 0)
+    state = _get_cooldown_state()
+    until = float(state.get("cooldown_until", 0) or 0)
     return now_ts < until
 
 
-def _arm_global_cooldown(seconds: float, now_ts: float) -> None:
-    """Arm global cooldown."""
-    expiry = now_ts + seconds
-    _alert_state["global_cooldown_until"] = expiry
-    _save_alert_state(_alert_state)
+def _arm_global_cooldown(seconds: float, now_ts: float, cli: str, msg_hash: str) -> None:
+    state = _get_cooldown_state()
+    state["cooldown_until"] = now_ts + seconds
+    state["last_cli"] = cli
+    state["last_hash"] = msg_hash
+    state["last_sent"] = now_ts
+    st.session_state["wa_global_cooldown"] = state
 
 
 def _alert_config() -> dict[str, Any]:
     settings = get_settings()
     return {
         "enabled": bool(st.session_state.get("wa_alerts_enabled", settings.get("whatsapp_alerts_enabled", True))),
-        "threshold": 1,  # ANY OTP - fixed
-        "window_min": 5,  # fixed 5 minutes
-        "cooldown_min": 5,  # fixed 5 minutes
+        "threshold": 1,
+        "window_min": 5,
+        "cooldown_min": 5,
     }
 
 
 def evaluate_cli_windows(df: pd.DataFrame, *, window_min: int, threshold: int) -> list[dict[str, Any]]:
-    """
-    Pure function: find CLIs with ANY OTP in the last window_min minutes.
-    threshold is always 1 (any OTP activity).
-    """
     if df is None or df.empty or "CLI" not in df.columns:
         return []
     if "dt" not in df.columns:
@@ -429,7 +395,6 @@ def evaluate_cli_windows(df: pd.DataFrame, *, window_min: int, threshold: int) -
     hits: list[dict[str, Any]] = []
     for cli, grp in recent.groupby(recent["CLI"].astype(str), sort=False):
         total = int(len(grp))
-        # ANY OTP (threshold is 1)
         if total < 1:
             continue
         panel = "MIXED"
@@ -457,11 +422,6 @@ def evaluate_cli_windows(df: pd.DataFrame, *, window_min: int, threshold: int) -
 
 
 def process_otp_alerts(df: pd.DataFrame, *, force: bool = False) -> list[dict[str, Any]]:
-    """
-    Run one evaluation tick against the live merged frame.
-    Sends alerts EVERY 5 MINUTES (GLOBAL COOLDOWN) for TOP 1 CLI.
-    Only 1 alert every 5 minutes, regardless of CLI changes.
-    """
     if not _ALERT_PROCESS_LOCK.acquire(blocking=False):
         return []
 
@@ -476,10 +436,7 @@ def process_otp_alerts(df: pd.DataFrame, *, force: bool = False) -> list[dict[st
             return []
         st.session_state["wa_last_scan_ts"] = now_ts
 
-        # Check GLOBAL cooldown first
         if _is_global_cooling(now_ts):
-            remaining = int(_alert_state.get("global_cooldown_until", 0) - now_ts)
-            log_event("wa_alert_skipped", f"global cooldown active, {remaining}s remaining")
             return []
 
         try:
@@ -489,8 +446,6 @@ def process_otp_alerts(df: pd.DataFrame, *, force: bool = False) -> list[dict[st
             return []
 
         fired: list[dict[str, Any]] = []
-
-        # ONLY TOP 1 CLI
         top_hits = hits[:1]
 
         for hit in top_hits:
@@ -507,25 +462,16 @@ def process_otp_alerts(df: pd.DataFrame, *, force: bool = False) -> list[dict[st
             )
 
             msg_hash = hashlib.sha256(msg.encode("utf-8")).hexdigest()
-            last_hash = _alert_state.get("last_hash", "")
-            last_sent = _alert_state.get("last_sent", 0)
+            state = _get_cooldown_state()
+            last_hash = state.get("last_hash", "")
+            last_sent = state.get("last_sent", 0)
 
-            # Duplicate check - same message within 30 seconds
             if msg_hash == last_hash and (now_ts - last_sent) < 30:
-                log_event("wa_alert_skipped", "duplicate message", cli=cli, hash=msg_hash[:8])
                 continue
 
             meta = {"cli": cli, "panel": hit["panel"], "total": hit["total"], "country": hit["main_country"]}
 
-            # Arm GLOBAL cooldown (5 minutes)
-            _arm_global_cooldown(300, now_ts)
-            
-            # Save last hash/sent for duplicate detection
-            _alert_state["last_hash"] = msg_hash
-            _alert_state["last_sent"] = now_ts
-            _alert_state["last_cli"] = cli
-            _save_alert_state(_alert_state)
-
+            _arm_global_cooldown(300, now_ts, cli, msg_hash)
             send_whatsapp_alert_async(msg, meta=meta)
 
             fired.append({**meta, "message": msg})
@@ -545,10 +491,9 @@ def process_otp_alerts(df: pd.DataFrame, *, force: bool = False) -> list[dict[st
 
 
 # ---------------------------------------------------------------------------
-# GREEN-API Helper Functions (for Settings page)
+# GREEN-API Helper Functions
 # ---------------------------------------------------------------------------
 def _greenapi_base(settings: dict[str, Any] | None = None) -> tuple[str, str, str] | dict[str, Any]:
-    """Return (api_url, instance, token) or error dict."""
     settings = settings or get_settings()
     instance = str(settings.get("greenapi_id_instance") or "").strip()
     token = str(settings.get("greenapi_api_token") or "").strip()
@@ -556,14 +501,13 @@ def _greenapi_base(settings: dict[str, Any] | None = None) -> tuple[str, str, st
     if not instance or not token:
         return {
             "ok": False,
-            "detail": "GREENAPI_ID_INSTANCE / GREENAPI_API_TOKEN missing in secrets",
+            "detail": "GREENAPI_ID_INSTANCE / GREENAPI_API_TOKEN missing",
             "groups": [],
         }
     return api_url, instance, token
 
 
 def list_greenapi_groups(count: int = 200) -> dict[str, Any]:
-    """Discover WhatsApp GROUP chat IDs from the linked Green-API instance."""
     base = _greenapi_base()
     if isinstance(base, dict):
         return base
@@ -635,7 +579,7 @@ def list_greenapi_groups(count: int = 200) -> dict[str, Any]:
     tip = (
         "Phone se target group OPEN karke koi message bhejo (e.g. 'id test'), "
         "10–20 sec wait, phir dubara Fetch dabao. "
-        "Green-API purane silent groups nahi dikhata jab tak unme linked number se activity na ho."
+        "Green-API purane silent groups nahi dikhata."
     )
     return {
         "ok": True,
@@ -648,7 +592,6 @@ def list_greenapi_groups(count: int = 200) -> dict[str, Any]:
 
 
 def check_greenapi_state() -> dict[str, Any]:
-    """Quick health: instance authorized?"""
     base = _greenapi_base()
     if isinstance(base, dict):
         return base
@@ -673,7 +616,6 @@ def check_greenapi_state() -> dict[str, Any]:
 
 
 def preview_alert_for_cli(df: pd.DataFrame, cli: str) -> str | None:
-    """Build a dry-run message for Settings UI."""
     if df is None or df.empty or not cli:
         return None
     sub = df[df["CLI"].astype(str).str.contains(str(cli), case=False, na=False)] if "CLI" in df.columns else df
