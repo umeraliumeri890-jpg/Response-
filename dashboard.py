@@ -633,10 +633,13 @@ def page_settings() -> None:
     wa1, wa2, wa3 = st.columns(3)
     with wa1:
         st.session_state["wa_alerts_enabled"] = st.toggle(
-            "Enable WA alerts",
-            value=bool(st.session_state.get("wa_alerts_enabled", settings.get("whatsapp_alerts_enabled", True))),
+            "Enable in-browser WA alerts (NOT recommended)",
+            value=bool(st.session_state.get("wa_alerts_enabled", False)),
         )
-        st.caption("Alert triggers on ANY OTP activity (no threshold)")
+        st.caption(
+            "Keep OFF. 24/7 alerts run from GitHub Actions worker only "
+            "(prevents double WhatsApp messages when dashboard is open)."
+        )
     with wa2:
         st.caption("Window: **5 minutes** (fixed)")
         st.caption("Cooldown: **5 minutes** (fixed)")

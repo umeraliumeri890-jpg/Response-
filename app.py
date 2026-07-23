@@ -69,7 +69,7 @@ def _init_state() -> None:
         "search_history": [],
         "favorite_filters": [],
         "page": "Dashboard",
-        "wa_alerts_enabled": True,
+        "wa_alerts_enabled": False,  # dashboard must NOT auto-send (worker owns alerts)
         "wa_threshold": 50,
         "wa_window_min": 5,
         "wa_cooldown_min": 5,
@@ -189,14 +189,12 @@ def main() -> None:
     except Exception:
         pass
 
-    # In-session WhatsApp OTP alerts (only while a real browser tab is open).
-    # 24/7 delivery is handled by alert_worker.py via GitHub Actions —
-    # HTTP keep-alive pings never execute this block.
-    if process_otp_alerts is not None:
-        try:
-            process_otp_alerts(df)
-        except Exception as exc:
-            log_event("wa_engine_error", str(exc))
+    # AUTO WhatsApp OTP alerts are intentionally DISABLED in Streamlit.
+    # Reason: browser session + GitHub worker would double-send.
+    # 24/7 alerts = alert_worker.py via GitHub Actions only.
+    # Manual TEST button in Settings still works (direct Green-API call).
+    _ = process_otp_alerts  # keep import for optional future/manual use
+    _ = df
 
     try:
         if page == "Dashboard":

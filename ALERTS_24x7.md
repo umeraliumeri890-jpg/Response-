@@ -141,10 +141,20 @@ python alert_worker.py --force
 | Streamlit Community Cloud | Free |
 | Green-API developer | Free tier (check limits) |
 
+## Double alerts (dashboard open)
+
+Streamlit auto `process_otp_alerts()` is **disabled** in `app.py`.
+Only GitHub Actions worker sends production alerts.
+Settings → Send TEST still works (manual).
+Keep the dashboard toggle **OFF**.
+
 ## What NOT to expect
 
 - Pinging the Streamlit URL will **never** reliably fire alerts.
 - Leaving a phone browser tab open is fragile (sleep, network).
 - Streamlit free tier has **no always-on background thread** for your script.
+- GitHub `schedule` is **UTC** and often delayed 5–20 min on free tier.
+- First scheduled run after enabling can take up to ~1 hour to appear.
+- Look for Event = **`schedule`** (not only `workflow_dispatch`).
 
 The headless worker is the correct architecture.
