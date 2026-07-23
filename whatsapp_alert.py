@@ -7,7 +7,7 @@ Trigger (per CLI):
   - rolling 5-minute window
   - ANY OTP activity (no threshold)
   - ONLY TOP 1 CLI
-  - PERSISTENT cooldown - survives app restart
+  - GLOBAL COOLDOWN: only 1 alert every 5 minutes (not per CLI)
 
 Message templates:
   - strip OTP digits (4–8) → ******
@@ -38,7 +38,7 @@ from config import get_settings
 from utils import log_event
 
 # ---------------------------------------------------------------------------
-# Persistent state file - COOLDOWN + DUPLICATE DETECTION
+# Persistent state file - GLOBAL COOLDOWN + DUPLICATE DETECTION
 # ---------------------------------------------------------------------------
 ALERT_STATE_FILE = "alert_state.json"
 
@@ -47,7 +47,8 @@ def _load_alert_state() -> dict[str, Any]:
     default_state = {
         "last_hash": "",
         "last_sent": 0,
-        "cooldowns": {}  # CLI -> expiry_timestamp
+        "last_cli": "",           # Last CLI that triggered alert
+        "global_cooldown_until": 0  # Global cooldown expiry timestamp
     }
     if os.path.exists(ALERT_STATE_FILE):
         try:
@@ -374,32 +375,19 @@ def send_whatsapp_alert_async(message: str, meta: dict[str, Any] | None = None) 
 
 
 # ---------------------------------------------------------------------------
-# Cooldown state - PERSISTENT (survives app restart)
+# GLOBAL COOLDOWN (not per CLI)
 # ---------------------------------------------------------------------------
-def _cooldown_map() -> dict[str, float]:
-    """Cooldown map from persistent file."""
-    return _alert_state.setdefault("cooldowns", {})
-
-
-def _is_cooling(cli: str, now_ts: float) -> bool:
-    """Check if CLI is in cooldown."""
-    cooldowns = _cooldown_map()
-    until = float(cooldowns.get(cli, 0) or 0)
+def _is_global_cooling(now_ts: float) -> bool:
+    """Check if global cooldown is active."""
+    until = float(_alert_state.get("global_cooldown_until", 0) or 0)
     return now_ts < until
 
 
-def _arm_cooldown(cli: str, seconds: float, now_ts: float) -> None:
-    """Arm cooldown - persists in file."""
+def _arm_global_cooldown(seconds: float, now_ts: float) -> None:
+    """Arm global cooldown."""
     expiry = now_ts + seconds
-    _alert_state.setdefault("cooldowns", {})[cli] = expiry
+    _alert_state["global_cooldown_until"] = expiry
     _save_alert_state(_alert_state)
-
-
-def _clear_cooldown(cli: str) -> None:
-    """Clear cooldown for a CLI (for testing)."""
-    if cli in _alert_state.get("cooldowns", {}):
-        del _alert_state["cooldowns"][cli]
-        _save_alert_state(_alert_state)
 
 
 def _alert_config() -> dict[str, Any]:
@@ -471,8 +459,8 @@ def evaluate_cli_windows(df: pd.DataFrame, *, window_min: int, threshold: int) -
 def process_otp_alerts(df: pd.DataFrame, *, force: bool = False) -> list[dict[str, Any]]:
     """
     Run one evaluation tick against the live merged frame.
-    Sends alerts EVERY 5 MINUTES for TOP 1 CLI with ANY OTP activity.
-    Cooldown is PERSISTENT - survives app restart.
+    Sends alerts EVERY 5 MINUTES (GLOBAL COOLDOWN) for TOP 1 CLI.
+    Only 1 alert every 5 minutes, regardless of CLI changes.
     """
     if not _ALERT_PROCESS_LOCK.acquire(blocking=False):
         return []
@@ -488,8 +476,13 @@ def process_otp_alerts(df: pd.DataFrame, *, force: bool = False) -> list[dict[st
             return []
         st.session_state["wa_last_scan_ts"] = now_ts
 
+        # Check GLOBAL cooldown first
+        if _is_global_cooling(now_ts):
+            remaining = int(_alert_state.get("global_cooldown_until", 0) - now_ts)
+            log_event("wa_alert_skipped", f"global cooldown active, {remaining}s remaining")
+            return []
+
         try:
-            # threshold = 1 (ANY OTP)
             hits = evaluate_cli_windows(df, window_min=5, threshold=1)
         except Exception as exc:
             log_event("wa_eval_error", str(exc))
@@ -503,14 +496,6 @@ def process_otp_alerts(df: pd.DataFrame, *, force: bool = False) -> list[dict[st
         for hit in top_hits:
             cli = hit["cli"]
             total = hit["total"]
-
-            # Fixed 5 minute cooldown
-            cooldown_sec = 300
-
-            # Check persistent cooldown
-            if _is_cooling(cli, now_ts):
-                log_event("wa_alert_skipped", "cooldown active", cli=cli, remaining=f"{_cooldown_map().get(cli, 0) - now_ts:.0f}s")
-                continue
 
             msg = build_alert_message(
                 cli=cli,
@@ -532,12 +517,13 @@ def process_otp_alerts(df: pd.DataFrame, *, force: bool = False) -> list[dict[st
 
             meta = {"cli": cli, "panel": hit["panel"], "total": hit["total"], "country": hit["main_country"]}
 
-            # Arm persistent cooldown
-            _arm_cooldown(cli, cooldown_sec, now_ts)
+            # Arm GLOBAL cooldown (5 minutes)
+            _arm_global_cooldown(300, now_ts)
             
             # Save last hash/sent for duplicate detection
             _alert_state["last_hash"] = msg_hash
             _alert_state["last_sent"] = now_ts
+            _alert_state["last_cli"] = cli
             _save_alert_state(_alert_state)
 
             send_whatsapp_alert_async(msg, meta=meta)
@@ -546,7 +532,7 @@ def process_otp_alerts(df: pd.DataFrame, *, force: bool = False) -> list[dict[st
             log_event("wa_alert_triggered", "OTP traffic", **meta)
 
             try:
-                st.toast(f"🚨 WA alert · {cli} · {hit['total']} OTPs (TOP 1) | Next in 5min", icon="📱")
+                st.toast(f"🚨 WA alert · {cli} · {hit['total']} OTPs | Next in 5min", icon="📱")
             except Exception:
                 pass
 
