@@ -99,6 +99,10 @@ def enforce_session() -> None:
     if not is_authenticated():
         return
     settings = get_settings()
+    # Auto-login mode never times out the synthetic session
+    if settings.get("auth_disabled"):
+        touch_activity()
+        return
     if session_expired(settings["session_timeout_min"]):
         log_event("session_timeout", "inactivity timeout")
         logout()
@@ -162,7 +166,23 @@ def render_login() -> None:
         st.caption(f"🔒 Device ID: `{fp[:24]}…`  ·  Each code is device-locked.")
 
 
+def _auto_login() -> None:
+    """Synthetic session when AUTH_DISABLED=true (dashboard open without code)."""
+    if is_authenticated():
+        return
+    st.session_state["authenticated"] = True
+    st.session_state["operator_name"] = ADMIN_OPERATOR
+    st.session_state["auth_code"] = "AUTO"
+    touch_activity()
+    log_event("auto_login", "AUTH_DISABLED — session granted", operator=ADMIN_OPERATOR)
+
+
 def require_auth() -> None:
+    settings = get_settings()
+    if settings.get("auth_disabled", True):
+        _auto_login()
+        enforce_session()
+        return
     if not is_authenticated():
         render_login()
         st.stop()
