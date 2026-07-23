@@ -1,817 +1,722 @@
-"""Dashboard pages: KPIs, live monitor, search, exports, settings."""
+"""
+SMART WHATSAPP OTP ALERT ENGINE
+================================
+Monitors the already-merged live dataframe (no extra API calls).
+
+Trigger (per CLI):
+  - rolling 5-minute window
+  - ANY OTP activity (no threshold)
+  - ONLY TOP 1 CLI
+  - PERSISTENT cooldown - survives app restart
+
+Message templates:
+  - strip OTP digits (4–8) → ******
+  - unique templates only
+
+Delivery is isolated in send_whatsapp_alert() so Meta / Twilio /
+CallMeBot / webhook can be plugged later without touching the engine.
+"""
 from __future__ import annotations
 
+import hashlib
 import html
-from datetime import date, datetime, timezone
+import json
+import os
+import re
+import threading
+import time
+from collections import OrderedDict
+from datetime import datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import quote
 
 import pandas as pd
+import requests
 import streamlit as st
 
-try:
-    from st_aggrid import AgGrid, DataReturnMode, GridOptionsBuilder, GridUpdateMode, JsCode
+from config import get_settings
+from utils import log_event
 
-    HAS_AGGRID = True
-except Exception:  # pragma: no cover
-    HAS_AGGRID = False
-    AgGrid = None  # type: ignore
-    DataReturnMode = None  # type: ignore
-    GridOptionsBuilder = None  # type: ignore
-    GridUpdateMode = None  # type: ignore
-    JsCode = None  # type: ignore
+# ---------------------------------------------------------------------------
+# Persistent state file - COOLDOWN + DUPLICATE DETECTION
+# ---------------------------------------------------------------------------
+ALERT_STATE_FILE = "alert_state.json"
 
-from api import load_live_data
-from charts import (
-    api_comparison,
-    cli_bar,
-    country_bar,
-    country_map,
-    country_pie,
-    daily_trend,
-    hourly_trend,
-    live_timeline,
-    otp_heatmap,
-    team_performance,
-)
-from config import REFRESH_OPTIONS, THEMES, get_settings, theme_colors
-from utils import (
-    apply_search,
-    compute_kpis,
-    df_to_csv_bytes,
-    df_to_excel_bytes,
-    df_to_json_bytes,
-    df_to_pdf_bytes,
-    push_search_history,
-    system_info,
-    touch_activity,
-)
-
-
-def _fmt_delay(sec: float) -> str:
-    if sec < 60:
-        return f"{sec:.0f}s"
-    if sec < 3600:
-        return f"{sec/60:.1f}m"
-    return f"{sec/3600:.1f}h"
-
-
-def render_header(operator: str, is_admin: bool, health: dict) -> None:
-    up = sum(1 for h in health.values() if h.get("ok"))
-    total = max(len(health), 1)
-    live = "LIVE" if up else "DEGRADED"
-    color = "#00E676" if up == total and total else ("#F0B429" if up else "#FF3D71")
-    st.markdown(
-        f"""
-        <div class="hdr">
-          <div class="badge">UTS SYSTEMS · ENTERPRISE</div>
-          <div class="title">⚡ UTS <span>HUNTERS</span> ⚡</div>
-          <div class="sub">> Cyber SOC · Multi-API OTP Intelligence</div>
-          <div class="divider"></div>
-        </div>
-        <div class="opbar glass">
-          <div class="oi"><span class="pd" style="background:{color};box-shadow:0 0 8px {color}"></span><span style="color:{color}">{live}</span></div>
-          <div class="od">|</div>
-          <div class="oi">OPERATOR: <span>{operator.upper()}</span></div>
-          <div class="od">|</div>
-          <div class="oi">SESSION: <span>{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</span></div>
-          <div class="od">|</div>
-          <div class="oi">APIs: <span>{up}/{total}</span></div>
-          {"<div class='od'>|</div><div class='oi'><span style='color:#F0B429'>👑 ADMIN</span></div>" if is_admin else ""}
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def kpi_cards(kpis: dict[str, Any], health: dict) -> None:
-    api_status = "UP" if any(h.get("ok") for h in health.values()) else "DOWN"
-    cards = [
-        ("Total OTP", f"{kpis['total_otp']:,}", "📦"),
-        ("Today OTP", f"{kpis['today_otp']:,}", "📅"),
-        ("5 Min OTP", f"{kpis['min5_otp']:,}", "⚡"),
-        ("Unique Numbers", f"{kpis['unique_numbers']:,}", "🔢"),
-        ("Unique CLI", f"{kpis['unique_cli']:,}", "📡"),
-        ("API Status", api_status, "💚" if api_status == "UP" else "💔"),
-        ("Avg Delay", _fmt_delay(kpis["avg_delay_sec"]), "⏱️"),
-        ("Countries", f"{kpis['countries']:,}", "🌍"),
-        ("Matched", f"{kpis['matched']:,}", "🎯"),
-    ]
-    cols = st.columns(3)
-    for i, (label, value, icon) in enumerate(cards):
-        with cols[i % 3]:
-            st.markdown(
-                f'<div class="kpi glass"><div class="kpi-icon">{icon}</div>'
-                f'<div class="kpi-val">{value}</div><div class="kpi-label">{label}</div></div>',
-                unsafe_allow_html=True,
-            )
-
-
-def live_cli_cards(top_cli: list[dict]) -> None:
-    """Render top-3 CLI cards. Use single-line HTML (no indented markdown code fences)."""
-    slots = (top_cli + [{"name": "—", "count": 0}] * 3)[:3]
-    ranks = ["r1", "r2", "r3"]
-    medals = ["🥇 Top 1 — Last 5 Min", "🥈 Top 2 — Last 5 Min", "🥉 Top 3 — Last 5 Min"]
-    cols = st.columns(3)
-    for i, item in enumerate(slots):
-        name = html.escape(str(item.get("name", "—")))
-        count = int(item.get("count", 0) or 0)
-        # Keep HTML on one line — Streamlit treats indented multi-line blocks as code
-        card = (
-            f'<div class="rc {ranks[i]} glass">'
-            f'<div class="rwm">{i + 1}</div>'
-            f'<div class="rb">{medals[i]}</div>'
-            f'<div class="rn">{name}</div>'
-            f'<div class="rc_">⚡ {count} OTPs</div>'
-            f"</div>"
-        )
-        with cols[i]:
-            st.markdown(card, unsafe_allow_html=True)
-
-
-def api_health_cards(health: dict) -> None:
-    if not health:
-        st.info("No API health data yet.")
-        return
-    cols = st.columns(len(health))
-    for i, (name, h) in enumerate(health.items()):
-        status = h.get("status", "DOWN")
-        color = "#00E676" if h.get("ok") else "#FF3D71"
-        err = html.escape(str(h.get("error") or "None"))
-        sync = html.escape(str(h.get("last_sync", "—")))
-        with cols[i]:
-            st.markdown(
-                f'<div class="health glass">'
-                f'<div class="health-name">{html.escape(str(name))}</div>'
-                f'<div class="health-status" style="color:{color}">{html.escape(str(status))}</div>'
-                f'<div class="health-row"><span>Latency</span><b>{h.get("latency_ms", 0)} ms</b></div>'
-                f'<div class="health-row"><span>Records</span><b>{h.get("records", 0)}</b></div>'
-                f'<div class="health-row"><span>Last Sync</span><b>{sync}</b></div>'
-                f'<div class="health-row"><span>Errors</span><b>{err}</b></div>'
-                f"</div>",
-                unsafe_allow_html=True,
-            )
-
-
-def _live_display_frame(df: pd.DataFrame) -> pd.DataFrame:
-    """Full readable columns for live monitoring (no Team/Range clutter)."""
-    if df is None or df.empty:
-        return pd.DataFrame(columns=["Time", "Panel", "CLI", "Number", "Country", "Message"])
-    show = df.drop(columns=["dt", "Team Member", "Range"], errors="ignore").copy()
-    keep = [c for c in ["Time", "Panel", "CLI", "Number", "Country", "Message"] if c in show.columns]
-    # Keep any remaining useful cols after core set
-    extra = [c for c in show.columns if c not in keep]
-    show = show[keep + extra]
-    # Force plain strings so nothing truncates oddly
-    for c in show.columns:
-        show[c] = show[c].fillna("").astype(str)
-        if c == "Message":
-            show[c] = show[c].map(lambda x: html.unescape(x) if x else "")
-    return show
-
-
-def _render_mobile_otp_cards(df: pd.DataFrame, limit: int = 80) -> None:
-    """Card list — every field fully visible on phone screens."""
-    if df is None or df.empty:
-        st.caption("No rows to display.")
-        return
-    rows = df.head(int(limit))
-    cards: list[str] = ['<div class="otp-feed">']
-    for _, r in rows.iterrows():
-        time_v = html.escape(str(r.get("Time", "")))
-        panel_v = html.escape(str(r.get("Panel", "")))
-        cli_v = html.escape(str(r.get("CLI", "")))
-        num_v = html.escape(str(r.get("Number", "")))
-        country_v = html.escape(str(r.get("Country", "")))
-        msg_v = html.escape(str(r.get("Message", "")))
-        cards.append(
-            '<div class="otp-card glass">'
-            f'<div class="otp-top"><span class="otp-time">{time_v}</span>'
-            f'<span class="otp-panel">{panel_v}</span></div>'
-            f'<div class="otp-cli">{cli_v}</div>'
-            f'<div class="otp-row"><span class="otp-k">Number</span><span class="otp-v otp-num">{num_v}</span></div>'
-            f'<div class="otp-row"><span class="otp-k">Country</span><span class="otp-v">{country_v}</span></div>'
-            f'<div class="otp-msg">{msg_v}</div>'
-            "</div>"
-        )
-    cards.append("</div>")
-    st.markdown("".join(cards), unsafe_allow_html=True)
-
-
-def aggrid_table(
-    df: pd.DataFrame,
-    height: int = 420,
-    key: str = "grid",
-    *,
-    live_mode: bool = False,
-    hide_team_range: bool = False,
-) -> pd.DataFrame:
-    """
-    Table renderer.
-    - live_mode=True → mobile-first full-text cards (no truncation, no Team/Range)
-    - otherwise AgGrid / dataframe fallback
-    """
-    if df is None or df.empty:
-        st.caption("No rows to display.")
-        return df
-
-    if live_mode or hide_team_range:
-        show = _live_display_frame(df)
-    else:
-        show = df.drop(columns=["dt"], errors="ignore").copy()
-
-    # Live monitor: always full text — cards on all viewports (mobile-first)
-    if live_mode:
-        # Desktop also gets a full non-truncated table under the cards toggle
-        view = st.radio(
-            "View",
-            ["Cards (full text)", "Table (full text)"],
-            horizontal=True,
-            key=f"{key}_view",
-            label_visibility="collapsed",
-        )
-        st.caption(f"Showing **{len(show)}** rows · full text · Team/Range hidden")
-        if view.startswith("Cards"):
-            _render_mobile_otp_cards(show, limit=min(len(show), 120))
-            return show
-        # Full-text dataframe — wrap enabled, no column ellipsis
-        st.dataframe(
-            show,
-            use_container_width=True,
-            height=height,
-            hide_index=True,
-            column_config={
-                "Time": st.column_config.TextColumn("Time", width="medium"),
-                "Panel": st.column_config.TextColumn("Panel", width="small"),
-                "CLI": st.column_config.TextColumn("CLI", width="medium"),
-                "Number": st.column_config.TextColumn("Number", width="medium"),
-                "Country": st.column_config.TextColumn("Country", width="medium"),
-                "Message": st.column_config.TextColumn("Message", width="large"),
-            },
-        )
-        return show
-
-    if not HAS_AGGRID:
-        st.dataframe(show, use_container_width=True, height=height, hide_index=True)
-        return show
-
-    gb = GridOptionsBuilder.from_dataframe(show)
-    gb.configure_default_column(
-        filterable=True,
-        sortable=True,
-        resizable=True,
-        editable=False,
-        groupable=False,
-        wrapText=True,
-        autoHeight=True,
-        floatingFilter=False,
-    )
-    gb.configure_pagination(
-        enabled=True,
-        paginationAutoPageSize=False,
-        paginationPageSize=int(st.session_state.get("page_size", 50)),
-    )
-    gb.configure_side_bar()
-    gb.configure_selection(selection_mode="multiple", use_checkbox=False)
-    if "Time" in show.columns:
-        gb.configure_column("Time", pinned="left", minWidth=150)
-    if "Message" in show.columns:
-        gb.configure_column("Message", minWidth=280, flex=2, wrapText=True, autoHeight=True)
-    if "Number" in show.columns:
-        gb.configure_column("Number", minWidth=140)
-    if "CLI" in show.columns:
-        gb.configure_column("CLI", minWidth=120)
-    if "Country" in show.columns:
-        gb.configure_column("Country", minWidth=120)
-    if "Team Member" in show.columns:
-        gb.configure_column(
-            "Team Member",
-            cellStyle=JsCode(
-                """
-                function(params) {
-                  if (params.value && params.value.toString().trim() !== '') {
-                    return {'color': '#00D4FF', 'fontWeight': '700', 'borderLeft': '3px solid #00D4FF'};
-                  }
-                  return {};
-                }
-                """
-            ),
-        )
-    # Never clip cell content with ellipsis
-    grid_options = gb.build()
-    grid_options["defaultColDef"] = {
-        **grid_options.get("defaultColDef", {}),
-        "wrapText": True,
-        "autoHeight": True,
-        "resizable": True,
-        "suppressSizeToFit": False,
+def _load_alert_state() -> dict[str, Any]:
+    """Load persistent alert state from JSON file."""
+    default_state = {
+        "last_hash": "",
+        "last_sent": 0,
+        "cooldowns": {}  # CLI -> expiry_timestamp
     }
-    t = theme_colors()
-    custom_css = {
-        ".ag-root-wrapper": {
-            "background-color": t["card"],
-            "border": f"1px solid {t['accent']}33",
-            "border-radius": "8px",
-        },
-        ".ag-header": {"background-color": t["bg2"], "color": t["accent"]},
-        ".ag-row": {"background-color": t["card"], "color": t["text"]},
-        ".ag-row-odd": {"background-color": t["bg2"]},
-        ".ag-cell": {
-            "white-space": "normal !important",
-            "line-height": "1.35",
-            "overflow": "visible",
-            "text-overflow": "clip",
-        },
-    }
-    resp = AgGrid(
-        show,
-        gridOptions=grid_options,
-        height=height,
-        theme="streamlit",
-        update_mode=GridUpdateMode.NO_UPDATE,
-        data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
-        allow_unsafe_jscode=True,
-        custom_css=custom_css,
-        key=key,
-        reload_data=False,
-        fit_columns_on_grid_load=False,
-    )
+    if os.path.exists(ALERT_STATE_FILE):
+        try:
+            with open(ALERT_STATE_FILE, "r") as f:
+                data = json.load(f)
+                for key in default_state:
+                    if key not in data:
+                        data[key] = default_state[key]
+                return data
+        except Exception:
+            return default_state
+    return default_state
+
+def _save_alert_state(state: dict[str, Any]) -> None:
+    """Save persistent alert state to JSON file."""
     try:
-        return pd.DataFrame(resp["data"])
+        with open(ALERT_STATE_FILE, "w") as f:
+            json.dump(state, f, indent=2)
     except Exception:
-        return show
+        pass
+
+_alert_state = _load_alert_state()
+_ALERT_PROCESS_LOCK = threading.Lock()
+
+# ---------------------------------------------------------------------------
+# Tunables
+# ---------------------------------------------------------------------------
+DEFAULT_THRESHOLD = 1  # ANY OTP
+DEFAULT_WINDOW_MIN = 5
+DEFAULT_COOLDOWN_MIN = 5
+MAX_TEMPLATES = 8
+MAX_COUNTRIES = 8
+MAX_ALERTS_PER_TICK = 5
+
+# OTP digit runs 4–8 long (word-ish boundaries; keep Arabic/Unicode text intact)
+_OTP_RE = re.compile(r"(?<!\d)\d{4,8}(?!\d)")
+# HTML entities sometimes appear in messages
+_ENTITY_RE = re.compile(r"&(?:#\d+|#x[0-9a-fA-F]+|\w+);")
+_WS_RE = re.compile(r"\s+")
+
+# Country → flag (fallback 🌍)
+_FLAGS: dict[str, str] = {
+    "Malaysia": "🇲🇾",
+    "Singapore": "🇸🇬",
+    "Indonesia": "🇮🇩",
+    "Pakistan": "🇵🇰",
+    "India": "🇮🇳",
+    "United Arab Emirates": "🇦🇪",
+    "United Kingdom": "🇬🇧",
+    "United States": "🇺🇸",
+    "Russia": "🇷🇺",
+    "Georgia": "🇬🇪",
+    "Angola": "🇦🇴",
+    "Palestine": "🇵🇸",
+    "Saudi Arabia": "🇸🇦",
+    "Bangladesh": "🇧🇩",
+    "Philippines": "🇵🇭",
+    "Thailand": "🇹🇭",
+    "Vietnam": "🇻🇳",
+    "Nigeria": "🇳🇬",
+    "Turkey": "🇹🇷",
+    "Germany": "🇩🇪",
+    "France": "🇫🇷",
+    "Canada": "🇨🇦",
+    "Australia": "🇦🇺",
+}
 
 
-def _notify_events(df: pd.DataFrame, health: dict) -> None:
-    """Toast notifications for API down / high traffic / new OTPs."""
-    if not st.session_state.get("notifications_enabled", True):
-        return
-    for name, h in (health or {}).items():
-        flag = f"notified_down_{name}"
-        if not h.get("ok") and not st.session_state.get(flag):
-            st.toast(f"⚠ API DOWN: {name} — {h.get('error') or 'unreachable'}", icon="🔴")
-            st.session_state[flag] = True
-        if h.get("ok"):
-            st.session_state[flag] = False
-
-    kpis = compute_kpis(df, tz=st.session_state.get("timezone", "UTC"))
-    if kpis["min5_otp"] >= int(st.session_state.get("high_traffic_threshold", 80)):
-        last = st.session_state.get("last_high_traffic_toast", 0)
-        now_ts = datetime.now(timezone.utc).replace(tzinfo=None).timestamp()
-        if now_ts - last > 60:
-            st.toast(f"🔥 High traffic: {kpis['min5_otp']} OTPs in 5 min", icon="⚡")
-            st.session_state["last_high_traffic_toast"] = now_ts
-
-    prev = int(st.session_state.get("prev_total_otp", 0))
-    if kpis["total_otp"] > prev > 0:
-        st.toast(f"✨ +{kpis['total_otp'] - prev} new OTP records", icon="📨")
-    st.session_state["prev_total_otp"] = kpis["total_otp"]
+# ---------------------------------------------------------------------------
+# Template helpers
+# ---------------------------------------------------------------------------
+def normalize_template(message: str) -> str:
+    """Replace OTP digit groups with ****** and collapse whitespace."""
+    if message is None:
+        return ""
+    text = str(message)
+    try:
+        text = html.unescape(text)
+    except Exception:
+        pass
+    text = _ENTITY_RE.sub(" ", text)
+    text = _OTP_RE.sub("******", text)
+    text = _WS_RE.sub(" ", text).strip()
+    return text
 
 
-def page_dashboard(df: pd.DataFrame, health: dict) -> None:
-    st.markdown('<div class="sl">COMMAND OVERVIEW</div>', unsafe_allow_html=True)
-    kpis = compute_kpis(df, tz=st.session_state.get("timezone", "UTC"))
-    kpi_cards(kpis, health)
-    st.markdown('<div class="sl">LIVE CLI LEADERS</div>', unsafe_allow_html=True)
-    live_cli_cards(kpis.get("top_cli") or [])
-    st.markdown('<div class="sl">API HEALTH</div>', unsafe_allow_html=True)
-    api_health_cards(health)
-    c1, c2 = st.columns(2)
-    with c1:
-        st.plotly_chart(live_timeline(df), use_container_width=True, config={"displayModeBar": False})
-    with c2:
-        st.plotly_chart(api_comparison(df), use_container_width=True, config={"displayModeBar": False})
-    c3, c4 = st.columns(2)
-    with c3:
-        st.plotly_chart(country_pie(df), use_container_width=True, config={"displayModeBar": False})
-    with c4:
-        st.plotly_chart(cli_bar(df), use_container_width=True, config={"displayModeBar": False})
+def unique_templates(messages: pd.Series, limit: int = MAX_TEMPLATES) -> list[str]:
+    seen: OrderedDict[str, None] = OrderedDict()
+    for raw in messages.fillna("").astype(str):
+        tmpl = normalize_template(raw)
+        if not tmpl:
+            continue
+        if tmpl not in seen:
+            seen[tmpl] = None
+        if len(seen) >= limit:
+            break
+    return list(seen.keys())
 
 
-def page_live_monitor(df: pd.DataFrame) -> None:
-    st.markdown('<div class="sl">LIVE MONITOR</div>', unsafe_allow_html=True)
-    c1, c2, c3 = st.columns([2, 1, 1])
-    with c1:
-        target = st.text_input("🎯 Target CLI", value=st.session_state.get("target_cli", "MYOB"), key="target_cli")
-    with c2:
-        limit = st.number_input(
-            "Stream buffer",
-            min_value=25,
-            max_value=5000,
-            value=int(st.session_state.get("stream_buffer", 500)),
-            step=25,
-        )
-        st.session_state["stream_buffer"] = int(limit)
-    with c3:
-        only_matched = st.toggle("Matched only", value=False)
+def top_countries(series: pd.Series, limit: int = MAX_COUNTRIES) -> list[tuple[str, int]]:
+    if series is None or series.empty:
+        return []
+    vc = series.fillna("Unknown").astype(str).value_counts().head(limit)
+    return [(str(k), int(v)) for k, v in vc.items()]
 
-    kpis = compute_kpis(df)
-    live_cli_cards(kpis.get("top_cli") or [])
+
+def _flag(country: str) -> str:
+    return _FLAGS.get(country, "🌍")
+
+
+def _circled(n: int) -> str:
+    if 1 <= n <= 20:
+        return chr(0x2460 + n - 1)
+    return f"{n}."
+
+
+# ---------------------------------------------------------------------------
+# Message builder
+# ---------------------------------------------------------------------------
+def build_alert_message(
+    *,
+    cli: str,
+    panel: str,
+    total: int,
+    main_country: str,
+    templates: list[str],
+    countries: list[tuple[str, int]],
+    when: datetime | None = None,
+) -> str:
+    ts = when or datetime.now()
+    time_str = ts.strftime("%I:%M %p").lstrip("0")
+
+    lines = [
+        "🚨 OTP TRAFFIC ALERT",
+        "",
+        f"⚠ CLI : {cli}",
+        f"📡 Panel : {panel}",
+        f"🌍 Main Country : {main_country or 'Unknown'}",
+        f"📊 Total OTP : {total}",
+        f"⏰ Time : {time_str}",
+        "",
+        "━━━━━━━━━━━━━━━━━━",
+        "",
+        "📝 Message Templates",
+        "",
+    ]
+    if templates:
+        for i, tmpl in enumerate(templates, 1):
+            lines.append(f"{_circled(i)} {tmpl}")
+            lines.append("")
+    else:
+        lines.append("① (no message body)")
+        lines.append("")
+
+    lines.extend([
+        "━━━━━━━━━━━━━━━━━━",
+        "",
+        "🌍 Top Countries",
+        "",
+    ])
+    if countries:
+        for name, cnt in countries:
+            lines.append(f"{_flag(name)} {name} : {cnt}")
+    else:
+        lines.append("🌍 Unknown : 0")
+
+    lines.extend([
+        "",
+        "━━━━━━━━━━━━━━━━━━",
+        "",
+        "Status:",
+        "LIVE",
+    ])
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Delivery (isolated — swap provider without touching engine)
+# ---------------------------------------------------------------------------
+def send_whatsapp_alert(message: str, *, meta: dict[str, Any] | None = None) -> dict[str, Any]:
+    settings = get_settings()
+    provider = str(settings.get("whatsapp_provider") or "log").strip().lower()
+    meta = meta or {}
+
+    hist = st.session_state.setdefault("wa_alert_history", [])
+    hist.insert(0, {
+        "ts": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds"),
+        "provider": provider,
+        "cli": meta.get("cli"),
+        "total": meta.get("total"),
+        "preview": message[:180],
+    })
+    st.session_state["wa_alert_history"] = hist[:30]
+
+    try:
+        if provider in ("", "log", "none", "dry_run"):
+            log_event("wa_alert_log", "dry-run alert", cli=meta.get("cli"), total=meta.get("total"))
+            return {"ok": True, "provider": "log", "detail": "logged only"}
+
+        if provider == "callmebot":
+            return _send_callmebot(message, settings)
+        if provider == "greenapi":
+            return _send_greenapi(message, settings)
+        if provider == "webhook":
+            return _send_webhook(message, settings, meta)
+        if provider == "meta":
+            return _send_meta(message, settings)
+        if provider == "twilio":
+            return _send_twilio(message, settings)
+
+        log_event("wa_alert_unknown_provider", provider)
+        return {"ok": False, "provider": provider, "detail": f"unknown provider: {provider}"}
+    except Exception as exc:
+        log_event("wa_alert_send_error", str(exc), provider=provider)
+        return {"ok": False, "provider": provider, "detail": str(exc)}
+
+
+def _send_callmebot(message: str, settings: dict[str, Any]) -> dict[str, Any]:
+    phone = str(settings.get("callmebot_phone") or "").strip().lstrip("+")
+    apikey = str(settings.get("callmebot_apikey") or "").strip()
+    if not phone or not apikey:
+        return {"ok": False, "provider": "callmebot", "detail": "CALLMEBOT_PHONE / CALLMEBOT_APIKEY missing"}
+    url = f"https://api.callmebot.com/whatsapp.php?phone={quote(phone)}&text={quote(message)}&apikey={quote(apikey)}"
+    r = requests.get(url, timeout=20)
+    ok = r.status_code == 200
+    return {"ok": ok, "provider": "callmebot", "detail": f"HTTP {r.status_code} {r.text[:200]}"}
+
+
+def _send_greenapi(message: str, settings: dict[str, Any]) -> dict[str, Any]:
+    instance = str(settings.get("greenapi_id_instance") or "").strip()
+    token = str(settings.get("greenapi_api_token") or "").strip()
+    api_url = str(settings.get("greenapi_api_url") or "https://api.green-api.com").strip().rstrip("/")
+    chat_id = str(settings.get("greenapi_group_id") or "").strip()
+
+    if not instance or not token or not chat_id:
+        return {
+            "ok": False,
+            "provider": "greenapi",
+            "detail": "GREENAPI_ID_INSTANCE / GREENAPI_API_TOKEN / GREENAPI_GROUP_ID missing",
+        }
+
+    if chat_id.isdigit():
+        chat_id = f"{chat_id}@g.us"
+    if not (chat_id.endswith("@g.us") or chat_id.endswith("@c.us")):
+        return {
+            "ok": False,
+            "provider": "greenapi",
+            "detail": "GREENAPI_GROUP_ID must look like 1203630...@g.us",
+        }
+
+    url = f"{api_url}/waInstance{instance}/sendMessage/{token}"
+    payload = {
+        "chatId": chat_id,
+        "message": message[:20000],
+        "linkPreview": False,
+    }
+    r = requests.post(url, json=payload, timeout=30)
+    ok = 200 <= r.status_code < 300
+    detail = f"HTTP {r.status_code}"
+    try:
+        body = r.json()
+        detail = f"{detail} {body}"
+        if ok and not body.get("idMessage") and body.get("message"):
+            ok = False
+    except Exception:
+        detail = f"{detail} {r.text[:240]}"
+    return {"ok": ok, "provider": "greenapi", "detail": detail[:400]}
+
+
+def _send_webhook(message: str, settings: dict[str, Any], meta: dict[str, Any]) -> dict[str, Any]:
+    url = str(settings.get("whatsapp_webhook_url") or "").strip()
+    if not url:
+        return {"ok": False, "provider": "webhook", "detail": "WHATSAPP_WEBHOOK_URL missing"}
+    payload = {"text": message, "message": message, **meta}
+    r = requests.post(url, json=payload, timeout=20)
+    ok = 200 <= r.status_code < 300
+    return {"ok": ok, "provider": "webhook", "detail": f"HTTP {r.status_code}"}
+
+
+def _send_meta(message: str, settings: dict[str, Any]) -> dict[str, Any]:
+    token = str(settings.get("meta_wa_token") or "").strip()
+    phone_id = str(settings.get("meta_wa_phone_id") or "").strip()
+    to = str(settings.get("meta_wa_to") or "").strip()
+    if not token or not phone_id or not to:
+        return {
+            "ok": False,
+            "provider": "meta",
+            "detail": "META_WA_TOKEN / META_WA_PHONE_ID / META_WA_TO missing",
+        }
+    url = f"https://graph.facebook.com/v19.0/{phone_id}/messages"
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    body = {
+        "messaging_product": "whatsapp",
+        "to": to.lstrip("+"),
+        "type": "text",
+        "text": {"preview_url": False, "body": message[:4096]},
+    }
+    r = requests.post(url, headers=headers, json=body, timeout=20)
+    ok = 200 <= r.status_code < 300
+    return {"ok": ok, "provider": "meta", "detail": f"HTTP {r.status_code} {r.text[:200]}"}
+
+
+def _send_twilio(message: str, settings: dict[str, Any]) -> dict[str, Any]:
+    sid = str(settings.get("twilio_sid") or "").strip()
+    token = str(settings.get("twilio_token") or "").strip()
+    frm = str(settings.get("twilio_wa_from") or "").strip()
+    to = str(settings.get("twilio_wa_to") or "").strip()
+    if not sid or not token or not frm or not to:
+        return {"ok": False, "provider": "twilio", "detail": "Twilio WA secrets missing"}
+    url = f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Messages.json"
+    data = {"From": frm, "To": to, "Body": message[:1600]}
+    r = requests.post(url, data=data, auth=(sid, token), timeout=20)
+    ok = 200 <= r.status_code < 300
+    return {"ok": ok, "provider": "twilio", "detail": f"HTTP {r.status_code} {r.text[:200]}"}
+
+
+def send_whatsapp_alert_async(message: str, meta: dict[str, Any] | None = None) -> None:
+    def _run() -> None:
+        try:
+            send_whatsapp_alert(message, meta=meta)
+        except Exception as exc:
+            log_event("wa_alert_async_error", str(exc))
+    threading.Thread(target=_run, name="wa-alert", daemon=True).start()
+
+
+# ---------------------------------------------------------------------------
+# Cooldown state - PERSISTENT (survives app restart)
+# ---------------------------------------------------------------------------
+def _cooldown_map() -> dict[str, float]:
+    """Cooldown map from persistent file."""
+    return _alert_state.setdefault("cooldowns", {})
+
+
+def _is_cooling(cli: str, now_ts: float) -> bool:
+    """Check if CLI is in cooldown."""
+    cooldowns = _cooldown_map()
+    until = float(cooldowns.get(cli, 0) or 0)
+    return now_ts < until
+
+
+def _arm_cooldown(cli: str, seconds: float, now_ts: float) -> None:
+    """Arm cooldown - persists in file."""
+    expiry = now_ts + seconds
+    _alert_state.setdefault("cooldowns", {})[cli] = expiry
+    _save_alert_state(_alert_state)
+
+
+def _clear_cooldown(cli: str) -> None:
+    """Clear cooldown for a CLI (for testing)."""
+    if cli in _alert_state.get("cooldowns", {}):
+        del _alert_state["cooldowns"][cli]
+        _save_alert_state(_alert_state)
+
+
+def _alert_config() -> dict[str, Any]:
+    settings = get_settings()
+    return {
+        "enabled": bool(st.session_state.get("wa_alerts_enabled", settings.get("whatsapp_alerts_enabled", True))),
+        "threshold": 1,  # ANY OTP - fixed
+        "window_min": 5,  # fixed 5 minutes
+        "cooldown_min": 5,  # fixed 5 minutes
+    }
+
+
+def evaluate_cli_windows(df: pd.DataFrame, *, window_min: int, threshold: int) -> list[dict[str, Any]]:
+    """
+    Pure function: find CLIs with ANY OTP in the last window_min minutes.
+    threshold is always 1 (any OTP activity).
+    """
+    if df is None or df.empty or "CLI" not in df.columns:
+        return []
+    if "dt" not in df.columns:
+        return []
 
     work = df.copy()
-    if target.strip() and "CLI" in work.columns:
-        tgt = work[work["CLI"].astype(str).str.contains(target.strip(), case=False, na=False)]
-    else:
-        tgt = work.iloc[0:0]
+    work["dt"] = pd.to_datetime(work["dt"], errors="coerce")
+    work = work.dropna(subset=["dt"])
+    if work.empty:
+        return []
 
-    st.markdown(
-        f'<div class="sl">TARGET TRACKER — {html.escape(target.upper() or "ALL")}</div>',
-        unsafe_allow_html=True,
-    )
-    # Mobile-first full text — Team/Range removed, no ellipsis
-    aggrid_table(tgt.head(80), height=360, key="tgt_grid", live_mode=True)
+    now = work["dt"].max()
+    if pd.isna(now):
+        return []
+    wall = datetime.now()
+    anchor = max(now.to_pydatetime() if hasattr(now, "to_pydatetime") else now, wall - timedelta(minutes=1))
+    start = anchor - timedelta(minutes=int(window_min))
+    recent = work[work["dt"] >= start]
+    if recent.empty:
+        return []
 
-    stream = work.head(int(limit))
-    if only_matched and "Team Member" in stream.columns:
-        stream = stream[stream["Team Member"].astype(str).str.strip() != ""]
-    st.markdown('<div class="sl">GLOBAL LIVE STREAM</div>', unsafe_allow_html=True)
-    aggrid_table(stream, height=640, key="live_grid", live_mode=True)
-
-
-def page_analytics(df: pd.DataFrame) -> None:
-    st.markdown('<div class="sl">ANALYTICS SUITE</div>', unsafe_allow_html=True)
-    a, b = st.columns(2)
-    with a:
-        st.plotly_chart(live_timeline(df), use_container_width=True)
-        st.plotly_chart(hourly_trend(df), use_container_width=True)
-        st.plotly_chart(otp_heatmap(df), use_container_width=True)
-    with b:
-        st.plotly_chart(daily_trend(df), use_container_width=True)
-        st.plotly_chart(api_comparison(df), use_container_width=True)
-        st.plotly_chart(team_performance(df), use_container_width=True)
-
-
-def page_countries(df: pd.DataFrame) -> None:
-    st.markdown('<div class="sl">COUNTRY INTELLIGENCE</div>', unsafe_allow_html=True)
-    c1, c2 = st.columns(2)
-    with c1:
-        st.plotly_chart(country_pie(df), use_container_width=True)
-        st.plotly_chart(country_bar(df), use_container_width=True)
-    with c2:
-        st.plotly_chart(country_map(df), use_container_width=True)
-        if df is not None and not df.empty and "Country" in df.columns:
-            vc = df["Country"].value_counts().rename_axis("Country").reset_index(name="OTP")
-            aggrid_table(vc, height=360, key="country_table")
-
-
-def page_cli(df: pd.DataFrame) -> None:
-    st.markdown('<div class="sl">CLI ANALYSIS</div>', unsafe_allow_html=True)
-    st.plotly_chart(cli_bar(df, top_n=25), use_container_width=True)
-    if df is not None and not df.empty and "CLI" in df.columns:
-        vc = df["CLI"].value_counts().rename_axis("CLI").reset_index(name="OTP")
-        if "Panel" in df.columns:
-            pivot = pd.crosstab(df["CLI"], df["Panel"])
-            vc = vc.merge(pivot, left_on="CLI", right_index=True, how="left")
-        aggrid_table(vc.head(200), height=480, key="cli_table")
-
-
-def page_search(df: pd.DataFrame) -> None:
-    st.markdown('<div class="sl">ADVANCED SEARCH</div>', unsafe_allow_html=True)
-    countries = ["All"]
-    members = ["All"]
-    if df is not None and not df.empty:
-        if "Country" in df.columns:
-            countries += sorted([c for c in df["Country"].dropna().unique().tolist() if c])
-        if "Team Member" in df.columns:
-            members += sorted([m for m in df["Team Member"].dropna().unique().tolist() if str(m).strip()])
-
-    favs = st.session_state.setdefault("favorite_filters", [])
-    if favs:
-        pick = st.selectbox("⭐ Favorite filters", ["—"] + [f["label"] for f in favs])
-        if pick != "—":
-            fav = next(f for f in favs if f["label"] == pick)
-            for k, v in fav["values"].items():
-                st.session_state[k] = v
-
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        cli = st.text_input("CLI", key="s_cli")
-        number = st.text_input("Number", key="s_number")
-    with c2:
-        country = st.selectbox("Country", countries, key="s_country")
-        member = st.selectbox("Team Member", members, key="s_member")
-    with c3:
-        message = st.text_input("Message", key="s_message")
-        api = st.selectbox("API", ["All", "LAMIX", "PURPLE"], key="s_api")
-    with c4:
-        mode = st.selectbox("Match mode", ["Contains", "Starts with", "Ends with"], key="s_mode")
-        use_regex = st.toggle("Regex", value=False, key="s_regex")
-
-    d1, d2, d3 = st.columns([1, 1, 1])
-    with d1:
-        date_from = st.date_input("From", value=None, key="s_from")
-    with d2:
-        date_to = st.date_input("To", value=None, key="s_to")
-    with d3:
-        st.write("")
-        st.write("")
-        run = st.button("🔍 Search", use_container_width=True)
-        save_fav = st.button("⭐ Save filter", use_container_width=True)
-
-    if save_fav:
-        label = f"{cli or '*'}|{country}|{api}|{mode}"
-        favs.insert(
-            0,
-            {
-                "label": label,
-                "values": {
-                    "s_cli": cli,
-                    "s_number": number,
-                    "s_country": country,
-                    "s_member": member,
-                    "s_message": message,
-                    "s_api": api,
-                    "s_mode": mode,
-                    "s_regex": use_regex,
-                },
-            },
-        )
-        st.session_state["favorite_filters"] = favs[:15]
-        st.success("Filter saved.")
-
-    filtered = apply_search(
-        df,
-        cli=cli,
-        country=country,
-        number=number,
-        message=message,
-        api=api,
-        member=member,
-        date_from=datetime.combine(date_from, datetime.min.time()) if isinstance(date_from, date) else None,
-        date_to=datetime.combine(date_to, datetime.min.time()) if isinstance(date_to, date) else None,
-        mode=mode,
-        use_regex=use_regex,
-    )
-    if run:
-        push_search_history(
-            {
-                "ts": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
-                "cli": cli,
-                "country": country,
-                "api": api,
-                "hits": len(filtered),
-            }
-        )
-    st.caption(f"Results: **{0 if filtered is None else len(filtered)}**")
-    aggrid_table(filtered if filtered is not None else df, height=520, key="search_grid")
-    st.session_state["last_filtered"] = filtered
-
-    hist = st.session_state.get("search_history") or []
-    if hist:
-        with st.expander("Search history"):
-            st.dataframe(pd.DataFrame(hist), use_container_width=True, hide_index=True)
-
-
-def page_exports(df: pd.DataFrame) -> None:
-    st.markdown('<div class="sl">EXPORT CENTER</div>', unsafe_allow_html=True)
-    scope = st.radio("Scope", ["Current Filter", "Full Data"], horizontal=True)
-    data = st.session_state.get("last_filtered") if scope == "Current Filter" else df
-    if data is None or (isinstance(data, pd.DataFrame) and data.empty):
-        data = df
-    if data is None:
-        data = pd.DataFrame()
-    export_df = data.drop(columns=["dt"], errors="ignore") if isinstance(data, pd.DataFrame) else pd.DataFrame()
-    st.write(f"Rows ready: **{len(export_df)}**")
-
-    c1, c2, c3, c4 = st.columns(4)
-    ts = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y%m%d_%H%M%S")
-    with c1:
-        st.download_button("⬇ CSV", data=df_to_csv_bytes(export_df), file_name=f"uts_otp_{ts}.csv", mime="text/csv", use_container_width=True)
-    with c2:
-        st.download_button("⬇ Excel", data=df_to_excel_bytes(export_df), file_name=f"uts_otp_{ts}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
-    with c3:
-        st.download_button("⬇ JSON", data=df_to_json_bytes(export_df), file_name=f"uts_otp_{ts}.json", mime="application/json", use_container_width=True)
-    with c4:
-        pdf = df_to_pdf_bytes(export_df)
-        mime = "application/pdf" if pdf[:4] == b"%PDF" else "text/plain"
-        ext = "pdf" if mime.endswith("pdf") else "txt"
-        st.download_button("⬇ PDF", data=pdf, file_name=f"uts_otp_{ts}.{ext}", mime=mime, use_container_width=True)
-
-    st.dataframe(export_df.head(100), use_container_width=True, hide_index=True)
-
-
-def page_settings() -> None:
-    """Settings page - only accessible to admin."""
-    from auth import is_admin
-    
-    # Admin check - only Umer Ali can access settings
-    if not is_admin():
-        st.warning("⚠️ Settings page is only accessible to admin (Umer Ali).")
-        st.stop()
-    
-    st.markdown('<div class="sl">SETTINGS</div>', unsafe_allow_html=True)
-    c1, c2 = st.columns(2)
-    with c1:
-        theme = st.selectbox("Theme", list(THEMES.keys()), index=list(THEMES.keys()).index(st.session_state.get("theme", "Cyber")))
-        st.session_state["theme"] = theme
-        refresh = st.selectbox(
-            "Auto refresh",
-            list(REFRESH_OPTIONS.keys()),
-            index=list(REFRESH_OPTIONS.keys()).index(st.session_state.get("refresh_label", "15 sec")),
-        )
-        st.session_state["refresh_label"] = refresh
-        st.session_state["refresh_sec"] = REFRESH_OPTIONS[refresh]
-        st.session_state["timezone"] = st.selectbox(
-            "Timezone",
-            ["UTC", "America/Los_Angeles", "America/New_York", "Europe/London", "Asia/Karachi", "Asia/Dubai", "Asia/Kolkata"],
-            index=0 if st.session_state.get("timezone", "UTC") == "UTC" else None,
-        )
-    with c2:
-        st.session_state["page_size"] = st.number_input("Table page size", 10, 500, int(st.session_state.get("page_size", 50)), 10)
-        st.session_state["notifications_enabled"] = st.toggle("Toast notifications", value=st.session_state.get("notifications_enabled", True))
-        st.session_state["desktop_notify"] = st.toggle("Desktop notification hint", value=st.session_state.get("desktop_notify", False))
-        st.session_state["high_traffic_threshold"] = st.number_input("High traffic threshold (5m)", 10, 5000, int(st.session_state.get("high_traffic_threshold", 80)), 10)
-        if st.button("Force API refresh", use_container_width=True):
-            load_live_data(force=True)
-            st.success("Cache cleared — next load is fresh.")
-            st.rerun()
-
-    # ---- WhatsApp OTP Alert Engine (Admin Only) ----
-    st.markdown('<div class="sl">WHATSAPP OTP ALERT ENGINE</div>', unsafe_allow_html=True)
-    st.info("🔒 Admin only: WhatsApp alert engine configuration")
-    
-    settings = get_settings()
-    wa1, wa2, wa3 = st.columns(3)
-    with wa1:
-        st.session_state["wa_alerts_enabled"] = st.toggle(
-            "Enable WA alerts",
-            value=bool(st.session_state.get("wa_alerts_enabled", settings.get("whatsapp_alerts_enabled", True))),
-        )
-        st.caption("Alert triggers on ANY OTP activity (no threshold)")
-    with wa2:
-        st.caption("Window: **5 minutes** (fixed)")
-        st.caption("Cooldown: **5 minutes** (fixed)")
-    with wa3:
-        st.caption(f"Provider (secrets): **{settings.get('whatsapp_provider', 'log')}**")
-        st.caption("log · greenapi · callmebot · webhook · meta · twilio")
-        if str(settings.get("whatsapp_provider", "")).lower() == "greenapi":
-            gid = str(settings.get("greenapi_group_id") or "")
-            st.caption(f"Group: `{gid[:28]}…`" if len(gid) > 28 else f"Group: `{gid or 'NOT SET'}`")
-        preview_cli = st.text_input("Preview CLI", value=st.session_state.get("target_cli", "MYOB"), key="wa_preview_cli")
-        if st.button("Preview alert message", use_container_width=True):
+    hits: list[dict[str, Any]] = []
+    for cli, grp in recent.groupby(recent["CLI"].astype(str), sort=False):
+        total = int(len(grp))
+        # ANY OTP (threshold is 1)
+        if total < 1:
+            continue
+        panel = "MIXED"
+        if "Panel" in grp.columns:
             try:
-                from whatsapp_alert import preview_alert_for_cli
+                panel = str(grp["Panel"].astype(str).value_counts().idxmax())
+            except Exception:
+                panel = "MIXED"
+        countries = top_countries(grp["Country"] if "Country" in grp.columns else pd.Series(dtype=str))
+        main_country = countries[0][0] if countries else "Unknown"
+        templates = unique_templates(grp["Message"] if "Message" in grp.columns else pd.Series(dtype=str))
+        hits.append({
+            "cli": str(cli),
+            "panel": panel,
+            "total": total,
+            "main_country": main_country,
+            "templates": templates,
+            "countries": countries,
+            "window_start": start,
+            "window_end": anchor,
+        })
 
-                df_live, _ = load_live_data(force=False)
-                msg = preview_alert_for_cli(df_live, preview_cli)
-                if msg:
-                    st.code(msg, language=None)
-                else:
-                    st.info("No rows for that CLI yet.")
-            except Exception as exc:
-                st.error(str(exc))
+    hits.sort(key=lambda h: h["total"], reverse=True)
+    return hits
 
-    # GREEN-API helpers (Admin Only)
-    if str(settings.get("whatsapp_provider", "")).lower() == "greenapi" or settings.get("greenapi_id_instance"):
-        st.markdown('<div class="sl">GREEN-API GROUP ID FINDER</div>', unsafe_allow_html=True)
-        st.warning(
-            "Console me **Chats empty** normal hai jab tak linked phone se group me "
-            "**naya message** na jaye. Purane groups auto list nahi hote."
+
+def process_otp_alerts(df: pd.DataFrame, *, force: bool = False) -> list[dict[str, Any]]:
+    """
+    Run one evaluation tick against the live merged frame.
+    Sends alerts EVERY 5 MINUTES for TOP 1 CLI with ANY OTP activity.
+    Cooldown is PERSISTENT - survives app restart.
+    """
+    if not _ALERT_PROCESS_LOCK.acquire(blocking=False):
+        return []
+
+    try:
+        cfg = _alert_config()
+        if not cfg["enabled"] and not force:
+            return []
+
+        now_ts = time.time()
+        last = float(st.session_state.get("wa_last_scan_ts", 0) or 0)
+        if not force and (now_ts - last) < 10:
+            return []
+        st.session_state["wa_last_scan_ts"] = now_ts
+
+        try:
+            # threshold = 1 (ANY OTP)
+            hits = evaluate_cli_windows(df, window_min=5, threshold=1)
+        except Exception as exc:
+            log_event("wa_eval_error", str(exc))
+            return []
+
+        fired: list[dict[str, Any]] = []
+
+        # ONLY TOP 1 CLI
+        top_hits = hits[:1]
+
+        for hit in top_hits:
+            cli = hit["cli"]
+            total = hit["total"]
+
+            # Fixed 5 minute cooldown
+            cooldown_sec = 300
+
+            # Check persistent cooldown
+            if _is_cooling(cli, now_ts):
+                log_event("wa_alert_skipped", "cooldown active", cli=cli, remaining=f"{_cooldown_map().get(cli, 0) - now_ts:.0f}s")
+                continue
+
+            msg = build_alert_message(
+                cli=cli,
+                panel=hit["panel"],
+                total=hit["total"],
+                main_country=hit["main_country"],
+                templates=hit["templates"],
+                countries=hit["countries"],
+            )
+
+            msg_hash = hashlib.sha256(msg.encode("utf-8")).hexdigest()
+            last_hash = _alert_state.get("last_hash", "")
+            last_sent = _alert_state.get("last_sent", 0)
+
+            # Duplicate check - same message within 30 seconds
+            if msg_hash == last_hash and (now_ts - last_sent) < 30:
+                log_event("wa_alert_skipped", "duplicate message", cli=cli, hash=msg_hash[:8])
+                continue
+
+            meta = {"cli": cli, "panel": hit["panel"], "total": hit["total"], "country": hit["main_country"]}
+
+            # Arm persistent cooldown
+            _arm_cooldown(cli, cooldown_sec, now_ts)
+            
+            # Save last hash/sent for duplicate detection
+            _alert_state["last_hash"] = msg_hash
+            _alert_state["last_sent"] = now_ts
+            _save_alert_state(_alert_state)
+
+            send_whatsapp_alert_async(msg, meta=meta)
+
+            fired.append({**meta, "message": msg})
+            log_event("wa_alert_triggered", "OTP traffic", **meta)
+
+            try:
+                st.toast(f"🚨 WA alert · {cli} · {hit['total']} OTPs (TOP 1) | Next in 5min", icon="📱")
+            except Exception:
+                pass
+
+        if fired:
+            st.session_state["wa_last_fired"] = fired
+        return fired
+
+    finally:
+        _ALERT_PROCESS_LOCK.release()
+
+
+# ---------------------------------------------------------------------------
+# GREEN-API Helper Functions (for Settings page)
+# ---------------------------------------------------------------------------
+def _greenapi_base(settings: dict[str, Any] | None = None) -> tuple[str, str, str] | dict[str, Any]:
+    """Return (api_url, instance, token) or error dict."""
+    settings = settings or get_settings()
+    instance = str(settings.get("greenapi_id_instance") or "").strip()
+    token = str(settings.get("greenapi_api_token") or "").strip()
+    api_url = str(settings.get("greenapi_api_url") or "https://api.green-api.com").strip().rstrip("/")
+    if not instance or not token:
+        return {
+            "ok": False,
+            "detail": "GREENAPI_ID_INSTANCE / GREENAPI_API_TOKEN missing in secrets",
+            "groups": [],
+        }
+    return api_url, instance, token
+
+
+def list_greenapi_groups(count: int = 200) -> dict[str, Any]:
+    """Discover WhatsApp GROUP chat IDs from the linked Green-API instance."""
+    base = _greenapi_base()
+    if isinstance(base, dict):
+        return base
+    api_url, instance, token = base
+    found: dict[str, dict[str, Any]] = {}
+    errors: list[str] = []
+
+    try:
+        url = f"{api_url}/waInstance{instance}/getChats/{token}"
+        r = requests.get(url, params={"count": int(count)}, timeout=30)
+        if 200 <= r.status_code < 300:
+            data = r.json() if r.text else []
+            if isinstance(data, list):
+                for item in data:
+                    if not isinstance(item, dict):
+                        continue
+                    cid = str(item.get("id") or item.get("chatId") or "")
+                    ctype = str(item.get("type") or "").lower()
+                    name = str(item.get("name") or "")
+                    if cid.endswith("@g.us") or ctype == "group":
+                        if cid.isdigit():
+                            cid = f"{cid}@g.us"
+                        if cid:
+                            found[cid] = {
+                                "chatId": cid,
+                                "name": name or cid,
+                                "type": ctype or "group",
+                                "source": "getChats",
+                            }
+            elif isinstance(data, dict) and data.get("message"):
+                errors.append(f"getChats: {data.get('message')}")
+        else:
+            errors.append(f"getChats HTTP {r.status_code}: {r.text[:180]}")
+    except Exception as exc:
+        errors.append(f"getChats error: {exc}")
+
+    for journal in ("lastOutgoingMessages", "lastIncomingMessages"):
+        try:
+            url = f"{api_url}/waInstance{instance}/{journal}/{token}"
+            r = requests.get(url, params={"minutes": 1440}, timeout=30)
+            if not (200 <= r.status_code < 300):
+                errors.append(f"{journal} HTTP {r.status_code}")
+                continue
+            data = r.json() if r.text else []
+            if not isinstance(data, list):
+                continue
+            for item in data:
+                if not isinstance(item, dict):
+                    continue
+                cid = str(item.get("chatId") or "")
+                if not cid.endswith("@g.us"):
+                    continue
+                name = ""
+                for key in ("chatName", "senderName", "name"):
+                    if item.get(key):
+                        name = str(item.get(key))
+                        break
+                prev = found.get(cid)
+                found[cid] = {
+                    "chatId": cid,
+                    "name": (prev or {}).get("name") or name or cid,
+                    "type": "group",
+                    "source": (prev or {}).get("source", "") + f"+{journal}",
+                }
+        except Exception as exc:
+            errors.append(f"{journal} error: {exc}")
+
+    groups = sorted(found.values(), key=lambda g: (g.get("name") or g["chatId"]).lower())
+    tip = (
+        "Phone se target group OPEN karke koi message bhejo (e.g. 'id test'), "
+        "10–20 sec wait, phir dubara Fetch dabao. "
+        "Green-API purane silent groups nahi dikhata jab tak unme linked number se activity na ho."
+    )
+    return {
+        "ok": True,
+        "groups": groups,
+        "count": len(groups),
+        "errors": errors,
+        "tip": tip if not groups else "",
+        "detail": f"Found {len(groups)} group(s)",
+    }
+
+
+def check_greenapi_state() -> dict[str, Any]:
+    """Quick health: instance authorized?"""
+    base = _greenapi_base()
+    if isinstance(base, dict):
+        return base
+    api_url, instance, token = base
+    try:
+        url = f"{api_url}/waInstance{instance}/getStateInstance/{token}"
+        r = requests.get(url, timeout=20)
+        body = {}
+        try:
+            body = r.json()
+        except Exception:
+            body = {"raw": r.text[:200]}
+        state = str(body.get("stateInstance") or body.get("state") or "")
+        return {
+            "ok": 200 <= r.status_code < 300,
+            "state": state or "unknown",
+            "detail": body,
+            "authorized": state.lower() in {"authorized", "online", "connected"},
+        }
+    except Exception as exc:
+        return {"ok": False, "state": "error", "detail": str(exc), "authorized": False}
+
+
+def preview_alert_for_cli(df: pd.DataFrame, cli: str) -> str | None:
+    """Build a dry-run message for Settings UI."""
+    if df is None or df.empty or not cli:
+        return None
+    sub = df[df["CLI"].astype(str).str.contains(str(cli), case=False, na=False)] if "CLI" in df.columns else df
+    hits = evaluate_cli_windows(sub, window_min=5, threshold=1)
+    if not hits:
+        if sub.empty:
+            return None
+        templates = unique_templates(sub["Message"] if "Message" in sub.columns else pd.Series(dtype=str))
+        countries = top_countries(sub["Country"] if "Country" in sub.columns else pd.Series(dtype=str))
+        panel = "MIXED"
+        if "Panel" in sub.columns and not sub.empty:
+            try:
+                panel = str(sub["Panel"].astype(str).value_counts().idxmax())
+            except Exception:
+                pass
+        return build_alert_message(
+            cli=cli,
+            panel=panel,
+            total=len(sub),
+            main_country=countries[0][0] if countries else "Unknown",
+            templates=templates,
+            countries=countries,
         )
-        g1, g2, g3 = st.columns(3)
-        with g1:
-            if st.button("1) Check WA link status", use_container_width=True, key="ga_state_btn"):
-                try:
-                    from whatsapp_alert import check_greenapi_state
-
-                    st.session_state["ga_state"] = check_greenapi_state()
-                except Exception as exc:
-                    st.session_state["ga_state"] = {"ok": False, "detail": str(exc)}
-        with g2:
-            if st.button("2) Fetch groups (@g.us)", use_container_width=True, key="ga_fetch_btn"):
-                try:
-                    from whatsapp_alert import list_greenapi_groups
-
-                    with st.spinner("Green-API se groups pull ho rahe hain..."):
-                        st.session_state["ga_groups"] = list_greenapi_groups()
-                except Exception as exc:
-                    st.session_state["ga_groups"] = {"ok": False, "groups": [], "detail": str(exc)}
-        with g3:
-            if st.button("3) Send TEST to secrets group", use_container_width=True, key="ga_test_btn"):
-                try:
-                    from whatsapp_alert import send_whatsapp_alert
-
-                    test_msg = (
-                        "🧪 UTS HUNTERS TEST\n\n"
-                        "Green-API group link OK.\n"
-                        f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-                    )
-                    res = send_whatsapp_alert(test_msg, meta={"cli": "TEST", "total": 0})
-                    st.session_state["ga_test_result"] = res
-                except Exception as exc:
-                    st.session_state["ga_test_result"] = {"ok": False, "detail": str(exc)}
-
-        state = st.session_state.get("ga_state")
-        if state:
-            if state.get("authorized") or str(state.get("state", "")).lower() == "authorized":
-                st.success(f"Instance state: **{state.get('state', 'authorized')}** — phone linked ✅")
-            else:
-                st.error(
-                    f"Instance state: **{state.get('state', 'unknown')}** — "
-                    "console me QR dubara scan karo / phone internet on rakho."
-                )
-                with st.expander("State detail"):
-                    st.json(state)
-
-        ga = st.session_state.get("ga_groups")
-        if ga:
-            groups = ga.get("groups") or []
-            if groups:
-                st.success(f"{len(groups)} group milay — apna group select/copy karo:")
-                gdf = pd.DataFrame(groups)[["name", "chatId", "source"]]
-                st.dataframe(gdf, use_container_width=True, hide_index=True)
-                pick = st.selectbox(
-                    "Group choose karo",
-                    options=[f"{g.get('name')}  |  {g.get('chatId')}" for g in groups],
-                    key="ga_pick",
-                )
-                if pick and "|" in pick:
-                    chosen = pick.split("|")[-1].strip()
-                    st.code(chosen, language=None)
-                    st.info(
-                        "Is ID ko secrets me paste karo:\n\n"
-                        f'`GREENAPI_GROUP_ID = "{chosen}"`\n\n'
-                        '`WHATSAPP_PROVIDER = "greenapi"`'
-                    )
-            else:
-                st.error("Abhi koi group nahi mila.")
-                if ga.get("tip"):
-                    st.markdown(f"**Fix:** {ga['tip']}")
-                if ga.get("errors"):
-                    with st.expander("API notes"):
-                        st.write(ga.get("errors"))
-
-        if st.session_state.get("ga_test_result"):
-            tr = st.session_state["ga_test_result"]
-            if tr.get("ok"):
-                st.success(f"TEST send OK · {tr.get('provider')} · {tr.get('detail')}")
-            else:
-                st.error(f"TEST failed · {tr.get('detail')}")
-
-        st.markdown(
-            """
-**Group ID empty kyun hoti hai + exact fix**
-
-1. Green-API console → instance **authorized** (QR scanned with YOUR number)
-2. Phone pe WhatsApp kholo → **wahi number** jo QR se link hai
-3. Target group open karo
-4. Group me **naya message** bhejo: `uts id test`
-5. 15 second wait
-6. Yahan **Fetch groups** dabao  
-   — ab row aayegi: `GroupName | 1203630....@g.us`
-7. Woh `@g.us` secrets me `GREENAPI_GROUP_ID` pe daalo
-8. **Send TEST** se group me test message verify karo
-
-Console ka "Chats" panel aksar blank rehta hai — is liye app ke andar Fetch use karo.
-            """
-        )
-    else:
-        st.markdown(
-            """
-**Apna number → apna WhatsApp group (recommended free path):**
-
-### GREEN-API
-1. [console.green-api.com](https://console.green-api.com/) → instance → QR scan  
-2. Secrets:
-   - `WHATSAPP_PROVIDER = "greenapi"`
-   - `GREENAPI_ID_INSTANCE`
-   - `GREENAPI_API_TOKEN`
-   - `GREENAPI_GROUP_ID` = `....@g.us`
-3. Phone se group me koi msg bhejo, phir Settings → **Fetch groups**
-
-CallMeBot groups support nahi karta.
-            """
-        )
-
-    hist = st.session_state.get("wa_alert_history") or []
-    if hist:
-        with st.expander(f"Recent WA alerts ({len(hist)})", expanded=False):
-            st.dataframe(pd.DataFrame(hist), use_container_width=True, hide_index=True)
-
-    st.markdown('<div class="sl">SYSTEM INFORMATION</div>', unsafe_allow_html=True)
-    info = system_info()
-    st.json(info)
-
-    if st.session_state.get("desktop_notify"):
-        st.markdown(
-            """
-            <script>
-            if (window.Notification && Notification.permission !== 'granted') {
-              Notification.requestPermission();
-            }
-            </script>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    st.caption("Keyboard: use sidebar to jump pages · R to rerun (Streamlit) · settings persist in session.")
-
-
-def error_boundary(exc: Exception) -> None:
-    st.markdown('<div class="error-box glass">', unsafe_allow_html=True)
-    st.error("Something went wrong while loading the dashboard.")
-    st.exception(exc)
-    if st.button("🔄 Retry", key="err_retry"):
-        load_live_data(force=True)
-        touch_activity()
-        st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
+    h = hits[0]
+    return build_alert_message(
+        cli=h["cli"],
+        panel=h["panel"],
+        total=h["total"],
+        main_country=h["main_country"],
+        templates=h["templates"],
+        countries=h["countries"],
+    )
