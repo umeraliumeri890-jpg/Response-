@@ -1,0 +1,91 @@
+# Headless OTP → WhatsApp alert worker (does NOT depend on Streamlit browser sessions).
+# This is the real 24/7 engine. Keep-alive pings alone cannot run Streamlit script logic.
+name: OTP WhatsApp Alert Worker
+
+on:
+  schedule:
+    # Every 5 minutes (GitHub may drift a few minutes on free tier — still fine with 5-min window)
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Force send even if cooldown active"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+concurrency:
+  group: otp-alert-worker
+  cancel-in-progress: false
+
+jobs:
+  alert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install worker deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install "pandas>=2.1.0" "requests>=2.31.0" "phonenumbers>=8.13.0" "urllib3>=2.0.0"
+
+      - name: Restore alert state cache
+        uses: actions/cache@v4
+        with:
+          path: data/alert_state.json
+          key: alert-state-${{ github.run_id }}
+          restore-keys: |
+            alert-state-
+
+      - name: Ensure data dir
+        run: mkdir -p data && test -f data/alert_state.json || echo '{"cooldown_until":0,"last_cli":"","last_hash":"","last_sent":0,"history":[]}' > data/alert_state.json
+
+      - name: Run OTP alert worker
+        env:
+          ALERT_STATE_PATH: data/alert_state.json
+          LAMIX_URL: ${{ secrets.LAMIX_URL }}
+          LAMIX_TOKEN: ${{ secrets.LAMIX_TOKEN }}
+          PURPLE_URL: ${{ secrets.PURPLE_URL }}
+          PURPLE_TOKEN: ${{ secrets.PURPLE_TOKEN }}
+          API_TIMEOUT: ${{ secrets.API_TIMEOUT }}
+          API_RETRIES: ${{ secrets.API_RETRIES }}
+          LAMIX_RECORDS: ${{ secrets.LAMIX_RECORDS }}
+          PURPLE_RECORDS: ${{ secrets.PURPLE_RECORDS }}
+          PURPLE_LOOKBACK_DAYS: ${{ secrets.PURPLE_LOOKBACK_DAYS }}
+          WHATSAPP_ALERTS_ENABLED: ${{ secrets.WHATSAPP_ALERTS_ENABLED }}
+          WHATSAPP_THRESHOLD: ${{ secrets.WHATSAPP_THRESHOLD }}
+          WHATSAPP_WINDOW_MIN: ${{ secrets.WHATSAPP_WINDOW_MIN }}
+          WHATSAPP_COOLDOWN_MIN: ${{ secrets.WHATSAPP_COOLDOWN_MIN }}
+          WHATSAPP_PROVIDER: ${{ secrets.WHATSAPP_PROVIDER }}
+          WHATSAPP_WEBHOOK_URL: ${{ secrets.WHATSAPP_WEBHOOK_URL }}
+          GREENAPI_ID_INSTANCE: ${{ secrets.GREENAPI_ID_INSTANCE }}
+          GREENAPI_API_TOKEN: ${{ secrets.GREENAPI_API_TOKEN }}
+          GREENAPI_API_URL: ${{ secrets.GREENAPI_API_URL }}
+          GREENAPI_GROUP_ID: ${{ secrets.GREENAPI_GROUP_ID }}
+          CALLMEBOT_PHONE: ${{ secrets.CALLMEBOT_PHONE }}
+          CALLMEBOT_APIKEY: ${{ secrets.CALLMEBOT_APIKEY }}
+        run: |
+          FORCE_FLAG=""
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.force }}" = "true" ]; then
+            FORCE_FLAG="--force"
+          fi
+          python alert_worker.py $FORCE_FLAG
+
+      - name: Upload alert state artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: alert-state
+          path: data/alert_state.json
+          retention-days: 7

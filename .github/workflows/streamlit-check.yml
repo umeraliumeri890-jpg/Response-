@@ -23,7 +23,18 @@ jobs:
         run: |
           python - <<'PY'
           import importlib
-          for m in ["config", "utils", "auth", "api", "charts", "analytics", "admin", "dashboard"]:
+          for m in ["config", "utils", "auth", "api", "charts", "analytics", "admin", "dashboard", "whatsapp_alert"]:
               importlib.import_module(m)
               print("ok", m)
           PY
+      - name: Headless worker smoke (no secrets → config_error/no_data is OK)
+        run: |
+          pip install -r requirements-worker.txt
+          python -m py_compile alert_worker.py
+          # Should exit non-zero only on fatal; missing tokens returns 2
+          set +e
+          python alert_worker.py
+          code=$?
+          set -e
+          echo "worker exit=$code"
+          test "$code" -eq 0 -o "$code" -eq 2
