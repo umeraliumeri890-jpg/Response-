@@ -5,7 +5,8 @@ Monitors the already-merged live dataframe (no extra API calls).
 
 Trigger (per CLI):
   - rolling 5-minute window
-  - ALWAYS sends alert every 5 minutes if any OTP exists (TOP 1 CLI only)
+  - ANY OTP activity (no threshold)
+  - ONLY TOP 1 CLI
   - one alert, then cooldown 5 minutes
 
 Message templates:
@@ -72,9 +73,9 @@ _alert_state = _load_alert_state()
 _ALERT_PROCESS_LOCK = threading.Lock()
 
 # ---------------------------------------------------------------------------
-# Tunables (overridable via secrets / session)
+# Tunables
 # ---------------------------------------------------------------------------
-DEFAULT_THRESHOLD = 50
+DEFAULT_THRESHOLD = 1  # ANY OTP
 DEFAULT_WINDOW_MIN = 5
 DEFAULT_COOLDOWN_MIN = 5
 MAX_TEMPLATES = 8
@@ -395,16 +396,16 @@ def _alert_config() -> dict[str, Any]:
     settings = get_settings()
     return {
         "enabled": bool(st.session_state.get("wa_alerts_enabled", settings.get("whatsapp_alerts_enabled", True))),
-        "threshold": int(st.session_state.get("wa_threshold", settings.get("whatsapp_threshold", DEFAULT_THRESHOLD))),
-        "window_min": int(st.session_state.get("wa_window_min", settings.get("whatsapp_window_min", DEFAULT_WINDOW_MIN))),
-        "cooldown_min": int(st.session_state.get("wa_cooldown_min", settings.get("whatsapp_cooldown_min", DEFAULT_COOLDOWN_MIN))),
+        "threshold": 1,  # ANY OTP - fixed
+        "window_min": 5,  # fixed 5 minutes
+        "cooldown_min": 5,  # fixed 5 minutes
     }
 
 
 def evaluate_cli_windows(df: pd.DataFrame, *, window_min: int, threshold: int) -> list[dict[str, Any]]:
     """
     Pure function: find CLIs with ANY OTP in the last window_min minutes.
-    Minimum threshold is 1 (send alert for any OTP activity).
+    threshold is always 1 (any OTP activity).
     """
     if df is None or df.empty or "CLI" not in df.columns:
         return []
@@ -430,7 +431,7 @@ def evaluate_cli_windows(df: pd.DataFrame, *, window_min: int, threshold: int) -
     hits: list[dict[str, Any]] = []
     for cli, grp in recent.groupby(recent["CLI"].astype(str), sort=False):
         total = int(len(grp))
-        # ALWAYS trigger if ANY OTP exists (total >= 1)
+        # ANY OTP (threshold is 1)
         if total < 1:
             continue
         panel = "MIXED"
@@ -460,7 +461,8 @@ def evaluate_cli_windows(df: pd.DataFrame, *, window_min: int, threshold: int) -
 def process_otp_alerts(df: pd.DataFrame, *, force: bool = False) -> list[dict[str, Any]]:
     """
     Run one evaluation tick against the live merged frame.
-    Sends alerts EVERY 5 MINUTES for TOP 1 CLI with OTP activity.
+    Sends alerts EVERY 5 MINUTES for TOP 1 CLI with ANY OTP activity.
+    No threshold - any OTP triggers alert.
     """
     if not _ALERT_PROCESS_LOCK.acquire(blocking=False):
         return []
@@ -477,21 +479,23 @@ def process_otp_alerts(df: pd.DataFrame, *, force: bool = False) -> list[dict[st
         st.session_state["wa_last_scan_ts"] = now_ts
 
         try:
-            hits = evaluate_cli_windows(df, window_min=cfg["window_min"], threshold=1)
+            # threshold = 1 (ANY OTP)
+            hits = evaluate_cli_windows(df, window_min=5, threshold=1)
         except Exception as exc:
             log_event("wa_eval_error", str(exc))
             return []
 
         fired: list[dict[str, Any]] = []
 
-        # ONLY TOP 1 CLI - highest OTP count
+        # ONLY TOP 1 CLI
         top_hits = hits[:1]
 
         for hit in top_hits:
             cli = hit["cli"]
             total = hit["total"]
 
-            cooldown_sec = 300  # 5 minutes fixed
+            # Fixed 5 minute cooldown
+            cooldown_sec = 300
 
             if _is_cooling(cli, now_ts):
                 continue
@@ -557,17 +561,7 @@ def _greenapi_base(settings: dict[str, Any] | None = None) -> tuple[str, str, st
 
 
 def list_greenapi_groups(count: int = 200) -> dict[str, Any]:
-    """
-    Discover WhatsApp GROUP chat IDs from the linked Green-API instance.
-
-    Tries:
-      1) getChats  → type == group / id endswith @g.us
-      2) lastOutgoingMessages + lastIncomingMessages → chatId @g.us
-
-    IMPORTANT: Green-API only sees chats that had activity AFTER the phone was linked.
-    If empty: open WhatsApp on the linked phone → open target group → send any message
-    (e.g. "test") → wait 10–20s → run this again.
-    """
+    """Discover WhatsApp GROUP chat IDs from the linked Green-API instance."""
     base = _greenapi_base()
     if isinstance(base, dict):
         return base
@@ -575,7 +569,6 @@ def list_greenapi_groups(count: int = 200) -> dict[str, Any]:
     found: dict[str, dict[str, Any]] = {}
     errors: list[str] = []
 
-    # 1) getChats
     try:
         url = f"{api_url}/waInstance{instance}/getChats/{token}"
         r = requests.get(url, params={"count": int(count)}, timeout=30)
@@ -605,7 +598,6 @@ def list_greenapi_groups(count: int = 200) -> dict[str, Any]:
     except Exception as exc:
         errors.append(f"getChats error: {exc}")
 
-    # 2) journals (often fill faster right after you send a group msg)
     for journal in ("lastOutgoingMessages", "lastIncomingMessages"):
         try:
             url = f"{api_url}/waInstance{instance}/{journal}/{token}"
@@ -623,7 +615,6 @@ def list_greenapi_groups(count: int = 200) -> dict[str, Any]:
                 if not cid.endswith("@g.us"):
                     continue
                 name = ""
-                # some payloads nest group info
                 for key in ("chatName", "senderName", "name"):
                     if item.get(key):
                         name = str(item.get(key))
@@ -683,9 +674,8 @@ def preview_alert_for_cli(df: pd.DataFrame, cli: str) -> str | None:
     """Build a dry-run message for Settings UI."""
     if df is None or df.empty or not cli:
         return None
-    cfg = _alert_config()
     sub = df[df["CLI"].astype(str).str.contains(str(cli), case=False, na=False)] if "CLI" in df.columns else df
-    hits = evaluate_cli_windows(sub, window_min=cfg["window_min"], threshold=1)
+    hits = evaluate_cli_windows(sub, window_min=5, threshold=1)
     if not hits:
         if sub.empty:
             return None
