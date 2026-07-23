@@ -5,10 +5,16 @@ Monitors the already-merged live dataframe (no extra API calls).
 
 Trigger (per CLI):
   - rolling 5-minute window
-  - ANY OTP activity (no threshold)
+  - ANY OTP activity (threshold default 1)
   - ONLY TOP 1 CLI
   - GLOBAL COOLDOWN: only 1 alert every 5 minutes
-  - SESSION-BASED cooldown
+  - FILE-BASED cooldown (shared across sessions + workers)
+
+IMPORTANT
+---------
+Streamlit only runs this module while a real browser WebSocket session is open.
+HTTP keep-alive pings do NOT execute process_otp_alerts().
+For 24/7 alerts use alert_worker.py via GitHub Actions (otp_alert_worker.yml).
 """
 from __future__ import annotations
 
@@ -26,7 +32,7 @@ import pandas as pd
 import requests
 import streamlit as st
 
-from config import get_settings
+from config import ALERT_STATE_FILE, DATA_DIR, get_settings
 from utils import log_event
 
 # ---------------------------------------------------------------------------
@@ -192,15 +198,18 @@ def send_whatsapp_alert(message: str, *, meta: dict[str, Any] | None = None) -> 
     provider = str(settings.get("whatsapp_provider") or "log").strip().lower()
     meta = meta or {}
 
-    hist = st.session_state.setdefault("wa_alert_history", [])
-    hist.insert(0, {
-        "ts": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds"),
-        "provider": provider,
-        "cli": meta.get("cli"),
-        "total": meta.get("total"),
-        "preview": message[:180],
-    })
-    st.session_state["wa_alert_history"] = hist[:30]
+    try:
+        hist = st.session_state.setdefault("wa_alert_history", [])
+        hist.insert(0, {
+            "ts": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds"),
+            "provider": provider,
+            "cli": meta.get("cli"),
+            "total": meta.get("total"),
+            "preview": message[:180],
+        })
+        st.session_state["wa_alert_history"] = hist[:30]
+    except Exception:
+        pass
 
     try:
         if provider in ("", "log", "none", "dry_run"):
@@ -334,15 +343,62 @@ def send_whatsapp_alert_async(message: str, meta: dict[str, Any] | None = None) 
 
 
 # ---------------------------------------------------------------------------
-# GLOBAL COOLDOWN - SESSION BASED
+# GLOBAL COOLDOWN - FILE BASED (survives browser close / multi-session)
 # ---------------------------------------------------------------------------
-def _get_cooldown_state() -> dict[str, Any]:
-    return st.session_state.setdefault("wa_global_cooldown", {
-        "cooldown_until": 0,
+def _state_path():
+    try:
+        return ALERT_STATE_FILE
+    except Exception:
+        from pathlib import Path
+        return Path(__file__).resolve().parent / "data" / "alert_state.json"
+
+
+def _load_file_state() -> dict[str, Any]:
+    path = _state_path()
+    try:
+        if path.exists():
+            import json
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
+    except Exception as exc:
+        log_event("wa_state_load_error", str(exc))
+    return {
+        "cooldown_until": 0.0,
         "last_cli": "",
         "last_hash": "",
-        "last_sent": 0
-    })
+        "last_sent": 0.0,
+        "history": [],
+    }
+
+
+def _save_file_state(state: dict[str, Any]) -> None:
+    path = _state_path()
+    try:
+        import json
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(state, indent=2, default=str), encoding="utf-8")
+        tmp.replace(path)
+    except Exception as exc:
+        log_event("wa_state_save_error", str(exc))
+
+
+def _get_cooldown_state() -> dict[str, Any]:
+    """Prefer session mirror for UI, but always backed by disk."""
+    file_state = _load_file_state()
+    try:
+        sess = st.session_state.get("wa_global_cooldown")
+        if isinstance(sess, dict):
+            # Merge: take the more restrictive (later) cooldown
+            fu = float(file_state.get("cooldown_until", 0) or 0)
+            su = float(sess.get("cooldown_until", 0) or 0)
+            if su > fu:
+                file_state = {**file_state, **sess}
+        st.session_state["wa_global_cooldown"] = file_state
+    except Exception:
+        pass
+    return file_state
 
 
 def _is_global_cooling(now_ts: float) -> bool:
@@ -357,16 +413,25 @@ def _arm_global_cooldown(seconds: float, now_ts: float, cli: str, msg_hash: str)
     state["last_cli"] = cli
     state["last_hash"] = msg_hash
     state["last_sent"] = now_ts
-    st.session_state["wa_global_cooldown"] = state
+    try:
+        st.session_state["wa_global_cooldown"] = state
+    except Exception:
+        pass
+    _save_file_state(state)
 
 
 def _alert_config() -> dict[str, Any]:
     settings = get_settings()
+    enabled = settings.get("whatsapp_alerts_enabled", True)
+    try:
+        enabled = bool(st.session_state.get("wa_alerts_enabled", enabled))
+    except Exception:
+        enabled = bool(enabled)
     return {
-        "enabled": bool(st.session_state.get("wa_alerts_enabled", settings.get("whatsapp_alerts_enabled", True))),
-        "threshold": 1,
-        "window_min": 5,
-        "cooldown_min": 5,
+        "enabled": enabled,
+        "threshold": int(settings.get("whatsapp_threshold", 1) or 1),
+        "window_min": int(settings.get("whatsapp_window_min", 5) or 5),
+        "cooldown_min": int(settings.get("whatsapp_cooldown_min", 5) or 5),
     }
 
 
@@ -422,6 +487,10 @@ def evaluate_cli_windows(df: pd.DataFrame, *, window_min: int, threshold: int) -
 
 
 def process_otp_alerts(df: pd.DataFrame, *, force: bool = False) -> list[dict[str, Any]]:
+    """Run inside a live Streamlit session only.
+
+    For browser-closed / 24x7 delivery use alert_worker.py (GitHub Actions).
+    """
     if not _ALERT_PROCESS_LOCK.acquire(blocking=False):
         return []
 
@@ -431,26 +500,36 @@ def process_otp_alerts(df: pd.DataFrame, *, force: bool = False) -> list[dict[st
             return []
 
         now_ts = time.time()
-        last = float(st.session_state.get("wa_last_scan_ts", 0) or 0)
+        try:
+            last = float(st.session_state.get("wa_last_scan_ts", 0) or 0)
+        except Exception:
+            last = 0.0
         if not force and (now_ts - last) < 10:
             return []
-        st.session_state["wa_last_scan_ts"] = now_ts
+        try:
+            st.session_state["wa_last_scan_ts"] = now_ts
+        except Exception:
+            pass
 
         if _is_global_cooling(now_ts):
             return []
 
         try:
-            hits = evaluate_cli_windows(df, window_min=5, threshold=1)
+            hits = evaluate_cli_windows(
+                df,
+                window_min=int(cfg["window_min"]),
+                threshold=int(cfg["threshold"]),
+            )
         except Exception as exc:
             log_event("wa_eval_error", str(exc))
             return []
 
         fired: list[dict[str, Any]] = []
         top_hits = hits[:1]
+        cooldown_sec = max(60, int(cfg["cooldown_min"]) * 60)
 
         for hit in top_hits:
             cli = hit["cli"]
-            total = hit["total"]
 
             msg = build_alert_message(
                 cli=cli,
@@ -464,26 +543,33 @@ def process_otp_alerts(df: pd.DataFrame, *, force: bool = False) -> list[dict[st
             msg_hash = hashlib.sha256(msg.encode("utf-8")).hexdigest()
             state = _get_cooldown_state()
             last_hash = state.get("last_hash", "")
-            last_sent = state.get("last_sent", 0)
+            last_sent = float(state.get("last_sent", 0) or 0)
 
             if msg_hash == last_hash and (now_ts - last_sent) < 30:
                 continue
 
             meta = {"cli": cli, "panel": hit["panel"], "total": hit["total"], "country": hit["main_country"]}
 
-            _arm_global_cooldown(300, now_ts, cli, msg_hash)
+            # Arm cooldown before send to prevent double-fire on fast reruns
+            _arm_global_cooldown(cooldown_sec, now_ts, cli, msg_hash)
             send_whatsapp_alert_async(msg, meta=meta)
 
             fired.append({**meta, "message": msg})
             log_event("wa_alert_triggered", "OTP traffic", **meta)
 
             try:
-                st.toast(f"🚨 WA alert · {cli} · {hit['total']} OTPs | Next in 5min", icon="📱")
+                st.toast(
+                    f"🚨 WA alert · {cli} · {hit['total']} OTPs | Next in {cfg['cooldown_min']}min",
+                    icon="📱",
+                )
             except Exception:
                 pass
 
         if fired:
-            st.session_state["wa_last_fired"] = fired
+            try:
+                st.session_state["wa_last_fired"] = fired
+            except Exception:
+                pass
         return fired
 
     finally:
