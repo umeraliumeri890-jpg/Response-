@@ -4,7 +4,7 @@ name: OTP WhatsApp Alert Worker
 
 on:
   schedule:
-    # Every 5 minutes (GitHub may drift a few minutes on free tier — still fine with 5-min window)
+    # Every 5 minutes (GitHub free tier often drifts to ~10–15 min — still OK)
     - cron: "*/5 * * * *"
   workflow_dispatch:
     inputs:
@@ -44,12 +44,19 @@ jobs:
         uses: actions/cache@v4
         with:
           path: data/alert_state.json
-          key: alert-state-${{ github.run_id }}
+          # Stable key so cooldown survives across scheduled runs
+          key: alert-state-v1
           restore-keys: |
             alert-state-
 
       - name: Ensure data dir
-        run: mkdir -p data && test -f data/alert_state.json || echo '{"cooldown_until":0,"last_cli":"","last_hash":"","last_sent":0,"history":[]}' > data/alert_state.json
+        run: |
+          mkdir -p data
+          if [ ! -f data/alert_state.json ]; then
+            echo '{"cooldown_until":0,"last_cli":"","last_hash":"","last_sent":0,"history":[]}' > data/alert_state.json
+          fi
+          echo "Current alert state:"
+          cat data/alert_state.json || true
 
       - name: Run OTP alert worker
         env:
@@ -80,7 +87,10 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.force }}" = "true" ]; then
             FORCE_FLAG="--force"
           fi
+          echo "event=${{ github.event_name }} force_flag=${FORCE_FLAG:-none}"
           python alert_worker.py $FORCE_FLAG
+          echo "State after run:"
+          cat data/alert_state.json || true
 
       - name: Upload alert state artifact
         if: always()
