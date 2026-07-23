@@ -16,7 +16,6 @@ APP_NAME = "UTS HUNTERS ENTERPRISE"
 APP_VERSION = "2.0.0"
 ADMIN_OPERATOR = "Umer Ali"
 
-# Defaults used only when secrets are missing (local dev / demo).
 _DEFAULTS: dict[str, Any] = {
     "LAMIX_URL": "http://51.77.216.195/crapi/lamix/viewstats",
     "LAMIX_TOKEN": "",
@@ -24,26 +23,24 @@ _DEFAULTS: dict[str, Any] = {
     "PURPLE_TOKEN": "",
     "REGISTRY_URL": "",
     "ADMIN_KEY": "",
-    "SESSION_TIMEOUT_MIN": 60,
+    "SESSION_TIMEOUT_MIN": 1440,  # 24 hours
     "API_TIMEOUT": 12,
     "API_RETRIES": 2,
     "LAMIX_RECORDS": 400,
     "PURPLE_RECORDS": 2000,
     "PURPLE_LOOKBACK_DAYS": 30,
-    # WhatsApp alert engine (optional)
     "WHATSAPP_ALERTS_ENABLED": True,
-    "WHATSAPP_THRESHOLD": 50,
+    "WHATSAPP_THRESHOLD": 1,
     "WHATSAPP_WINDOW_MIN": 5,
     "WHATSAPP_COOLDOWN_MIN": 5,
-    "WHATSAPP_PROVIDER": "log",  # log | greenapi | callmebot | webhook | meta | twilio
+    "WHATSAPP_PROVIDER": "greenapi",
     "WHATSAPP_WEBHOOK_URL": "",
     "CALLMEBOT_PHONE": "",
     "CALLMEBOT_APIKEY": "",
-    # GREEN-API (personal WhatsApp → group) https://console.green-api.com/
     "GREENAPI_ID_INSTANCE": "",
     "GREENAPI_API_TOKEN": "",
     "GREENAPI_API_URL": "https://api.green-api.com",
-    "GREENAPI_GROUP_ID": "",  # e.g. 1203630xxxxxxxxx@g.us
+    "GREENAPI_GROUP_ID": "",
     "META_WA_TOKEN": "",
     "META_WA_PHONE_ID": "",
     "META_WA_TO": "",
@@ -165,13 +162,11 @@ def _secret(key: str, default: Any = None) -> Any:
     try:
         if key in st.secrets:
             return st.secrets[key]
-        # nested [api] style
-        for section in ("api", "auth", "app"):
+        for section in ("api", "auth", "app", "whatsapp"):
             try:
                 sec = st.secrets[section]
                 if key in sec:
                     return sec[key]
-                # case variants
                 low = key.lower()
                 if low in sec:
                     return sec[low]
@@ -185,7 +180,6 @@ def _secret(key: str, default: Any = None) -> Any:
 
 
 def get_settings() -> dict[str, Any]:
-    """Resolve runtime settings from secrets with safe defaults."""
     return {
         "lamix_url": str(_secret("LAMIX_URL", _DEFAULTS["LAMIX_URL"])),
         "lamix_token": str(_secret("LAMIX_TOKEN", _DEFAULTS["LAMIX_TOKEN"])),
@@ -200,7 +194,6 @@ def get_settings() -> dict[str, Any]:
         "purple_records": int(_secret("PURPLE_RECORDS", _DEFAULTS["PURPLE_RECORDS"])),
         "purple_lookback_days": int(_secret("PURPLE_LOOKBACK_DAYS", _DEFAULTS["PURPLE_LOOKBACK_DAYS"])),
         "team_file": str(_secret("TEAM_FILE", str(TEAM_FILE))),
-        # WhatsApp OTP alert engine
         "whatsapp_alerts_enabled": bool(_secret("WHATSAPP_ALERTS_ENABLED", _DEFAULTS["WHATSAPP_ALERTS_ENABLED"])),
         "whatsapp_threshold": int(_secret("WHATSAPP_THRESHOLD", _DEFAULTS["WHATSAPP_THRESHOLD"])),
         "whatsapp_window_min": int(_secret("WHATSAPP_WINDOW_MIN", _DEFAULTS["WHATSAPP_WINDOW_MIN"])),
