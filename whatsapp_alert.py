@@ -7,7 +7,7 @@ Trigger (per CLI):
   - rolling 5-minute window
   - ANY OTP activity (no threshold)
   - ONLY TOP 1 CLI
-  - one alert, then cooldown 5 minutes
+  - PERSISTENT cooldown - survives app restart
 
 Message templates:
   - strip OTP digits (4–8) → ******
@@ -38,7 +38,7 @@ from config import get_settings
 from utils import log_event
 
 # ---------------------------------------------------------------------------
-# Persistent state file
+# Persistent state file - COOLDOWN + DUPLICATE DETECTION
 # ---------------------------------------------------------------------------
 ALERT_STATE_FILE = "alert_state.json"
 
@@ -47,7 +47,7 @@ def _load_alert_state() -> dict[str, Any]:
     default_state = {
         "last_hash": "",
         "last_sent": 0,
-        "cooldowns": {}
+        "cooldowns": {}  # CLI -> expiry_timestamp
     }
     if os.path.exists(ALERT_STATE_FILE):
         try:
@@ -373,23 +373,33 @@ def send_whatsapp_alert_async(message: str, meta: dict[str, Any] | None = None) 
     threading.Thread(target=_run, name="wa-alert", daemon=True).start()
 
 
+# ---------------------------------------------------------------------------
+# Cooldown state - PERSISTENT (survives app restart)
+# ---------------------------------------------------------------------------
 def _cooldown_map() -> dict[str, float]:
-    persistent = _alert_state.get("cooldowns", {})
-    session_cooldowns = st.session_state.setdefault("wa_cli_cooldown_until", {})
-    return {**persistent, **session_cooldowns}
+    """Cooldown map from persistent file."""
+    return _alert_state.setdefault("cooldowns", {})
 
 
 def _is_cooling(cli: str, now_ts: float) -> bool:
+    """Check if CLI is in cooldown."""
     cooldowns = _cooldown_map()
     until = float(cooldowns.get(cli, 0) or 0)
     return now_ts < until
 
 
 def _arm_cooldown(cli: str, seconds: float, now_ts: float) -> None:
+    """Arm cooldown - persists in file."""
     expiry = now_ts + seconds
-    st.session_state.setdefault("wa_cli_cooldown_until", {})[cli] = expiry
     _alert_state.setdefault("cooldowns", {})[cli] = expiry
     _save_alert_state(_alert_state)
+
+
+def _clear_cooldown(cli: str) -> None:
+    """Clear cooldown for a CLI (for testing)."""
+    if cli in _alert_state.get("cooldowns", {}):
+        del _alert_state["cooldowns"][cli]
+        _save_alert_state(_alert_state)
 
 
 def _alert_config() -> dict[str, Any]:
@@ -462,7 +472,7 @@ def process_otp_alerts(df: pd.DataFrame, *, force: bool = False) -> list[dict[st
     """
     Run one evaluation tick against the live merged frame.
     Sends alerts EVERY 5 MINUTES for TOP 1 CLI with ANY OTP activity.
-    No threshold - any OTP triggers alert.
+    Cooldown is PERSISTENT - survives app restart.
     """
     if not _ALERT_PROCESS_LOCK.acquire(blocking=False):
         return []
@@ -497,7 +507,9 @@ def process_otp_alerts(df: pd.DataFrame, *, force: bool = False) -> list[dict[st
             # Fixed 5 minute cooldown
             cooldown_sec = 300
 
+            # Check persistent cooldown
             if _is_cooling(cli, now_ts):
+                log_event("wa_alert_skipped", "cooldown active", cli=cli, remaining=f"{_cooldown_map().get(cli, 0) - now_ts:.0f}s")
                 continue
 
             msg = build_alert_message(
@@ -513,13 +525,17 @@ def process_otp_alerts(df: pd.DataFrame, *, force: bool = False) -> list[dict[st
             last_hash = _alert_state.get("last_hash", "")
             last_sent = _alert_state.get("last_sent", 0)
 
+            # Duplicate check - same message within 30 seconds
             if msg_hash == last_hash and (now_ts - last_sent) < 30:
                 log_event("wa_alert_skipped", "duplicate message", cli=cli, hash=msg_hash[:8])
                 continue
 
             meta = {"cli": cli, "panel": hit["panel"], "total": hit["total"], "country": hit["main_country"]}
 
+            # Arm persistent cooldown
             _arm_cooldown(cli, cooldown_sec, now_ts)
+            
+            # Save last hash/sent for duplicate detection
             _alert_state["last_hash"] = msg_hash
             _alert_state["last_sent"] = now_ts
             _save_alert_state(_alert_state)
@@ -530,7 +546,7 @@ def process_otp_alerts(df: pd.DataFrame, *, force: bool = False) -> list[dict[st
             log_event("wa_alert_triggered", "OTP traffic", **meta)
 
             try:
-                st.toast(f"🚨 WA alert · {cli} · {hit['total']} OTPs (TOP 1)", icon="📱")
+                st.toast(f"🚨 WA alert · {cli} · {hit['total']} OTPs (TOP 1) | Next in 5min", icon="📱")
             except Exception:
                 pass
 
