@@ -189,7 +189,9 @@ def main() -> None:
     except Exception:
         pass
 
-    # Smart WhatsApp OTP Alert Engine — uses already-merged df only (non-blocking)
+    # In-session WhatsApp OTP alerts (only while a real browser tab is open).
+    # 24/7 delivery is handled by alert_worker.py via GitHub Actions —
+    # HTTP keep-alive pings never execute this block.
     if process_otp_alerts is not None:
         try:
             process_otp_alerts(df)
