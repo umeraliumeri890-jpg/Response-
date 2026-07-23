@@ -9,19 +9,5 @@ jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Install requests
-        run: pip install requests
-        
       - name: Ping App
-        run: |
-          python -c "
-import requests
-import time
-print('⏰ Pinging app...')
-url = 'https://leveluts.streamlit.app/?auto_login=true&code=UTS-ADMIN001'
-try:
-    response = requests.get(url, timeout=30, allow_redirects=True, max_redirects=10)
-    print(f'✅ Status: {response.status_code}')
-except Exception as e:
-    print(f'❌ Error: {e}')
-"
+        run: curl -s -o /dev/null https://leveluts.streamlit.app/
