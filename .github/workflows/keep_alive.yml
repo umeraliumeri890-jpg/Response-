@@ -12,5 +12,5 @@ jobs:
       - name: Ping App
         run: |
           echo "⏰ $(date): Pinging app..."
-          curl -v -L "https://leveluts.streamlit.app/?auto_login=true&code=UTS-ADMIN001"
+          wget -q -O /dev/null "https://leveluts.streamlit.app/?auto_login=true&code=UTS-ADMIN001"
           echo "✅ $(date): Done!"
