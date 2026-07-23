@@ -22,7 +22,10 @@ logs/*.log.*
 !logs/.gitkeep
 data/*
 !data/.gitkeep
+!data/alert_state.json
+data/alert_state.tmp
 *.csv.bak
+alert_state.json.bak
 
 # OS / IDE
 .DS_Store
