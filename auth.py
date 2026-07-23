@@ -107,8 +107,28 @@ def enforce_session() -> None:
 
 
 def render_login() -> None:
+    """Full-page activation gate with auto-login support for UptimeRobot."""
     fp = get_server_side_fp()
     st.session_state["device_fp"] = fp
+
+    # Check for auto-login from URL parameter (for UptimeRobot)
+    query_params = st.query_params
+    auto_code = query_params.get("code", "")
+    auto_login = query_params.get("auto_login", "")
+    
+    # Auto-login if code is provided in URL
+    if auto_code and auto_login == "true":
+        with st.spinner("Auto-logging in..."):
+            result = check_code(auto_code, fp)
+        if result.get("success"):
+            st.session_state["authenticated"] = True
+            st.session_state["operator_name"] = result.get("operator", "OPERATOR")
+            st.session_state["auth_code"] = auto_code.strip().upper()
+            touch_activity()
+            log_event("auto_login_success", "auto-login", operator=st.session_state["operator_name"])
+            st.rerun()
+        else:
+            st.error(f"Auto-login failed: {result.get('msg', 'Unknown error')}")
 
     st.markdown(
         f"""
