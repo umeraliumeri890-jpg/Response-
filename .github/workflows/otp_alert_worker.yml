@@ -1,10 +1,10 @@
-# Headless OTP → WhatsApp alert worker (does NOT depend on Streamlit browser sessions).
-# This is the real 24/7 engine. Keep-alive pings alone cannot run Streamlit script logic.
+# Headless OTP → WhatsApp alert worker (no Streamlit / no browser).
+# Real 24/7 engine. HTTP keep-alive pings cannot run Streamlit alert logic.
 name: OTP WhatsApp Alert Worker
 
 on:
   schedule:
-    # Every 5 minutes (GitHub free tier often drifts to ~10–15 min — still OK)
+    # GitHub free tier often delays cron (sometimes 5–30+ min). Still OK.
     - cron: "*/5 * * * *"
   workflow_dispatch:
     inputs:
@@ -16,6 +16,10 @@ on:
         options:
           - "false"
           - "true"
+  # Free external cron (cron-job.org) can POST repository_dispatch every 5 min
+  # if GitHub schedule is slow/unreliable. See ALERTS_24x7.md
+  repository_dispatch:
+    types: [otp_alert_tick]
 
 concurrency:
   group: otp-alert-worker
@@ -40,12 +44,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install "pandas>=2.1.0" "requests>=2.31.0" "phonenumbers>=8.13.0" "urllib3>=2.0.0"
 
-      - name: Restore alert state cache
-        uses: actions/cache@v4
+      # IMPORTANT: restore + save with UNIQUE key each run.
+      # Fixed key never updates cache after first hit → stuck cooldown / stale state.
+      - name: Restore alert state
+        uses: actions/cache/restore@v4
         with:
           path: data/alert_state.json
-          # Stable key so cooldown survives across scheduled runs
-          key: alert-state-v1
+          key: alert-state-${{ github.run_id }}
           restore-keys: |
             alert-state-
 
@@ -55,8 +60,8 @@ jobs:
           if [ ! -f data/alert_state.json ]; then
             echo '{"cooldown_until":0,"last_cli":"","last_hash":"","last_sent":0,"history":[]}' > data/alert_state.json
           fi
-          echo "Current alert state:"
-          cat data/alert_state.json || true
+          echo "=== alert state BEFORE ==="
+          cat data/alert_state.json
 
       - name: Run OTP alert worker
         env:
@@ -84,13 +89,24 @@ jobs:
           CALLMEBOT_APIKEY: ${{ secrets.CALLMEBOT_APIKEY }}
         run: |
           FORCE_FLAG=""
+          # Manual force OR repository_dispatch client_payload.force
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.force }}" = "true" ]; then
+            FORCE_FLAG="--force"
+          fi
+          if [ "${{ github.event_name }}" = "repository_dispatch" ] && [ "${{ github.event.client_payload.force }}" = "true" ]; then
             FORCE_FLAG="--force"
           fi
           echo "event=${{ github.event_name }} force_flag=${FORCE_FLAG:-none}"
           python alert_worker.py $FORCE_FLAG
-          echo "State after run:"
-          cat data/alert_state.json || true
+          echo "=== alert state AFTER ==="
+          cat data/alert_state.json
+
+      - name: Save alert state
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: data/alert_state.json
+          key: alert-state-${{ github.run_id }}
 
       - name: Upload alert state artifact
         if: always()
