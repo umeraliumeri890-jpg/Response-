@@ -558,9 +558,7 @@ def build_alert_message(
             lines.append(f"{flag(name)} {name} : {cnt}")
     else:
         lines.append("🌍 Unknown : 0")
-    lines.append("")
-    lines.extend(format_app_links_block(app))
-    lines.extend(["━━━━━━━━━━━━━━━━━━", "", "Status:", "LIVE · background worker + app intel"])
+    lines.extend(["", "━━━━━━━━━━━━━━━━━━", "", "Status:", "LIVE · background worker"])
     return "\n".join(lines)
 
 
@@ -613,14 +611,6 @@ def build_top_n_alert_message(hits: list[dict[str, Any]], *, top_n: int = 3) -> 
             for name, cnt in countries[:5]:
                 lines.append(f"   {flag(str(name))} {name} : {cnt}")
             lines.append("")
-        # compact links
-        if app.get("google"):
-            lines.append(f"🔍 Google: {app['google']}")
-        if app.get("play"):
-            lines.append(f"▶ Play  : {app['play']}")
-        if app.get("web"):
-            lines.append(f"🌐 Web   : {app['web']}")
-        lines.append("")
 
     lines.extend(
         [
