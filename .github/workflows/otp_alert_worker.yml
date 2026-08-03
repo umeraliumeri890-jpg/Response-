@@ -16,8 +16,8 @@ on:
         options:
           - "false"
           - "true"
-  # Free external cron (cron-job.org) can POST repository_dispatch every 5 min
-  # if GitHub schedule is slow/unreliable. See ALERTS_24x7.md
+  # External cron (cron-job.org) — set to EVERY 1 MINUTE for 1-min sending cadence.
+  # GitHub native schedule cannot run every 1 minute (min ~5). Use cron-job.org.
   repository_dispatch:
     types: [otp_alert_tick]
 
@@ -79,6 +79,8 @@ jobs:
           WHATSAPP_THRESHOLD: ${{ secrets.WHATSAPP_THRESHOLD }}
           WHATSAPP_WINDOW_MIN: ${{ secrets.WHATSAPP_WINDOW_MIN }}
           WHATSAPP_COOLDOWN_MIN: ${{ secrets.WHATSAPP_COOLDOWN_MIN }}
+          WHATSAPP_MAX_ALERTS_PER_RUN: ${{ secrets.WHATSAPP_MAX_ALERTS_PER_RUN }}
+          WHATSAPP_TOP_N: ${{ secrets.WHATSAPP_TOP_N }}
           WHATSAPP_PROVIDER: ${{ secrets.WHATSAPP_PROVIDER }}
           WHATSAPP_WEBHOOK_URL: ${{ secrets.WHATSAPP_WEBHOOK_URL }}
           GREENAPI_ID_INSTANCE: ${{ secrets.GREENAPI_ID_INSTANCE }}
