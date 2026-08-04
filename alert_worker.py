@@ -111,21 +111,6 @@ _FLAGS: dict[str, str] = {
     "Netherlands": "🇳🇱",
     "Brazil": "🇧🇷",
     "Mexico": "🇲🇽",
-    "Algeria": "🇩🇿",
-    "Tanzania": "🇹🇿",
-    "Kenya": "🇰🇪",
-    "Morocco": "🇲🇦",
-    "Ghana": "🇬🇭",
-    "Iraq": "🇮🇶",
-    "Iran": "🇮🇷",
-    "Jordan": "🇯🇴",
-    "Lebanon": "🇱🇧",
-    "Sri Lanka": "🇱🇰",
-    "Nepal": "🇳🇵",
-    "Myanmar": "🇲🇲",
-    "Cambodia": "🇰🇭",
-    "Laos": "🇱🇦",
-    "Brunei": "🇧🇳",
 }
 
 
@@ -337,7 +322,6 @@ def save_state(state: dict[str, Any]) -> None:
 
 
 def unique_templates(messages: pd.Series, limit: int = 8) -> list[str]:
-    """Keep FULL template text (no 160-char cut). OTP digits → {OTP}."""
     import re
 
     otp_re = re.compile(r"(?<!\d)\d{4,8}(?!\d)")
@@ -349,8 +333,7 @@ def unique_templates(messages: pd.Series, limit: int = 8) -> list[str]:
         if not t or t in seen:
             continue
         seen.add(t)
-        # Full message body — only hard-cap extreme spam SMS lengths
-        out.append(t if len(t) <= 500 else (t[:497] + "..."))
+        out.append(t[:160])
         if len(out) >= limit:
             break
     return out
@@ -379,9 +362,6 @@ def circled(n: int) -> str:
 _APP_CATALOG: list[dict[str, str]] = [
     # key words matched against CLI + message (case-insensitive)
     {"name": "Bumble", "keys": "bumble", "web": "https://bumble.com", "play": "https://play.google.com/store/apps/details?id=com.bumble.app", "ios": "https://apps.apple.com/app/bumble-dating-friends-bizz/id930441707", "google": "https://www.google.com/search?q=Bumble+app"},
-    {"name": "Cobee by Pluxee", "keys": "cobee,pluxee", "web": "https://www.pluxee.com", "play": "https://play.google.com/store/search?q=Cobee%20Pluxee&c=apps", "ios": "https://www.google.com/search?q=Cobee+by+Pluxee+app", "google": "https://www.google.com/search?q=Cobee+by+Pluxee"},
-    {"name": "Talabat", "keys": "talabat", "web": "https://www.talabat.com", "play": "https://play.google.com/store/search?q=talabat&c=apps", "ios": "https://www.google.com/search?q=Talabat+app", "google": "https://www.google.com/search?q=Talabat+app"},
-    {"name": "Rakuten", "keys": "rakuten", "web": "https://www.rakuten.com", "play": "https://play.google.com/store/search?q=rakuten&c=apps", "ios": "https://www.google.com/search?q=Rakuten+app", "google": "https://www.google.com/search?q=Rakuten+app"},
     {"name": "Tinder", "keys": "tinder", "web": "https://tinder.com", "play": "https://play.google.com/store/apps/details?id=com.tinder", "ios": "https://apps.apple.com/app/tinder-dating-app-meet-people/id547702041", "google": "https://www.google.com/search?q=Tinder+app"},
     {"name": "Hinge", "keys": "hinge", "web": "https://hinge.co", "play": "https://play.google.com/store/apps/details?id=co.hinge.app", "ios": "https://apps.apple.com/app/hinge-dating-app-matches/id595287172", "google": "https://www.google.com/search?q=Hinge+app"},
     {"name": "WhatsApp", "keys": "whatsapp,wa code,whats app", "web": "https://www.whatsapp.com", "play": "https://play.google.com/store/apps/details?id=com.whatsapp", "ios": "https://apps.apple.com/app/whatsapp-messenger/id310633997", "google": "https://www.google.com/search?q=WhatsApp"},
@@ -582,178 +562,65 @@ def build_alert_message(
     return "\n".join(lines)
 
 
-def _bar(count: int, total: int, width: int = 10) -> str:
-    total = max(1, int(total or 1))
-    count = max(0, int(count or 0))
-    filled = int(round((count / total) * width))
-    filled = max(0, min(width, filled))
-    return ("█" * filled) + ("░" * (width - filled))
-
-
-def _rank_badge(idx: int) -> str:
-    return {1: "🥇", 2: "🥈", 3: "🥉"}.get(int(idx), "🔹")
-
-
-def _rank_label(idx: int) -> str:
-    return {1: "DOMINANT", 2: "ACTIVE", 3: "STABLE"}.get(int(idx), "LIVE")
-
-
-def _clip(text: str, n: int) -> str:
-    s = " ".join(str(text or "").split())
-    if len(s) <= n:
-        return s
-    return s[: max(0, n - 1)] + "…"
-
-
-def _wrap_text(text: str, width: int) -> list[str]:
-    """Word-wrap full template text (no mid-word cut when possible)."""
-    s = " ".join(str(text or "").replace("\n", " ").split())
-    if not s:
-        return ["(no message body)"]
-    width = max(8, int(width))
-    words = s.split(" ")
-    rows: list[str] = []
-    cur = ""
-    for w in words:
-        trial = w if not cur else f"{cur} {w}"
-        if len(trial) <= width:
-            cur = trial
-            continue
-        if cur:
-            rows.append(cur)
-        # hard-split very long tokens
-        while len(w) > width:
-            rows.append(w[:width])
-            w = w[width:]
-        cur = w
-    if cur:
-        rows.append(cur)
-    return rows or ["(no message body)"]
-
-
-def _box_lines(lines_in: list[str], width: int = 34) -> list[str]:
-    """Pad/clip each content line into a fixed box row."""
-    inner = width
-    out: list[str] = []
-    for row in lines_in:
-        r = str(row)
-        if len(r) > inner:
-            r = r[: inner - 1] + "…"
-        out.append("║" + r + (" " * (inner - len(r))) + "║")
-    return out
-
-
-def _box(title: str, rows: list[str], width: int = 34) -> list[str]:
-    """Fixed-width box for WhatsApp monospace block."""
-    inner = width
-    title = _clip(title, inner - 2)
-    pad_left = max(0, (inner - len(title)) // 2)
-    pad_right = max(0, inner - len(title) - pad_left)
-    top = "╔" + ("═" * inner) + "╗"
-    mid = "╠" + ("═" * inner) + "╣"
-    bot = "╚" + ("═" * inner) + "╝"
-    title_line = "║" + (" " * pad_left) + title + (" " * pad_right) + "║"
-    out = [top, title_line, mid]
-    out.extend(_box_lines(rows, width=inner))
-    out.append(bot)
-    return out
-
-
 def build_top_n_alert_message(hits: list[dict[str, Any]], *, top_n: int = 3) -> str:
-    """WhatsApp-native premium layout with FULL message templates.
-
-    Structured cards are wrapped in a monospace ``` block so boxes stay aligned.
-    Templates are word-wrapped across multiple lines (not truncated).
-    """
+    """One WhatsApp message with TOP N apps/CLIs (not only top 1)."""
     top_n = max(1, min(10, int(top_n or 3)))
     selected = list(hits[:top_n])
+    time_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     grand_total = sum(int(h.get("total") or 0) for h in selected)
-    w = 34
-    # usable width inside box for template text after "  1. " prefix
-    tmpl_width = w - 5
 
-    header = [
-        "*UTS HUNTERS*",
-        "*OTP ALERT · LIVE FEED*",
+    lines = [
+        "🚨 UTS HUNTERS · OTP ALERT",
         "",
-        "⚡ *STATUS:* ACTIVE",
-        "⏱ *WINDOW:* 1-MIN",
-        f"📊 *TOTAL OTPs:* {grand_total}",
-        f"🏆 *TOP {len(selected)} GLOBAL RANKINGS*",
+        "━━━━━━━━━━━━━━━━━━",
+        "",
+        f"🏆 TOP {len(selected)} APPS (live window)",
+        f"📊 Combined OTPs : {grand_total}",
+        f"⏰ Time  : {time_str}",
         "",
     ]
 
-    mono: list[str] = []
     for idx, hit in enumerate(selected, 1):
         cli = str(hit.get("cli") or "UNKNOWN")
-        templates = [str(t) for t in (hit.get("templates") or []) if str(t).strip()]
+        templates = hit.get("templates") or []
         app = detect_app_brand(cli=cli, templates=templates)
-        app_name = str(app.get("name") or cli)
         countries = hit.get("countries") or []
-        total = int(hit.get("total") or 0)
-        panel = str(hit.get("panel") or "MIXED").upper()
-        if idx == 1 and panel not in {"", "MIXED"}:
-            panel_txt = f"{panel} · HIGH"
-        else:
-            panel_txt = panel
-        main_country = str(hit.get("main_country") or (countries[0][0] if countries else "Unknown"))
-        main_flag = flag(main_country)
-        main_share = 0
-        if countries and total > 0:
-            try:
-                main_share = int(round((int(countries[0][1]) / total) * 100))
-            except Exception:
-                main_share = 0
-
-        rows: list[str] = [
-            f" CLIENT : {_clip(cli, 24)}",
-            f" APP    : {_clip(app_name, 24)}",
-            f" PANEL  : {_clip(panel_txt, 24)}",
-            f" VOLUME : {total} OTPs",
-            f" REGION : {_clip(f'{main_flag} {main_country.upper()}' + (f' {main_share}%' if main_share else ''), 24)}",
-            " " + ("─" * (w - 2)),
-            f" TEMPLATES ({min(len(templates), 6)} FULL)",
-        ]
-
+        main_country = hit.get("main_country") or (countries[0][0] if countries else "Unknown")
+        lines.extend(
+            [
+                "━━━━━━━━━━━━━━━━━━",
+                "",
+                f"{circled(idx)} RANK {idx}",
+                f"📱 CLI   : {cli}",
+                f"🏷 App   : {app.get('name') or cli}",
+                f"🔌 Panel : {hit.get('panel') or 'MIXED'}",
+                f"📊 Count : {hit.get('total') or 0} OTP(s)",
+                f"🌍 Main  : {flag(str(main_country))} {main_country}",
+                "",
+                "📝 Templates",
+            ]
+        )
         if templates:
-            # Show up to 6 templates, each fully wrapped (no cut-off)
-            for t_i, tmpl in enumerate(templates[:6], 1):
-                wrapped = _wrap_text(tmpl, tmpl_width)
-                # first line with number, continuation indented
-                rows.append(f"  {t_i}. {wrapped[0]}")
-                for cont in wrapped[1:]:
-                    rows.append(f"     {cont}")
-                if t_i != min(len(templates), 6):
-                    rows.append("  " + ("·" * min(12, tmpl_width)))
+            for t_i, tmpl in enumerate(templates[:4], 1):
+                lines.append(f"   {t_i}. {tmpl}")
         else:
-            rows.append("  1. (no message body)")
-
+            lines.append("   1. (no message body)")
+        lines.append("")
         if countries:
-            rows.append(" " + ("─" * (w - 2)))
-            rows.append(" GEO-SPLIT")
+            lines.append("🌍 Countries")
             for name, cnt in countries[:5]:
-                nm = str(name)
-                c = int(cnt)
-                rows.append(f"  {flag(nm)} {_clip(nm, 10):<10} {_bar(c, total, 8)} {c}")
+                lines.append(f"   {flag(str(name))} {name} : {cnt}")
+            lines.append("")
 
-        title = f"{_rank_badge(idx)} RANK #{idx} · {_rank_label(idx)}"
-        mono.extend(_box(title, rows, width=w))
-        if idx != len(selected):
-            mono.append("")
-
-    footer = [
-        "",
-        "━━━━━━━━━━━━━━━━━━━━",
-        "*UTS-HQ · LIVE MONITOR*",
-        "© 2026 UTS HUNTERS",
-        "",
-        "═ *POWERED BY UMER ALI* ═",
-    ]
-
-    body = "\n".join(header)
-    body += "\n```\n" + "\n".join(mono) + "\n```\n"
-    body += "\n".join(footer)
-    return body
+    lines.extend(
+        [
+            "━━━━━━━━━━━━━━━━━━",
+            "",
+            "Status:",
+            f"LIVE · TOP {len(selected)} · 1-min worker",
+        ]
+    )
+    return "\n".join(lines)
 
 
 def evaluate_cli_windows(df: pd.DataFrame, *, window_min: int, threshold: int) -> list[dict[str, Any]]:
