@@ -337,6 +337,7 @@ def save_state(state: dict[str, Any]) -> None:
 
 
 def unique_templates(messages: pd.Series, limit: int = 8) -> list[str]:
+    """Keep FULL template text (no 160-char cut). OTP digits → {OTP}."""
     import re
 
     otp_re = re.compile(r"(?<!\d)\d{4,8}(?!\d)")
@@ -348,7 +349,8 @@ def unique_templates(messages: pd.Series, limit: int = 8) -> list[str]:
         if not t or t in seen:
             continue
         seen.add(t)
-        out.append(t[:160])
+        # Full message body — only hard-cap extreme spam SMS lengths
+        out.append(t if len(t) <= 500 else (t[:497] + "..."))
         if len(out) >= limit:
             break
     return out
@@ -603,8 +605,46 @@ def _clip(text: str, n: int) -> str:
     return s[: max(0, n - 1)] + "…"
 
 
+def _wrap_text(text: str, width: int) -> list[str]:
+    """Word-wrap full template text (no mid-word cut when possible)."""
+    s = " ".join(str(text or "").replace("\n", " ").split())
+    if not s:
+        return ["(no message body)"]
+    width = max(8, int(width))
+    words = s.split(" ")
+    rows: list[str] = []
+    cur = ""
+    for w in words:
+        trial = w if not cur else f"{cur} {w}"
+        if len(trial) <= width:
+            cur = trial
+            continue
+        if cur:
+            rows.append(cur)
+        # hard-split very long tokens
+        while len(w) > width:
+            rows.append(w[:width])
+            w = w[width:]
+        cur = w
+    if cur:
+        rows.append(cur)
+    return rows or ["(no message body)"]
+
+
+def _box_lines(lines_in: list[str], width: int = 34) -> list[str]:
+    """Pad/clip each content line into a fixed box row."""
+    inner = width
+    out: list[str] = []
+    for row in lines_in:
+        r = str(row)
+        if len(r) > inner:
+            r = r[: inner - 1] + "…"
+        out.append("║" + r + (" " * (inner - len(r))) + "║")
+    return out
+
+
 def _box(title: str, rows: list[str], width: int = 34) -> list[str]:
-    """Fixed-width box. Rendered inside WhatsApp ``` monospace so lines stay straight."""
+    """Fixed-width box for WhatsApp monospace block."""
     inner = width
     title = _clip(title, inner - 2)
     pad_left = max(0, (inner - len(title)) // 2)
@@ -614,35 +654,30 @@ def _box(title: str, rows: list[str], width: int = 34) -> list[str]:
     bot = "╚" + ("═" * inner) + "╝"
     title_line = "║" + (" " * pad_left) + title + (" " * pad_right) + "║"
     out = [top, title_line, mid]
-    for row in rows:
-        r = str(row)
-        # keep visual width simple (emoji may be wide on some devices)
-        if len(r) > inner:
-            r = r[: inner - 1] + "…"
-        out.append("║" + r + (" " * (inner - len(r))) + "║")
+    out.extend(_box_lines(rows, width=inner))
     out.append(bot)
     return out
 
 
 def build_top_n_alert_message(hits: list[dict[str, Any]], *, top_n: int = 3) -> str:
-    """WhatsApp-native premium layout.
+    """WhatsApp-native premium layout with FULL message templates.
 
-    Important: normal WhatsApp font breaks ASCII boxes.
-    Structured cards are wrapped in a monospace ``` block so full boxes
-    stay aligned on mobile.
+    Structured cards are wrapped in a monospace ``` block so boxes stay aligned.
+    Templates are word-wrapped across multiple lines (not truncated).
     """
     top_n = max(1, min(10, int(top_n or 3)))
     selected = list(hits[:top_n])
     grand_total = sum(int(h.get("total") or 0) for h in selected)
     w = 34
+    # usable width inside box for template text after "  1. " prefix
+    tmpl_width = w - 5
 
-    # Header uses WhatsApp rich text (outside monospace)
     header = [
         "*UTS HUNTERS*",
         "*OTP ALERT · LIVE FEED*",
         "",
-        f"⚡ *STATUS:* ACTIVE",
-        f"⏱ *WINDOW:* 1-MIN",
+        "⚡ *STATUS:* ACTIVE",
+        "⏱ *WINDOW:* 1-MIN",
         f"📊 *TOTAL OTPs:* {grand_total}",
         f"🏆 *TOP {len(selected)} GLOBAL RANKINGS*",
         "",
@@ -677,18 +712,26 @@ def build_top_n_alert_message(hits: list[dict[str, Any]], *, top_n: int = 3) -> 
             f" VOLUME : {total} OTPs",
             f" REGION : {_clip(f'{main_flag} {main_country.upper()}' + (f' {main_share}%' if main_share else ''), 24)}",
             " " + ("─" * (w - 2)),
-            f" TEMPLATES ({min(len(templates), 4)})",
+            f" TEMPLATES ({min(len(templates), 6)} FULL)",
         ]
+
         if templates:
-            for t_i, tmpl in enumerate(templates[:4], 1):
-                rows.append(f"  {t_i}. {_clip(tmpl, w - 5)}")
+            # Show up to 6 templates, each fully wrapped (no cut-off)
+            for t_i, tmpl in enumerate(templates[:6], 1):
+                wrapped = _wrap_text(tmpl, tmpl_width)
+                # first line with number, continuation indented
+                rows.append(f"  {t_i}. {wrapped[0]}")
+                for cont in wrapped[1:]:
+                    rows.append(f"     {cont}")
+                if t_i != min(len(templates), 6):
+                    rows.append("  " + ("·" * min(12, tmpl_width)))
         else:
             rows.append("  1. (no message body)")
 
         if countries:
             rows.append(" " + ("─" * (w - 2)))
             rows.append(" GEO-SPLIT")
-            for name, cnt in countries[:4]:
+            for name, cnt in countries[:5]:
                 nm = str(name)
                 c = int(cnt)
                 rows.append(f"  {flag(nm)} {_clip(nm, 10):<10} {_bar(c, total, 8)} {c}")
@@ -707,7 +750,6 @@ def build_top_n_alert_message(hits: list[dict[str, Any]], *, top_n: int = 3) -> 
         "═ *POWERED BY UMER ALI* ═",
     ]
 
-    # Monospace fence = full boxes look clean in WhatsApp
     body = "\n".join(header)
     body += "\n```\n" + "\n".join(mono) + "\n```\n"
     body += "\n".join(footer)
