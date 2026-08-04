@@ -111,6 +111,21 @@ _FLAGS: dict[str, str] = {
     "Netherlands": "🇳🇱",
     "Brazil": "🇧🇷",
     "Mexico": "🇲🇽",
+    "Algeria": "🇩🇿",
+    "Tanzania": "🇹🇿",
+    "Kenya": "🇰🇪",
+    "Morocco": "🇲🇦",
+    "Ghana": "🇬🇭",
+    "Iraq": "🇮🇶",
+    "Iran": "🇮🇷",
+    "Jordan": "🇯🇴",
+    "Lebanon": "🇱🇧",
+    "Sri Lanka": "🇱🇰",
+    "Nepal": "🇳🇵",
+    "Myanmar": "🇲🇲",
+    "Cambodia": "🇰🇭",
+    "Laos": "🇱🇦",
+    "Brunei": "🇧🇳",
 }
 
 
@@ -565,7 +580,7 @@ def build_alert_message(
     return "\n".join(lines)
 
 
-def _bar(count: int, total: int, width: int = 16) -> str:
+def _bar(count: int, total: int, width: int = 10) -> str:
     total = max(1, int(total or 1))
     count = max(0, int(count or 0))
     filled = int(round((count / total) * width))
@@ -581,59 +596,59 @@ def _rank_label(idx: int) -> str:
     return {1: "DOMINANT", 2: "ACTIVE", 3: "STABLE"}.get(int(idx), "LIVE")
 
 
-def _wrap_quote(text: str, width: int = 42) -> list[str]:
-    raw = " ".join(str(text or "").split())
-    if not raw:
-        return ['  "(no message body)"']
-    words = raw.split(" ")
-    rows: list[str] = []
-    cur = ""
-    for w in words:
-        trial = w if not cur else f"{cur} {w}"
-        if len(trial) <= width:
-            cur = trial
-        else:
-            if cur:
-                rows.append(cur)
-            cur = w
-    if cur:
-        rows.append(cur)
-    out: list[str] = []
-    for i, row in enumerate(rows):
-        if i == 0 and len(rows) == 1:
-            out.append(f'  "{row}"')
-        elif i == 0:
-            out.append(f'  "{row}')
-        elif i == len(rows) - 1:
-            out.append(f"  {row}\"")
-        else:
-            out.append(f"  {row}")
+def _clip(text: str, n: int) -> str:
+    s = " ".join(str(text or "").split())
+    if len(s) <= n:
+        return s
+    return s[: max(0, n - 1)] + "…"
+
+
+def _box(title: str, rows: list[str], width: int = 34) -> list[str]:
+    """Fixed-width box. Rendered inside WhatsApp ``` monospace so lines stay straight."""
+    inner = width
+    title = _clip(title, inner - 2)
+    pad_left = max(0, (inner - len(title)) // 2)
+    pad_right = max(0, inner - len(title) - pad_left)
+    top = "╔" + ("═" * inner) + "╗"
+    mid = "╠" + ("═" * inner) + "╣"
+    bot = "╚" + ("═" * inner) + "╝"
+    title_line = "║" + (" " * pad_left) + title + (" " * pad_right) + "║"
+    out = [top, title_line, mid]
+    for row in rows:
+        r = str(row)
+        # keep visual width simple (emoji may be wide on some devices)
+        if len(r) > inner:
+            r = r[: inner - 1] + "…"
+        out.append("║" + r + (" " * (inner - len(r))) + "║")
+    out.append(bot)
     return out
 
 
 def build_top_n_alert_message(hits: list[dict[str, Any]], *, top_n: int = 3) -> str:
-    """Premium UTS Hunters WhatsApp layout — TOP N, no links."""
+    """WhatsApp-native premium layout.
+
+    Important: normal WhatsApp font breaks ASCII boxes.
+    Structured cards are wrapped in a monospace ``` block so full boxes
+    stay aligned on mobile.
+    """
     top_n = max(1, min(10, int(top_n or 3)))
     selected = list(hits[:top_n])
     grand_total = sum(int(h.get("total") or 0) for h in selected)
+    w = 34
 
-    lines: list[str] = [
-        "◤━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━◥",
-        "                 UTS HUNTERS",
-        "                  OTP ALERT",
-        "            LIVE INTELLIGENCE FEED",
-        "◣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━◢",
+    # Header uses WhatsApp rich text (outside monospace)
+    header = [
+        "*UTS HUNTERS*",
+        "*OTP ALERT · LIVE FEED*",
         "",
-        "                  ⚡ STATUS: ACTIVE",
-        "              ⏱ WINDOW: 1-MIN REFRESH",
-        f"          📊 TOTAL OTPs HARVESTED: {grand_total}",
-        "",
-        "┌───────────────────────────────────────────┐",
-        f"│          🏆 TOP {len(selected)} GLOBAL RANKINGS         │",
-        "└───────────────────────────────────────────┘",
+        f"⚡ *STATUS:* ACTIVE",
+        f"⏱ *WINDOW:* 1-MIN",
+        f"📊 *TOTAL OTPs:* {grand_total}",
+        f"🏆 *TOP {len(selected)} GLOBAL RANKINGS*",
         "",
     ]
 
+    mono: list[str] = []
     for idx, hit in enumerate(selected, 1):
         cli = str(hit.get("cli") or "UNKNOWN")
         templates = [str(t) for t in (hit.get("templates") or []) if str(t).strip()]
@@ -643,7 +658,7 @@ def build_top_n_alert_message(hits: list[dict[str, Any]], *, top_n: int = 3) -> 
         total = int(hit.get("total") or 0)
         panel = str(hit.get("panel") or "MIXED").upper()
         if idx == 1 and panel not in {"", "MIXED"}:
-            panel_txt = f"{panel} (HIGH-PRIORITY)"
+            panel_txt = f"{panel} · HIGH"
         else:
             panel_txt = panel
         main_country = str(hit.get("main_country") or (countries[0][0] if countries else "Unknown"))
@@ -655,95 +670,48 @@ def build_top_n_alert_message(hits: list[dict[str, Any]], *, top_n: int = 3) -> 
             except Exception:
                 main_share = 0
 
-        if idx == 1:
-            lines.extend(
-                [
-                    f"  {_rank_badge(idx)} RANK #{idx} · {_rank_label(idx)}",
-                    "  ──────────────────────────────────────────",
-                    f"  📱  CLIENT     : {cli}",
-                    f"  🏷  APP        : {app_name}",
-                    f"  🔌  PANEL      : {panel_txt}",
-                    f"  📈  VOLUME     : {total} OTPs",
-                    f"  🌍  PRIMARY    : {main_flag} {main_country.upper()}"
-                    + (f" ({main_share}%)" if main_share else ""),
-                    "",
-                    "  📝  MESSAGE TEMPLATE",
-                    "  ──────────────────────────────────────────",
-                ]
-            )
-            if templates:
-                lines.extend(_wrap_quote(templates[0]))
-            else:
-                lines.append('  "(no message body)"')
-            lines.append("")
-            if countries:
-                lines.extend(
-                    [
-                        "  ──────────────────────────────────────────",
-                        "  ⚠️  REGIONAL TRAFFIC",
-                        "  ──────────────────────────────────────────",
-                    ]
-                )
-                for name, cnt in countries[:5]:
-                    nm = str(name)
-                    c = int(cnt)
-                    lines.append(f"  {flag(nm)} {nm:<14} {_bar(c, total)}  {c}")
-            lines.append("")
-        else:
-            lines.extend(
-                [
-                    "┌───────────────────────────────────────────┐",
-                    f"│              RANK #{idx} · {_rank_label(idx):<7}             │",
-                    "├───────────────────────────────────────────┤",
-                    f"│  📱  CLIENT     : {cli:<22}│",
-                    f"│  🏷  APP        : {app_name[:22]:<22}│",
-                    f"│  🔌  PANEL      : {panel_txt[:22]:<22}│",
-                    f"│  📈  VOLUME     : {str(total) + ' OTPs':<22}│",
-                    f"│  🌍  PRIMARY    : {(main_flag + ' ' + main_country.upper())[:22]:<22}│",
-                    "│                                           │",
-                    f"│  📝  TEMPLATES ({len(templates)} DETECTED)              │",
-                    "│  ──────────────────────────────────────── │",
-                ]
-            )
-            if templates:
-                for t_i, tmpl in enumerate(templates[:4], 1):
-                    t = str(tmpl).replace("\n", " ")
-                    if len(t) > 36:
-                        t = t[:33] + "..."
-                    lines.append(f"│  {t_i}. {t:<37}│")
-            else:
-                lines.append("│  1. (no message body)                     │")
-            lines.append("│                                           │")
-            if countries:
-                lines.extend(
-                    [
-                        "│  🌍  GEO-SPLIT                           │",
-                        "│  ──────────────────────────────────────── │",
-                    ]
-                )
-                for name, cnt in countries[:4]:
-                    nm = str(name)
-                    c = int(cnt)
-                    row = f"{flag(nm)} {nm:<12} {_bar(c, total, 14)}  {c}"
-                    if len(row) > 41:
-                        row = row[:41]
-                    lines.append(f"│  {row:<41}│")
-            lines.append("└───────────────────────────────────────────┘")
-            lines.append("")
-
-    lines.extend(
-        [
-            "◤━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━◥",
-            "            UTS-HQ · LIVE MONITOR",
-            "       © 2026 UTS HUNTERS · ALL RIGHTS",
-            "◣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━◢",
-            "",
-            "              ═══════════════════",
-            "              POWERED BY UMER ALI",
-            "              ═══════════════════",
+        rows: list[str] = [
+            f" CLIENT : {_clip(cli, 24)}",
+            f" APP    : {_clip(app_name, 24)}",
+            f" PANEL  : {_clip(panel_txt, 24)}",
+            f" VOLUME : {total} OTPs",
+            f" REGION : {_clip(f'{main_flag} {main_country.upper()}' + (f' {main_share}%' if main_share else ''), 24)}",
+            " " + ("─" * (w - 2)),
+            f" TEMPLATES ({min(len(templates), 4)})",
         ]
-    )
-    return "\n".join(lines)
+        if templates:
+            for t_i, tmpl in enumerate(templates[:4], 1):
+                rows.append(f"  {t_i}. {_clip(tmpl, w - 5)}")
+        else:
+            rows.append("  1. (no message body)")
+
+        if countries:
+            rows.append(" " + ("─" * (w - 2)))
+            rows.append(" GEO-SPLIT")
+            for name, cnt in countries[:4]:
+                nm = str(name)
+                c = int(cnt)
+                rows.append(f"  {flag(nm)} {_clip(nm, 10):<10} {_bar(c, total, 8)} {c}")
+
+        title = f"{_rank_badge(idx)} RANK #{idx} · {_rank_label(idx)}"
+        mono.extend(_box(title, rows, width=w))
+        if idx != len(selected):
+            mono.append("")
+
+    footer = [
+        "",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "*UTS-HQ · LIVE MONITOR*",
+        "© 2026 UTS HUNTERS",
+        "",
+        "═ *POWERED BY UMER ALI* ═",
+    ]
+
+    # Monospace fence = full boxes look clean in WhatsApp
+    body = "\n".join(header)
+    body += "\n```\n" + "\n".join(mono) + "\n```\n"
+    body += "\n".join(footer)
+    return body
 
 
 def evaluate_cli_windows(df: pd.DataFrame, *, window_min: int, threshold: int) -> list[dict[str, Any]]:
