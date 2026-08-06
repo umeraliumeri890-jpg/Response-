@@ -1,6 +1,6 @@
 # Headless OTP → WhatsApp alert worker (no Streamlit / no browser).
 # Real 24/7 engine. HTTP keep-alive pings cannot run Streamlit alert logic.
-name: OTP WhatsApp Alert Worker
+name: OTP WhatsApp Alert Worker V2
 
 on:
   workflow_dispatch:
