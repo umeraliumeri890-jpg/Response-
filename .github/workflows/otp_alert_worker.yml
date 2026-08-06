@@ -17,10 +17,6 @@ on:
   repository_dispatch:
     types: [otp_alert_tick]
 
-concurrency:
-  group: otp-alert-worker
-  cancel-in-progress: true
-
 jobs:
   alert:
     runs-on: ubuntu-latest
