@@ -22,7 +22,7 @@ on:
     types: [otp_alert_tick]
 
 concurrency:
-  group: otp-alert-worker
+  group: otp-alert-worker-${{ github.run_id }}
   cancel-in-progress: false
 
 jobs:
