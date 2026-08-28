@@ -59,13 +59,12 @@ def get_http_session() -> requests.Session:
 
 
 def _normalize_item(item: dict[str, Any], panel: str) -> dict[str, Any] | None:
-    # ✅ Updated field mapping for new Lamix API
-    dt_raw = item.get("time") or item.get("dt") or item.get("datetime") or item.get("date")
-    num = item.get("number") or item.get("num") or item.get("phone") or item.get("msisdn")
+    dt_raw = item.get("dt") or item.get("datetime") or item.get("time") or item.get("date")
+    num = item.get("num") or item.get("number") or item.get("phone") or item.get("msisdn")
     if num is None or dt_raw is None:
         return None
     cli = item.get("cli") or item.get("ident") or item.get("sender") or "UNKNOWN"
-    message = item.get("content") or item.get("message") or item.get("msg") or item.get("text") or ""
+    message = item.get("message") or item.get("msg") or item.get("text") or item.get("content") or ""
     return {
         "panel": panel,
         "dt_raw": dt_raw,
@@ -86,59 +85,45 @@ def fetch_lamix(session: requests.Session | None = None) -> tuple[list[dict], Ap
         health.status = "MISCONFIG"
         return [], health
 
-    # ✅ New API: Use Bearer token in header, not query param
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/json",
-    }
-    
-    # ✅ New API: Use `limit` instead of `records`, `from` for date range
-    params = {
-        "limit": min(settings["lamix_records"], 1000),  # Max 1000 per API
-    }
-    
-    # Optional: Add date filter for last 30 days
-    from_date = (datetime.now() - timedelta(days=settings.get("purple_lookback_days", 30))).strftime("%Y-%m-%dT00:00:00Z")
-    params["from"] = from_date
-
     t0 = time.perf_counter()
     try:
+        # New Lamix REST API: GET /api/v1/messages
+        # Auth: Authorization: Bearer <token>  (query ?token= also works)
+        # Params: limit (1-1000, default 10). Response: { "records": [...], "count": N }
+        limit = max(1, min(int(settings["lamix_records"]), 1000))
         r = sess.get(
             url,
-            params=params,
-            headers=headers,
+            params={"limit": limit},
+            headers={"Authorization": f"Bearer {token}"},
             timeout=settings["api_timeout"],
         )
         health.latency_ms = round((time.perf_counter() - t0) * 1000, 1)
         health.last_sync = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")
-        
         if r.status_code != 200:
-            health.error = f"HTTP {r.status_code}"
+            try:
+                err_body = r.json()
+                err_code = err_body.get("error") if isinstance(err_body, dict) else None
+            except Exception:
+                err_code = None
+            health.error = f"HTTP {r.status_code}" + (f" ({err_code})" if err_code else "")
             health.status = "DOWN"
             log_event("api_fail", health.error, api="LAMIX")
             return [], health
-            
         payload = r.json()
-        
-        # ✅ New API: Response has `records` array, not `data`
-        raw = payload.get("records", []) if isinstance(payload, dict) else payload
-        
-        # ✅ Handle case where response has `records` with `count`
-        if isinstance(raw, dict) and "records" in raw:
-            raw = raw.get("records", [])
-            
+        if isinstance(payload, dict):
+            raw = payload.get("records") or payload.get("data") or []
+        else:
+            raw = payload
         rows: list[dict] = []
         for item in raw or []:
             if isinstance(item, dict):
                 n = _normalize_item(item, "LAMIX")
                 if n:
                     rows.append(n)
-                    
         health.ok = True
         health.records = len(rows)
         health.status = "UP"
         return rows, health
-        
     except Exception as exc:
         health.latency_ms = round((time.perf_counter() - t0) * 1000, 1)
         health.error = str(exc)
