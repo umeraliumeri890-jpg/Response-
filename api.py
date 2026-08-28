@@ -168,7 +168,12 @@ def fetch_purple(session: requests.Session | None = None) -> tuple[list[dict], A
             return [], health
         payload = r.json()
         if isinstance(payload, dict):
-            raw = payload.get("data", [])
+            if str(payload.get("status", "")).lower().startswith("error"):
+                health.error = str(payload.get("description") or payload.get("status"))
+                health.status = "DOWN"
+                log_event("api_fail", health.error, api="PURPLE")
+                return [], health
+            raw = payload.get("data") or payload.get("records") or payload.get("messages") or []
         elif isinstance(payload, list):
             raw = payload
         else:
@@ -196,7 +201,9 @@ def merge_records(rows: list[dict]) -> pd.DataFrame:
     if not rows:
         return pd.DataFrame(columns=["panel", "num", "cli", "message", "dt", "dt_raw"])
     df = pd.DataFrame(rows)
-    df["dt"] = pd.to_datetime(df["dt_raw"], errors="coerce", utc=True)
+    # Lamix = ISO-8601 with Z; Purple = naive "YYYY-MM-DD HH:MM:SS".
+    # utc=True alone drops naive Purple rows when mixed with Z timestamps.
+    df["dt"] = pd.to_datetime(df["dt_raw"], errors="coerce", utc=True, format="mixed")
     df = df.dropna(subset=["dt"])
     df["dt"] = df["dt"].dt.tz_convert("UTC").dt.tz_localize(None)
     # Automatic duplicate removal
