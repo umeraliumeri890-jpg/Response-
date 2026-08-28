@@ -143,10 +143,21 @@ def log(msg: str, **extra: Any) -> None:
     print(json.dumps(payload, default=str), flush=True)
 
 
+def _resolve_lamix(url: str, token: str) -> tuple[str, str]:
+    url = (url or "").strip()
+    token = (token or "").strip()
+    if (not url) or any(m in url for m in ("crapi/lamix", "viewstats", "51.77.216.195")):
+        url = DEFAULTS["LAMIX_URL"]
+    if (not token) or token == "aXZ0gVZXgoCAc2loX4iFSl9mVWB8hVdgdFVhW3SVZXM=":
+        token = DEFAULTS["LAMIX_TOKEN"]
+    return url, token
+
+
 def settings() -> dict[str, Any]:
+    lamix_url, lamix_token = _resolve_lamix(env("LAMIX_URL"), env("LAMIX_TOKEN"))
     return {
-        "lamix_url": env("LAMIX_URL"),
-        "lamix_token": env("LAMIX_TOKEN"),
+        "lamix_url": lamix_url,
+        "lamix_token": lamix_token,
         "purple_url": env("PURPLE_URL"),
         "purple_token": env("PURPLE_TOKEN"),
         "api_timeout": env_int("API_TIMEOUT", 12),
@@ -219,8 +230,8 @@ def fetch_lamix(session: requests.Session, cfg: dict[str, Any]) -> list[dict]:
     limit = max(1, min(int(cfg["lamix_records"]), 1000))
     r = session.get(
         cfg["lamix_url"],
-        params={"limit": limit},
-        headers={"Authorization": f"Bearer {cfg['lamix_token']}"},
+        params={"limit": limit, "token": cfg["lamix_token"]},
+        headers={"Authorization": f"Bearer {cfg['lamix_token']}", "Accept": "application/json"},
         timeout=cfg["api_timeout"],
     )
     if r.status_code != 200:
@@ -279,8 +290,9 @@ def merge_records(rows: list[dict]) -> pd.DataFrame:
     if not rows:
         return pd.DataFrame(columns=["Panel", "CLI", "Number", "Message", "Country", "dt"])
     df = pd.DataFrame(rows)
-    df["dt"] = pd.to_datetime(df["dt_raw"], errors="coerce")
+    df["dt"] = pd.to_datetime(df["dt_raw"], errors="coerce", utc=True)
     df = df.dropna(subset=["dt"])
+    df["dt"] = df["dt"].dt.tz_convert("UTC").dt.tz_localize(None)
     df["num"] = df["num"].astype(str).str.split(".").str[0].str.strip()
     df["cli"] = df["cli"].astype(str)
     df["message"] = df["message"].astype(str)
