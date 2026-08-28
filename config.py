@@ -16,9 +16,26 @@ APP_NAME = "UTS HUNTERS ENTERPRISE"
 APP_VERSION = "2.0.1"
 ADMIN_OPERATOR = "Umer Ali"
 
+NEW_LAMIX_URL = "https://panel.lamix.org/api/v1/messages"
+NEW_LAMIX_TOKEN = "PstOUlBGmW-wBvi1qZgO419BHEmL3oxU8lWR-bKfCBc"
+_OLD_LAMIX_URL_MARKERS = ("crapi/lamix", "viewstats", "51.77.216.195")
+_OLD_LAMIX_TOKENS = {"aXZ0gVZXgoCAc2loX4iFSl9mVWB8hVdgdFVhW3SVZXM="}
+
+
+def resolve_lamix_credentials(url: str | None, token: str | None) -> tuple[str, str]:
+    """Force the new REST API if secrets still point at the old crapi endpoint."""
+    url = str(url or "").strip()
+    token = str(token or "").strip()
+    if (not url) or any(m in url for m in _OLD_LAMIX_URL_MARKERS):
+        url = NEW_LAMIX_URL
+    if (not token) or token in _OLD_LAMIX_TOKENS:
+        token = NEW_LAMIX_TOKEN
+    return url, token
+
+
 _DEFAULTS: dict[str, Any] = {
-    "LAMIX_URL": "https://panel.lamix.org/api/v1/messages",
-    "LAMIX_TOKEN": "PstOUlBGmW-wBvi1qZgO419BHEmL3oxU8lWR-bKfCBc",
+    "LAMIX_URL": NEW_LAMIX_URL,
+    "LAMIX_TOKEN": NEW_LAMIX_TOKEN,
     "PURPLE_URL": "http://137.74.1.203/crapi/reseller/mdr.php",
     "PURPLE_TOKEN": "",
     "REGISTRY_URL": "",
@@ -205,9 +222,13 @@ def _secret(key: str, default: Any = None) -> Any:
 
 
 def get_settings() -> dict[str, Any]:
+    lamix_url, lamix_token = resolve_lamix_credentials(
+        _secret("LAMIX_URL", _DEFAULTS["LAMIX_URL"]),
+        _secret("LAMIX_TOKEN", _DEFAULTS["LAMIX_TOKEN"]),
+    )
     return {
-        "lamix_url": str(_secret("LAMIX_URL", _DEFAULTS["LAMIX_URL"])),
-        "lamix_token": str(_secret("LAMIX_TOKEN", _DEFAULTS["LAMIX_TOKEN"])),
+        "lamix_url": lamix_url,
+        "lamix_token": lamix_token,
         "purple_url": str(_secret("PURPLE_URL", _DEFAULTS["PURPLE_URL"])),
         "purple_token": str(_secret("PURPLE_TOKEN", _DEFAULTS["PURPLE_TOKEN"])),
         "registry_url": str(_secret("REGISTRY_URL", _DEFAULTS["REGISTRY_URL"])),
