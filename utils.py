@@ -271,8 +271,10 @@ def compute_kpis(df: pd.DataFrame, tz: str = "UTC") -> dict[str, Any]:
     work = df.copy()
     if "dt" not in work.columns:
         return empty
-    work["dt"] = pd.to_datetime(work["dt"], errors="coerce")
+    work["dt"] = pd.to_datetime(work["dt"], errors="coerce", utc=True, format="mixed")
     work = work.dropna(subset=["dt"])
+    if getattr(work["dt"].dt, "tz", None) is not None:
+        work["dt"] = work["dt"].dt.tz_convert("UTC").dt.tz_localize(None)
 
     today = now.date()
     min5 = now - timedelta(minutes=5)
