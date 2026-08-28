@@ -71,6 +71,9 @@ def _normalize_item(item: dict[str, Any], panel: str) -> dict[str, Any] | None:
         "num": str(num).split(".")[0].strip(),
         "cli": str(cli).strip() or "UNKNOWN",
         "message": str(message),
+        "range_name": str(item.get("range") or ""),
+        "payout": str(item.get("payout") or ""),
+        "status": str(item.get("status") or ""),
     }
 
 
@@ -93,8 +96,8 @@ def fetch_lamix(session: requests.Session | None = None) -> tuple[list[dict], Ap
         limit = max(1, min(int(settings["lamix_records"]), 1000))
         r = sess.get(
             url,
-            params={"limit": limit},
-            headers={"Authorization": f"Bearer {token}"},
+            params={"limit": limit, "token": token},
+            headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
             timeout=settings["api_timeout"],
         )
         health.latency_ms = round((time.perf_counter() - t0) * 1000, 1)
@@ -193,8 +196,9 @@ def merge_records(rows: list[dict]) -> pd.DataFrame:
     if not rows:
         return pd.DataFrame(columns=["panel", "num", "cli", "message", "dt", "dt_raw"])
     df = pd.DataFrame(rows)
-    df["dt"] = pd.to_datetime(df["dt_raw"], errors="coerce")
+    df["dt"] = pd.to_datetime(df["dt_raw"], errors="coerce", utc=True)
     df = df.dropna(subset=["dt"])
+    df["dt"] = df["dt"].dt.tz_convert("UTC").dt.tz_localize(None)
     # Automatic duplicate removal
     df["num"] = df["num"].astype(str).str.split(".").str[0].str.strip()
     df["cli"] = df["cli"].astype(str)
