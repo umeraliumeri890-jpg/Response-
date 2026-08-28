@@ -17,8 +17,8 @@ APP_VERSION = "2.0.1"
 ADMIN_OPERATOR = "Umer Ali"
 
 _DEFAULTS: dict[str, Any] = {
-    "LAMIX_URL": "https://panel.lamix.org/api/v1/messages",  # ✅ Updated
-    "LAMIX_TOKEN": "",
+    "LAMIX_URL": "https://panel.lamix.org/api/v1/messages",
+    "LAMIX_TOKEN": "PstOUlBGmW-wBvi1qZgO419BHEmL3oxU8lWR-bKfCBc",
     "PURPLE_URL": "http://137.74.1.203/crapi/reseller/mdr.php",
     "PURPLE_TOKEN": "",
     "REGISTRY_URL": "",
@@ -26,7 +26,7 @@ _DEFAULTS: dict[str, Any] = {
     "SESSION_TIMEOUT_MIN": 1440,  # 24 hours
     "API_TIMEOUT": 12,
     "API_RETRIES": 2,
-    "LAMIX_RECORDS": 500,  # ✅ Increased to 500 (max 1000)
+    "LAMIX_RECORDS": 400,
     "PURPLE_RECORDS": 2000,
     "PURPLE_LOOKBACK_DAYS": 30,
     "WHATSAPP_ALERTS_ENABLED": True,
