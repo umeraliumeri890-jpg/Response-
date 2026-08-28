@@ -271,7 +271,10 @@ def fetch_purple(session: requests.Session, cfg: dict[str, Any]) -> list[dict]:
         return []
     payload = r.json()
     if isinstance(payload, dict):
-        raw = payload.get("data", [])
+        if str(payload.get("status", "")).lower().startswith("error"):
+            log("purple_fail", status=r.status_code, body=str(payload)[:200])
+            return []
+        raw = payload.get("data") or payload.get("records") or payload.get("messages") or []
     elif isinstance(payload, list):
         raw = payload
     else:
@@ -290,7 +293,7 @@ def merge_records(rows: list[dict]) -> pd.DataFrame:
     if not rows:
         return pd.DataFrame(columns=["Panel", "CLI", "Number", "Message", "Country", "dt"])
     df = pd.DataFrame(rows)
-    df["dt"] = pd.to_datetime(df["dt_raw"], errors="coerce", utc=True)
+    df["dt"] = pd.to_datetime(df["dt_raw"], errors="coerce", utc=True, format="mixed")
     df = df.dropna(subset=["dt"])
     df["dt"] = df["dt"].dt.tz_convert("UTC").dt.tz_localize(None)
     df["num"] = df["num"].astype(str).str.split(".").str[0].str.strip()
