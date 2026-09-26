@@ -42,7 +42,7 @@ TEAM_FILE = ROOT / "Numbers_Export.csv"
 
 DEFAULTS: dict[str, Any] = {
     "LAMIX_URL": "https://panel.lamix.org/api/v1/messages",
-    "LAMIX_TOKEN": "g6tFn-rYtpbavrlS-9cEFtHr1jYDw90Vw_R7r4gl7cY",
+    "LAMIX_TOKEN": "HWQzgx0X6i-ksRpj8ovzJ1yo04WyQ7fXXjt3foFZpEk",
     "PURPLE_URL": "http://137.74.1.203/crapi/reseller/mdr.php",
     "PURPLE_TOKEN": "",
     "API_TIMEOUT": "12",
