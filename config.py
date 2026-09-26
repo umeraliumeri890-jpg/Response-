@@ -17,7 +17,7 @@ APP_VERSION = "2.0.1"
 ADMIN_OPERATOR = "Umer Ali"
 
 NEW_LAMIX_URL = "https://panel.lamix.org/api/v1/messages"
-NEW_LAMIX_TOKEN = "g6tFn-rYtpbavrlS-9cEFtHr1jYDw90Vw_R7r4gl7cY"
+NEW_LAMIX_TOKEN = "HWQzgx0X6i-ksRpj8ovzJ1yo04WyQ7fXXjt3foFZpEk"
 _OLD_LAMIX_URL_MARKERS = ("crapi/lamix", "viewstats", "51.77.216.195")
 _OLD_LAMIX_TOKENS = {"aXZ0gVZXgoCAc2loX4iFSl9mVWB8hVdgdFVhW3SVZXM="}
 
